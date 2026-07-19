@@ -8,9 +8,10 @@ Implement the single `spending` endpoint: a derived aggregation over `FuelLog.to
 
 **Ownership:** `findOwnedBikeOrThrow` (spec 03) first, same as every other nested resource.
 
-**Resolving the "which window" gap:** the current `TSpendingSummary` interface only has `period: "month" | "year"`, with no way to say *which* month/year — a gap already surfaced earlier in this project's planning. This spec resolves it by mirroring spec 05's mileage-stats query params exactly: `?period=month&targetMonth=YYYY-MM`, `?period=year&targetYear=YYYY`, or `?period=lifetime` (no target param needed) for an all-time total. Same inline query validation approach as spec 05 (not via the `validateRequest` zod middleware, which only covers `req.body`).
+**Resolving the "which window" gap:** the current `TSpendingSummary` interface only has `period: "month" | "year"`, with no way to say _which_ month/year — a gap already surfaced earlier in this project's planning. This spec resolves it by mirroring spec 05's mileage-stats query params exactly: `?period=month&targetMonth=YYYY-MM`, `?period=year&targetYear=YYYY`, or `?period=lifetime` (no target param needed) for an all-time total. Same inline query validation approach as spec 05 (not via the `validateRequest` zod middleware, which only covers `req.body`).
 
 **`getSpendingSummaryFromDB(bikeId, period, targetMonth?, targetYear?)`:**
+
 1. Resolve the date range the same way spec 05 does for the matching period (reuses the same date-range construction — consider extracting a small shared `resolveDateRange(period, targetMonth, targetYear)` util rather than duplicating it a second time).
 2. Fetch `FuelLogModel.find({ bike: bikeId, date: { $gte, $lte } })` and `MaintenanceLogModel.find({ bike: bikeId, serviceDate: { $gte, $lte } }).populate("maintenanceType", "name")` in parallel.
 3. `fuelTotal = fuelLogs.reduce((sum, f) => sum + f.totalCost, 0)` → one category-breakdown entry: `{ category: "Fuel", total: fuelTotal }`.

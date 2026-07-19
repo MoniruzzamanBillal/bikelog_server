@@ -13,11 +13,11 @@ Implement the two real endpoints for `engineOilType` (`create` + `list` only, sa
 **Seed data proposal:**
 `bike-log-plan.md` §2.2 only pins one concrete number (Synthetic ≈ 1250km) as an example; Mineral/Semi-Synthetic aren't given specific values. Proposed seed set for `src/scripts/seedEngineOilTypes.ts` (same pattern as spec 06's script — upsert-by-name, idempotent):
 
-| name | suggestedIntervalKm |
-|---|---|
-| Mineral | 800 |
-| Semi-Synthetic | 1000 |
-| Synthetic | 1250 |
+| name           | suggestedIntervalKm |
+| -------------- | ------------------- |
+| Mineral        | 800                 |
+| Semi-Synthetic | 1000                |
+| Synthetic      | 1250                |
 
 **These three numbers are assumptions I'm proposing, not values confirmed anywhere in the plan doc** — flagged explicitly since getting oil-change intervals wrong has a real-world cost (unlike, say, a maintenance-type label). Please confirm or correct these before the seed script actually runs. They're only ever a pre-fill default on the maintenance-log form — `intervalKmUsed` on each actual log is always user-editable regardless (per the break-in schedule requirement from `bike_log_project` memory: 6 oil changes across ~2000km, irregular spacing, never a flat number).
 

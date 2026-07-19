@@ -1,38 +1,98 @@
 import httpStatus from "http-status";
-import AppError from "../../Error/AppError";
 import catchAsync from "../../util/catchAsync";
+import sendResponse from "../../util/sendResponse";
+import { maintenanceLogServices } from "./maintenanceLog.service";
 
-// ! for creating a maintenance log
-const createMaintenanceLog = catchAsync(async () => {
-  throw new AppError(httpStatus.NOT_IMPLEMENTED, "Not implemented yet");
+const createMaintenanceLog = catchAsync(async (req, res) => {
+  const result = await maintenanceLogServices.createMaintenanceLogIntoDB(
+    req.params.bikeId,
+    req.user.userId,
+    req.body,
+  );
+
+  sendResponse(res, {
+    status: httpStatus.CREATED,
+    success: true,
+    message: "Maintenance log created successfully",
+    data: result,
+  });
 });
 
-// ! for getting all maintenance logs for a bike
-const getMaintenanceLogs = catchAsync(async () => {
-  throw new AppError(httpStatus.NOT_IMPLEMENTED, "Not implemented yet");
+const getMaintenanceLogs = catchAsync(async (req, res) => {
+  const { result, meta } = await maintenanceLogServices.getMaintenanceLogsFromDB(
+    req.params.bikeId,
+    req.user.userId,
+    req.query,
+  );
+
+  sendResponse(res, {
+    status: httpStatus.OK,
+    success: true,
+    message: "Maintenance logs retrieved successfully",
+    data: { result, meta },
+  });
 });
 
-// ! for getting a single maintenance log by id
-const getMaintenanceLogById = catchAsync(async () => {
-  throw new AppError(httpStatus.NOT_IMPLEMENTED, "Not implemented yet");
+const getMaintenanceLogById = catchAsync(async (req, res) => {
+  const result = await maintenanceLogServices.getMaintenanceLogByIdFromDB(
+    req.params.bikeId,
+    req.user.userId,
+    req.params.id,
+  );
+
+  sendResponse(res, {
+    status: httpStatus.OK,
+    success: true,
+    message: "Maintenance log retrieved successfully",
+    data: result,
+  });
 });
 
-// ! for updating a maintenance log
-const updateMaintenanceLog = catchAsync(async () => {
-  throw new AppError(httpStatus.NOT_IMPLEMENTED, "Not implemented yet");
+const updateMaintenanceLog = catchAsync(async (req, res) => {
+  const result = await maintenanceLogServices.updateMaintenanceLogInDB(
+    req.params.bikeId,
+    req.user.userId,
+    req.params.id,
+    req.body,
+  );
+
+  sendResponse(res, {
+    status: httpStatus.OK,
+    success: true,
+    message: "Maintenance log updated successfully",
+    data: result,
+  });
 });
 
-// ! for deleting a maintenance log
-const deleteMaintenanceLog = catchAsync(async () => {
-  throw new AppError(httpStatus.NOT_IMPLEMENTED, "Not implemented yet");
+const deleteMaintenanceLog = catchAsync(async (req, res) => {
+  const result = await maintenanceLogServices.deleteMaintenanceLogFromDB(
+    req.params.bikeId,
+    req.user.userId,
+    req.params.id,
+  );
+
+  sendResponse(res, {
+    status: httpStatus.OK,
+    success: true,
+    message: "Maintenance log deleted successfully",
+    data: result,
+  });
 });
 
-// ! for getting due/overdue/upcoming maintenance reminders for a bike
-const getReminders = catchAsync(async () => {
-  throw new AppError(httpStatus.NOT_IMPLEMENTED, "Not implemented yet");
+const getReminders = catchAsync(async (req, res) => {
+  const result = await maintenanceLogServices.getRemindersFromDB(
+    req.params.bikeId,
+    req.user.userId,
+  );
+
+  sendResponse(res, {
+    status: httpStatus.OK,
+    success: true,
+    message: "Reminders retrieved successfully",
+    data: result,
+  });
 });
 
-//
 export const maintenanceLogController = {
   createMaintenanceLog,
   getMaintenanceLogs,

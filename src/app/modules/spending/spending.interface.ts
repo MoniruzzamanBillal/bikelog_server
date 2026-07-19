@@ -4,7 +4,9 @@ export type TSpendingCategoryBreakdown = {
 };
 
 export type TSpendingSummary = {
-  period: "month" | "year";
+  period: "month" | "year" | "lifetime";
+  targetMonth?: string;
+  targetYear?: string;
   totalSpending: number;
   categoryBreakdown: TSpendingCategoryBreakdown[];
 };

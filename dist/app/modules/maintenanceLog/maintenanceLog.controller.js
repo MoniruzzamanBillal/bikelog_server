@@ -14,33 +14,63 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.maintenanceLogController = void 0;
 const http_status_1 = __importDefault(require("http-status"));
-const AppError_1 = __importDefault(require("../../Error/AppError"));
 const catchAsync_1 = __importDefault(require("../../util/catchAsync"));
-// ! for creating a maintenance log
-const createMaintenanceLog = (0, catchAsync_1.default)(() => __awaiter(void 0, void 0, void 0, function* () {
-    throw new AppError_1.default(http_status_1.default.NOT_IMPLEMENTED, "Not implemented yet");
+const sendResponse_1 = __importDefault(require("../../util/sendResponse"));
+const maintenanceLog_service_1 = require("./maintenanceLog.service");
+const createMaintenanceLog = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const result = yield maintenanceLog_service_1.maintenanceLogServices.createMaintenanceLogIntoDB(req.params.bikeId, req.user.userId, req.body);
+    (0, sendResponse_1.default)(res, {
+        status: http_status_1.default.CREATED,
+        success: true,
+        message: "Maintenance log created successfully",
+        data: result,
+    });
 }));
-// ! for getting all maintenance logs for a bike
-const getMaintenanceLogs = (0, catchAsync_1.default)(() => __awaiter(void 0, void 0, void 0, function* () {
-    throw new AppError_1.default(http_status_1.default.NOT_IMPLEMENTED, "Not implemented yet");
+const getMaintenanceLogs = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { result, meta } = yield maintenanceLog_service_1.maintenanceLogServices.getMaintenanceLogsFromDB(req.params.bikeId, req.user.userId, req.query);
+    (0, sendResponse_1.default)(res, {
+        status: http_status_1.default.OK,
+        success: true,
+        message: "Maintenance logs retrieved successfully",
+        data: { result, meta },
+    });
 }));
-// ! for getting a single maintenance log by id
-const getMaintenanceLogById = (0, catchAsync_1.default)(() => __awaiter(void 0, void 0, void 0, function* () {
-    throw new AppError_1.default(http_status_1.default.NOT_IMPLEMENTED, "Not implemented yet");
+const getMaintenanceLogById = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const result = yield maintenanceLog_service_1.maintenanceLogServices.getMaintenanceLogByIdFromDB(req.params.bikeId, req.user.userId, req.params.id);
+    (0, sendResponse_1.default)(res, {
+        status: http_status_1.default.OK,
+        success: true,
+        message: "Maintenance log retrieved successfully",
+        data: result,
+    });
 }));
-// ! for updating a maintenance log
-const updateMaintenanceLog = (0, catchAsync_1.default)(() => __awaiter(void 0, void 0, void 0, function* () {
-    throw new AppError_1.default(http_status_1.default.NOT_IMPLEMENTED, "Not implemented yet");
+const updateMaintenanceLog = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const result = yield maintenanceLog_service_1.maintenanceLogServices.updateMaintenanceLogInDB(req.params.bikeId, req.user.userId, req.params.id, req.body);
+    (0, sendResponse_1.default)(res, {
+        status: http_status_1.default.OK,
+        success: true,
+        message: "Maintenance log updated successfully",
+        data: result,
+    });
 }));
-// ! for deleting a maintenance log
-const deleteMaintenanceLog = (0, catchAsync_1.default)(() => __awaiter(void 0, void 0, void 0, function* () {
-    throw new AppError_1.default(http_status_1.default.NOT_IMPLEMENTED, "Not implemented yet");
+const deleteMaintenanceLog = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const result = yield maintenanceLog_service_1.maintenanceLogServices.deleteMaintenanceLogFromDB(req.params.bikeId, req.user.userId, req.params.id);
+    (0, sendResponse_1.default)(res, {
+        status: http_status_1.default.OK,
+        success: true,
+        message: "Maintenance log deleted successfully",
+        data: result,
+    });
 }));
-// ! for getting due/overdue/upcoming maintenance reminders for a bike
-const getReminders = (0, catchAsync_1.default)(() => __awaiter(void 0, void 0, void 0, function* () {
-    throw new AppError_1.default(http_status_1.default.NOT_IMPLEMENTED, "Not implemented yet");
+const getReminders = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const result = yield maintenanceLog_service_1.maintenanceLogServices.getRemindersFromDB(req.params.bikeId, req.user.userId);
+    (0, sendResponse_1.default)(res, {
+        status: http_status_1.default.OK,
+        success: true,
+        message: "Reminders retrieved successfully",
+        data: result,
+    });
 }));
-//
 exports.maintenanceLogController = {
     createMaintenanceLog,
     getMaintenanceLogs,

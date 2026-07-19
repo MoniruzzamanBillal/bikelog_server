@@ -15,12 +15,14 @@ Implement the six stub endpoints on `maintenanceLog` (5 CRUD + `getReminders`), 
 **`currentOdometer` bump:** same `bumpOdometerIfHigher(bike, odometerReading)` helper from spec 03, called after saving.
 
 **CRUD:**
+
 - `createMaintenanceLogIntoDB`: ownership + referential checks → compute `nextDueOdometer` → save → bump odometer → return created log.
 - `getMaintenanceLogsFromDB(bikeId, userId, query)`: ownership check → `.find({bike: bikeId}).sort("-serviceDate")` (event date, not `createdAt`) — propose `Queryuilder` here too (same rationale as fuelLog: this list grows over the bike's lifetime), with an optional `maintenanceType` filter param since a user will often want "just show me oil-change history."
 - `getMaintenanceLogByIdFromDB`, `updateMaintenanceLogInDB`, `deleteMaintenanceLogFromDB`: ownership check; update recomputes `nextDueOdometer` if either `odometerReading` or `intervalKmUsed` changes (since it's derived from both — a partial update to just one must still keep the derived field correct, not stale).
 - No "referenced by a closed record" lock here (unlike `fuelLog`/`MileageRecord`) — nothing else derives from a `MaintenanceLog` the way mileage closures do, so edits/deletes are unrestricted beyond ownership.
 
 **`getReminders(bikeId, userId)`** → `GET /bikes/:bikeId/reminders`:
+
 1. Ownership check, load `bike.currentOdometer`.
 2. For each distinct `maintenanceType` this bike has at least one log for, find that type's **most recent** `MaintenanceLog` (by `serviceDate` descending).
 3. Km-based status: `overdue` if `bike.currentOdometer >= nextDueOdometer`; `upcoming` if within a buffer (`nextDueOdometer - bike.currentOdometer <= 50`); otherwise omit that type from the response entirely (not due soon, nothing to show).

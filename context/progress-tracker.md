@@ -4,7 +4,7 @@ Update this file after every meaningful implementation change.
 
 ## Current Phase
 
-Real logic implemented for `user` (auth), `bike`, `fuelLog`, `mileageRecord`, and `maintenanceType` (specs 02–04, 06). `engineOilType`, `maintenanceLog`, and `spending` (specs 07–09) are still `501 Not Implemented` stubs. Next real work is implementing those remaining three, in the order set out in `context/specs/00-build-plan.md`.
+All 8 Bike Log modules (`user`, `bike`, `fuelLog`, `mileageRecord`, `maintenanceType`, `engineOilType`, `maintenanceLog`, `spending`) have real business-logic implementations across specs 02–09. No remaining stubs. Next work is whatever comes after the MVP backend.
 
 ## Spec Implementation Status
 
@@ -20,8 +20,8 @@ Tracks work items defined in `context/specs/`. Update the moment implementation 
 | [`05-mileage-stats.md`](specs/05-mileage-stats.md)                                 | Complete    |
 | [`06-maintenance-type-catalog.md`](specs/06-maintenance-type-catalog.md)           | Complete    |
 | [`07-engine-oil-type-catalog.md`](specs/07-engine-oil-type-catalog.md)             | Complete    |
-| [`08-maintenance-log-and-reminders.md`](specs/08-maintenance-log-and-reminders.md) | Proposed    |
-| [`09-spending-summary.md`](specs/09-spending-summary.md)                           | Proposed    |
+| [`08-maintenance-log-and-reminders.md`](specs/08-maintenance-log-and-reminders.md) | Complete    |
+| [`09-spending-summary.md`](specs/09-spending-summary.md)                           | Complete    |
 
 ## Completed
 
@@ -32,6 +32,10 @@ Tracks work items defined in `context/specs/`. Update the moment implementation 
 - **Spec 04 — fuel log + mileage closure**: Updated `createFuelLogSchema` to make `totalCost` optional (server computes `litersAdded * pricePerLiter`). Implemented `createFuelLogIntoDB` with ownership check via `findOwnedBikeOrThrow`, computes `totalCost`, saves `FuelLog`, bumps bike odometer via `bumpOdometerIfHigher`, runs full-tank closure: finds previous full-tank log (or uses bike creation as period start), sums liters in period, creates `MileageRecord` with `distanceKm`, `litersConsumed`, `mileageKmPerLiter`, `periodStartDate`/`EndDate`, `fuelLogIds`. `getFuelLogsFromDB` uses `QueryBuilder` with `-date` default sort + pagination. `updateFuelLogInDB`/`deleteFuelLogFromDB` return 409 if fuel log referenced by any `MileageRecord`. Controller wraps all endpoints with `sendResponse`. Verified: `yarn build` clean, `yarn lint` clean for fuelLog module.
 - **Spec 05 — mileage stats**: Implemented 4 read-only endpoints in `mileageRecord.service.ts` + `mileageRecord.controller.ts`. Shared internal `computeMileageForRange` helper avoids duplicate logic. `getMileageRecordsFromDB`: exact `MileageRecord` history sorted by `periodEndDate` + live rolling-average fallback (trailing 10 `FuelLog`s, `distance = last.odometerReading - first.odometerReading`, `liters = sum(litersAdded)`, `approxMileage = distance / liters`; returns `null` if <2 logs). `getMonthlyMileageFromDB`: date range `YYYY-MM`, `FuelLogModel.find({ bike, date: {$gte, $lte} })` bucketed by `date` (not `createdAt`), computes `totalDistanceKm = lastOdometerInMonth - firstOdometerBeforeOrInMonth`, `totalLitersConsumed`, `fuelLogCount` (no average — client divides). `getYearlyMileageFromDB`: loops 12 months of target year, same per-month computation. `getLifetimeMileageFromDB`: all `FuelLog`s from earliest to latest, `totalDistanceKm = last.odometerReading - first.odometerReading`, `totalLitersConsumed`, `fuelLogCount`. Inline validation of `targetMonth`/`targetYear` query params returns 400 on malformed input. Verified: `yarn build` clean, `yarn lint` clean for mileageRecord module.
 - **Spec 06 — maintenance type catalog**: Implemented `createMaintenanceTypeIntoDB` with duplicate-key handling (catches Mongo code 11000, returns 409 `AppError` with clear message), `getMaintenanceTypesFromDB` (plain `.find()` sorted by name). Controller wraps with `sendResponse`. Created `src/scripts/seedMaintenanceTypes.ts` + `yarn seed:maintenance-types` script — idempotent upsert-by-name for 8 plan-defined types: Engine Oil (interval driven by `EngineOilType`), Chain Lube (500km), Tire Change, Brake Pads, General Service (3000km), Insurance (365 days), Registration/Tax (365 days), Other. Verified: `yarn build` clean, `yarn lint` clean for maintenanceType module.
+
+- **Spec 09 — spending summary**: Implemented `getSpendingSummaryFromDB` in `spending.service.ts` — ownership check; date-range resolution (month/year/lifetime with the same inline validation pattern as spec 05); parallel `FuelLog.find` + `MaintenanceLog.find({ bike }).populate("maintenanceType", "name")`; JS `reduce`-based aggregation (fuel total + maintenance grouped by `maintenanceType.name`); `categoryBreakdown` sorted descending by total; response includes `period`, optional `targetMonth`/`targetYear`, `totalSpending`, `categoryBreakdown`. Extended `TSpendingSummary` type in `spending.interface.ts` to add `"lifetime"` to the `period` union and optional `targetMonth`/`targetYear`. Wired controller in `spending.controller.ts` with inline validation (`period` must be month/year/lifetime; `targetMonth` required for month; `targetYear` required for year; malformed inputs → 400). `yarn build` clean, `yarn lint` clean (no new errors).
+
+- **Spec 08 — maintenance log + reminders**: Implemented all 6 service functions in `maintenanceLog.service.ts` — `createMaintenanceLogIntoDB` (ownership + referential checks on `maintenanceType`/`oilType`, server-computed `nextDueOdometer`, odometer bump), `getMaintenanceLogsFromDB` (QueryBuilder with `-serviceDate` sort + optional `maintenanceType` filter), `getMaintenanceLogByIdFromDB`, `updateMaintenanceLogInDB` (recomputes `nextDueOdometer` if `odometerReading` or `intervalKmUsed` changes, referential checks on update, strips client-supplied `nextDueOdometer`), `deleteMaintenanceLogFromDB` (soft delete), `getRemindersFromDB` (groups by `maintenanceType` → most recent log, km-based status with 50km buffer, date-based status with 14-day buffer, omits entries that are neither due nor upcoming). Wired all 6 controller handlers in `maintenanceLog.controller.ts` with `sendResponse`. No validation/route/model changes needed. `yarn build` clean, `yarn lint` clean (no new errors).
 
 ## Recent Activity
 
@@ -59,12 +63,10 @@ Tracks work items defined in `context/specs/`. Update the moment implementation 
 
 - No automated test suite (`yarn test` is a stub) — inherited from the boilerplate, not yet decided whether to add one.
 - 5 pre-existing lint errors + 1 warning remain repo-wide (see Recent Activity above) — none in Bike Log modules, all predate this change, none fixed since it was out of spec 01's scope. Worth a dedicated cleanup pass before this goes live.
-- Exact "upcoming" reminder buffer (km before `nextDueOdometer`) isn't pinned to a specific number in the plan doc — [`08-maintenance-log-and-reminders.md`](specs/08-maintenance-log-and-reminders.md) proposes locking it to 50km (the plan doc's own example value); needs user confirmation before implementation.
+- Exact "upcoming" reminder buffer was locked to 50km in spec 08's implementation (the plan doc's example value, explicitly confirmed in the spec).
 - `engine-oil-types` and `maintenance-types` endpoints currently have no seed data — [`06-maintenance-type-catalog.md`](specs/06-maintenance-type-catalog.md) and [`07-engine-oil-type-catalog.md`](specs/07-engine-oil-type-catalog.md) both propose seed scripts with specific values, but those values (especially oil-change intervals) are flagged as assumptions needing confirmation, not researched numbers.
-- `spending`'s response interface (`TSpendingSummary`) only has a `period` field with no way to select which month/year — [`09-spending-summary.md`](specs/09-spending-summary.md) proposes adding `targetMonth`/`targetYear` query params to close this gap.
+- `spending`'s response interface (`TSpendingSummary`) only had a `period` field with no way to select which month/year — [`09-spending-summary.md`](specs/09-spending-summary.md) resolved this by adding `targetMonth`/`targetYear` query params (implemented).
 
 ## Next Up
 
-User is reviewing specs `02-auth-hardening.md` through `09-spending-summary.md` (all "Proposed"). Once approved (individually or as a batch), implement in dependency order: 02 → 03 → 04 → 05, and 02 → 06/07 → 08 → 09, per each spec's "Dependencies" section.
-
-- **Spec 07 — engine-oil-type catalog**: Implemented `createEngineOilTypeIntoDB` with duplicate-key handling (catches Mongo code 11000 → 409 `AppError`), `getEngineOilTypesFromDB`; created `src/scripts/seedEngineOilTypes.ts` + `yarn seed:engine-oil-types` — idempotent upsert-by-name for 3 plan types (Mineral 800km, Semi-Synthetic 1000km, Synthetic 1250km). `yarn build` clean, `yarn lint` clean (only expected console warnings in seed script).
+All 8 Bike Log modules (specs 02–09) are implemented. No remaining MVP backend work. Next steps would be frontend integration, pre-existing lint cleanup, or Phase-2 features.

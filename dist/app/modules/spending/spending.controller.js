@@ -16,11 +16,23 @@ exports.spendingController = void 0;
 const http_status_1 = __importDefault(require("http-status"));
 const AppError_1 = __importDefault(require("../../Error/AppError"));
 const catchAsync_1 = __importDefault(require("../../util/catchAsync"));
-// ! for getting the spending summary (total + category breakdown) for a bike
-const getSpendingSummary = (0, catchAsync_1.default)(() => __awaiter(void 0, void 0, void 0, function* () {
-    throw new AppError_1.default(http_status_1.default.NOT_IMPLEMENTED, "Not implemented yet");
+const sendResponse_1 = __importDefault(require("../../util/sendResponse"));
+const spending_service_1 = require("./spending.service");
+const getSpendingSummary = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const period = req.query.period;
+    if (!period || !["month", "year", "lifetime"].includes(period)) {
+        throw new AppError_1.default(http_status_1.default.BAD_REQUEST, "period must be one of: month, year, lifetime");
+    }
+    const targetMonth = req.query.targetMonth;
+    const targetYear = req.query.targetYear;
+    const result = yield spending_service_1.spendingServices.getSpendingSummaryFromDB(req.params.bikeId, req.user.userId, period, targetMonth, targetYear);
+    (0, sendResponse_1.default)(res, {
+        status: http_status_1.default.OK,
+        success: true,
+        message: "Spending summary retrieved successfully",
+        data: result,
+    });
 }));
-//
 exports.spendingController = {
     getSpendingSummary,
 };
