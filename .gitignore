@@ -1,0 +1,26 @@
+.env
+.env*.local
+.vercel
+
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# testing
+/coverage
+
+
+
+.env*
+
+# vercel
+.vercel
+
+.vscode
+.vscode/
+.vscode/*
+
+
