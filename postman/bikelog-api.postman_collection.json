@@ -1,0 +1,1324 @@
+{
+  "info": {
+    "name": "Bike Log API",
+    "description": "Backend API for the Bike Log app (Express + TypeScript + Mongoose). Auth via JWT Bearer token — run Auth > Login first (after Auth > Register once), which auto-captures {{token}}. Then run Bikes > Create Bike, Maintenance Types > Create Maintenance Type, and Engine Oil Types > Create Engine Oil Type to auto-capture the ids the rest of the collection chains off of. See dummy-data.md in this folder for the full field reference.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000/api",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "bikeId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "fuelLogId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "maintenanceTypeId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "engineOilTypeId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "maintenanceLogId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Creates a new user. Response never includes the password hash. If the email already exists, returns 409 Conflict.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Rider\",\n  \"email\": \"rider@example.com\",\n  \"password\": \"test1234\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Logs in and returns a JWT at the top-level `token` field (not under `data`). The test script below saves it into the `token` collection variable automatically, so every other request in this collection (which use Bearer {{token}}) will work right after this runs.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"rider@example.com\",\n  \"password\": \"test1234\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code < 300) {",
+                  "    const body = pm.response.json();",
+                  "    const value = body.token;",
+                  "    if (value) {",
+                  "        pm.collectionVariables.set(\"token\", value);",
+                  "        console.log(\"Captured token =\", value);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Current User (me)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Bikes",
+      "item": [
+        {
+          "name": "Create Bike",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bikes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes"
+              ]
+            },
+            "description": "`owner` is taken from the JWT, never send it. `currentOdometer` here seeds the bike's immutable `initialOdometer` too; it's optional (defaults to 0).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nickname\": \"Red Beast\",\n  \"brand\": \"Yamaha\",\n  \"model\": \"FZS V3\",\n  \"registrationNumber\": \"DHAKA-METRO-GA-11-2233\",\n  \"purchaseDate\": \"2024-01-15\",\n  \"fuelTankCapacityLiters\": 12,\n  \"currentOdometer\": 1500\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.expect([201]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code < 300) {",
+                  "    const body = pm.response.json();",
+                  "    const value = body.data._id;",
+                  "    if (value) {",
+                  "        pm.collectionVariables.set(\"bikeId\", value);",
+                  "        console.log(\"Captured bikeId =\", value);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Bikes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Bike By Id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Bike",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}"
+              ]
+            },
+            "description": "All fields optional. `owner` and `currentOdometer` are silently stripped server-side even if you send them here.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nickname\": \"Red Beast MK2\",\n  \"fuelTankCapacityLiters\": 13\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Bike",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}"
+              ]
+            },
+            "description": "Soft delete. Run this LAST if at all — every other folder below depends on {{bikeId}} still being usable."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Fuel Logs",
+      "item": [
+        {
+          "name": "Create Fuel Log",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/fuel-logs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "fuel-logs"
+              ]
+            },
+            "description": "Never send `totalCost` — it's always server-computed as litersAdded * pricePerLiter and any client value is discarded. Response shape is `data.fuelLog` (+ `data.mileageRecordClosed` if isFullTank closed a period).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"odometerReading\": 1550,\n  \"litersAdded\": 8.5,\n  \"isFullTank\": true,\n  \"pricePerLiter\": 125.5,\n  \"fuelStation\": \"Padma Filling Station\",\n  \"date\": \"2026-07-01\",\n  \"notes\": \"Full tank before highway trip\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.expect([201]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code < 300) {",
+                  "    const body = pm.response.json();",
+                  "    const value = body.data.fuelLog._id;",
+                  "    if (value) {",
+                  "        pm.collectionVariables.set(\"fuelLogId\", value);",
+                  "        console.log(\"Captured fuelLogId =\", value);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Fuel Logs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/fuel-logs?page=1&limit=10&sort=-date",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "fuel-logs"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": false
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "disabled": false
+                },
+                {
+                  "key": "sort",
+                  "value": "-date",
+                  "disabled": false
+                },
+                {
+                  "key": "isFullTank",
+                  "value": "true",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Supports pagination (page/limit), sort, and field filters via QueryBuilder. `bike`/`isDeleted` query keys are ignored server-side (IDOR hardening) even if you set them."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Fuel Log By Id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/fuel-logs/{{fuelLogId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "fuel-logs",
+                "{{fuelLogId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Fuel Log",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/fuel-logs/{{fuelLogId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "fuel-logs",
+                "{{fuelLogId}}"
+              ]
+            },
+            "description": "Fails with 409 if this fuel log was already closed into a mileage record. `totalCost` is recomputed server-side whenever litersAdded/pricePerLiter change; a client-sent totalCost is dropped.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"odometerReading\": 1560,\n  \"notes\": \"Corrected odometer reading\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Fuel Log",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/fuel-logs/{{fuelLogId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "fuel-logs",
+                "{{fuelLogId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Mileage",
+      "item": [
+        {
+          "name": "List Mileage Records",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/mileage",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "mileage"
+              ]
+            },
+            "description": "No write endpoints exist for this module — records are auto-created when a full-tank fuel log closes a period."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Monthly Mileage",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/mileage/monthly?targetMonth=2026-07",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "mileage",
+                "monthly"
+              ],
+              "query": [
+                {
+                  "key": "targetMonth",
+                  "value": "2026-07",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "targetMonth is required, format YYYY-MM."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Yearly Mileage",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/mileage/yearly?targetYear=2026",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "mileage",
+                "yearly"
+              ],
+              "query": [
+                {
+                  "key": "targetYear",
+                  "value": "2026",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "targetYear is required, format YYYY."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lifetime Mileage",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/mileage/lifetime",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "mileage",
+                "lifetime"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Maintenance Types",
+      "item": [
+        {
+          "name": "Create Maintenance Type",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/maintenance-types",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "maintenance-types"
+              ]
+            },
+            "description": "Use a name distinct from the 8 seeded types (Engine Oil, Chain Lube, Tire Change, Brake Pads, General Service, Insurance, Registration/Tax, Other) to avoid confusion with catalog data from `yarn seed:maintenance-types`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Suspension Check\",\n  \"defaultIntervalKm\": 5000,\n  \"defaultIntervalDays\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.expect([201]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code < 300) {",
+                  "    const body = pm.response.json();",
+                  "    const value = body.data._id;",
+                  "    if (value) {",
+                  "        pm.collectionVariables.set(\"maintenanceTypeId\", value);",
+                  "        console.log(\"Captured maintenanceTypeId =\", value);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Maintenance Types",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/maintenance-types",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "maintenance-types"
+              ]
+            },
+            "description": "Run `yarn seed:maintenance-types` once against your DB first if this comes back empty."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Engine Oil Types",
+      "item": [
+        {
+          "name": "Create Engine Oil Type",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/engine-oil-types",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "engine-oil-types"
+              ]
+            },
+            "description": "Use a name distinct from the 3 seeded types (Mineral, Semi-Synthetic, Synthetic) to avoid confusion with catalog data from `yarn seed:engine-oil-types`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Fully Synthetic 10W-40\",\n  \"suggestedIntervalKm\": 1200\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.expect([201]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code < 300) {",
+                  "    const body = pm.response.json();",
+                  "    const value = body.data._id;",
+                  "    if (value) {",
+                  "        pm.collectionVariables.set(\"engineOilTypeId\", value);",
+                  "        console.log(\"Captured engineOilTypeId =\", value);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Engine Oil Types",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/engine-oil-types",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "engine-oil-types"
+              ]
+            },
+            "description": "Run `yarn seed:engine-oil-types` once against your DB first if this comes back empty."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Maintenance Logs",
+      "item": [
+        {
+          "name": "Create Maintenance Log",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/maintenance-logs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "maintenance-logs"
+              ]
+            },
+            "description": "Run 'Create Maintenance Type' and 'Create Engine Oil Type' first so {{maintenanceTypeId}}/{{engineOilTypeId}} are populated (or replace with real ids from the List requests, e.g. a seeded catalog id). `oilType` is optional. Never send `nextDueOdometer` — it's computed server-side from odometerReading + intervalKmUsed.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"maintenanceType\": \"{{maintenanceTypeId}}\",\n  \"odometerReading\": 1800,\n  \"oilType\": \"{{engineOilTypeId}}\",\n  \"intervalKmUsed\": 3000,\n  \"nextDueDate\": \"2026-10-01\",\n  \"cost\": 1500,\n  \"serviceDate\": \"2026-07-15\",\n  \"serviceCenter\": \"City Bike Care\",\n  \"partsReplaced\": [\n    \"Oil Filter\",\n    \"Engine Oil\"\n  ],\n  \"notes\": \"Routine service\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.expect([201]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code < 300) {",
+                  "    const body = pm.response.json();",
+                  "    const value = body.data._id;",
+                  "    if (value) {",
+                  "        pm.collectionVariables.set(\"maintenanceLogId\", value);",
+                  "        console.log(\"Captured maintenanceLogId =\", value);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Maintenance Logs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/maintenance-logs?page=1&limit=10&sort=-serviceDate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "maintenance-logs"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": false
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "disabled": false
+                },
+                {
+                  "key": "sort",
+                  "value": "-serviceDate",
+                  "disabled": false
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Maintenance Log By Id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/maintenance-logs/{{maintenanceLogId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "maintenance-logs",
+                "{{maintenanceLogId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Maintenance Log",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/maintenance-logs/{{maintenanceLogId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "maintenance-logs",
+                "{{maintenanceLogId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cost\": 1600,\n  \"notes\": \"Updated cost after parts price change\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Maintenance Log",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/maintenance-logs/{{maintenanceLogId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "maintenance-logs",
+                "{{maintenanceLogId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Reminders",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/reminders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "reminders"
+              ]
+            },
+            "description": "Computed on-read by comparing the bike's currentOdometer / today's date against each maintenance type's latest nextDueOdometer / nextDueDate. No body or query params."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Spending Summary",
+      "item": [
+        {
+          "name": "Spending Summary - Month",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/spending-summary?period=month&targetMonth=2026-07",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "spending-summary"
+              ],
+              "query": [
+                {
+                  "key": "period",
+                  "value": "month",
+                  "disabled": false
+                },
+                {
+                  "key": "targetMonth",
+                  "value": "2026-07",
+                  "disabled": false
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Spending Summary - Year",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/spending-summary?period=year&targetYear=2026",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "spending-summary"
+              ],
+              "query": [
+                {
+                  "key": "period",
+                  "value": "year",
+                  "disabled": false
+                },
+                {
+                  "key": "targetYear",
+                  "value": "2026",
+                  "disabled": false
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Spending Summary - Lifetime",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/spending-summary?period=lifetime",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "spending-summary"
+              ],
+              "query": [
+                {
+                  "key": "period",
+                  "value": "lifetime",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "period must be exactly one of month/year/lifetime, or the request 400s."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
