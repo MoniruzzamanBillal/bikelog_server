@@ -67,9 +67,10 @@ const getSpendingSummaryFromDB = (bikeId, userId, period, targetMonth, targetYea
     }, {});
     const categoryBreakdown = [
         { category: "Fuel", total: fuelTotal },
-        ...Object.entries(maintenanceByCategory)
-            .filter(([, total]) => total > 0)
-            .map(([category, total]) => ({ category, total })),
+        ...Object.entries(maintenanceByCategory).map(([category, total]) => ({
+            category,
+            total,
+        })),
     ];
     categoryBreakdown.sort((a, b) => b.total - a.total);
     const maintenanceTotal = maintenanceLogs.reduce((sum, log) => sum + log.cost, 0);

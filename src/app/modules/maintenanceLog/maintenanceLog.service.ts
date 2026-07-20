@@ -56,9 +56,16 @@ const getMaintenanceLogsFromDB = async (
 ) => {
   await findOwnedBikeOrThrow(bikeId, userId);
 
+  // ! strip client-controlled "bike"/"isDeleted" keys before they reach QueryBuilder.filter() —
+  // ! its .find(queryObj) call merges into the query and a later key wins, so an unsanitized
+  // ! `?bike=<otherBikeId>` would silently override the ownership-scoped filter below
+  const sanitizedQuery = { ...query };
+  delete sanitizedQuery.bike;
+  delete sanitizedQuery.isDeleted;
+
   const logsQuery = new QueryBuilder(
     maintenanceLogModel.find({ bike: bikeId, isDeleted: false }),
-    query,
+    sanitizedQuery,
   )
     .filter()
     .sort("-serviceDate")

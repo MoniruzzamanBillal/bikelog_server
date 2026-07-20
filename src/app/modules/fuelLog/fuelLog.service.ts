@@ -99,9 +99,16 @@ const getFuelLogsFromDB = async (
 ) => {
   await findOwnedBikeOrThrow(bikeId, userId);
 
+  // ! strip client-controlled "bike"/"isDeleted" keys before they reach QueryBuilder.filter() —
+  // ! its .find(queryObj) call merges into the query and a later key wins, so an unsanitized
+  // ! `?bike=<otherBikeId>` would silently override the ownership-scoped filter below
+  const sanitizedQuery = { ...query };
+  delete sanitizedQuery.bike;
+  delete sanitizedQuery.isDeleted;
+
   const fuelLogsQuery = new QueryBuilder(
     fuelLogModel.find({ bike: bikeId, isDeleted: false }),
-    query,
+    sanitizedQuery,
   )
     .filter()
     .sort("-date")
@@ -148,6 +155,9 @@ const updateFuelLogInDB = async (
       "This fuel log is part of a closed mileage record and can't be edited",
     );
   }
+
+  // ! totalCost is always server-derived — never trust a client-submitted value directly
+  delete payload.totalCost;
 
   if (payload.litersAdded !== undefined || payload.pricePerLiter !== undefined) {
     const fuelLog = await fuelLogModel.findOne({ _id: id, bike: bikeId });

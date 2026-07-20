@@ -80,7 +80,13 @@ const createFuelLogIntoDB = (bikeId, userId, payload) => __awaiter(void 0, void 
 });
 const getFuelLogsFromDB = (bikeId, userId, query) => __awaiter(void 0, void 0, void 0, function* () {
     yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
-    const fuelLogsQuery = new Queryuilder_1.default(fuelLog_model_1.fuelLogModel.find({ bike: bikeId, isDeleted: false }), query)
+    // ! strip client-controlled "bike"/"isDeleted" keys before they reach QueryBuilder.filter() —
+    // ! its .find(queryObj) call merges into the query and a later key wins, so an unsanitized
+    // ! `?bike=<otherBikeId>` would silently override the ownership-scoped filter below
+    const sanitizedQuery = Object.assign({}, query);
+    delete sanitizedQuery.bike;
+    delete sanitizedQuery.isDeleted;
+    const fuelLogsQuery = new Queryuilder_1.default(fuelLog_model_1.fuelLogModel.find({ bike: bikeId, isDeleted: false }), sanitizedQuery)
         .filter()
         .sort("-date")
         .pagination()
@@ -110,6 +116,8 @@ const updateFuelLogInDB = (bikeId, userId, id, payload) => __awaiter(void 0, voi
     if (existsInMileageRecord) {
         throw new AppError_1.default(http_status_1.default.CONFLICT, "This fuel log is part of a closed mileage record and can't be edited");
     }
+    // ! totalCost is always server-derived — never trust a client-submitted value directly
+    delete payload.totalCost;
     if (payload.litersAdded !== undefined || payload.pricePerLiter !== undefined) {
         const fuelLog = yield fuelLog_model_1.fuelLogModel.findOne({ _id: id, bike: bikeId });
         if (fuelLog) {

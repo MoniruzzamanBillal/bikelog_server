@@ -9,9 +9,23 @@ import config from "../../config";
 
 // ! for creating a user
 const createUser = async (payload: TUser) => {
-  const result = await userModel.create(payload);
-
-  return result;
+  try {
+    const result = await userModel.create(payload);
+    return userModel.findById(result._id).select("-password");
+  } catch (error: unknown) {
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error as { code: number }).code === 11000
+    ) {
+      throw new AppError(
+        httpStatus.CONFLICT,
+        "A user with this email already exists",
+      );
+    }
+    throw error;
+  }
 };
 
 // ! for login a user

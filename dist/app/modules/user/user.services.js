@@ -21,8 +21,19 @@ const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const config_1 = __importDefault(require("../../config"));
 // ! for creating a user
 const createUser = (payload) => __awaiter(void 0, void 0, void 0, function* () {
-    const result = yield user_model_1.userModel.create(payload);
-    return result;
+    try {
+        const result = yield user_model_1.userModel.create(payload);
+        return user_model_1.userModel.findById(result._id).select("-password");
+    }
+    catch (error) {
+        if (error &&
+            typeof error === "object" &&
+            "code" in error &&
+            error.code === 11000) {
+            throw new AppError_1.default(http_status_1.default.CONFLICT, "A user with this email already exists");
+        }
+        throw error;
+    }
 });
 const loginFromDb = (payload) => __awaiter(void 0, void 0, void 0, function* () {
     const userData = yield user_model_1.userModel.findOne({ email: payload === null || payload === void 0 ? void 0 : payload.email });

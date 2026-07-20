@@ -82,9 +82,10 @@ const getSpendingSummaryFromDB = async (
 
   const categoryBreakdown: { category: string; total: number }[] = [
     { category: "Fuel", total: fuelTotal },
-    ...Object.entries(maintenanceByCategory)
-      .filter(([, total]) => total > 0)
-      .map(([category, total]) => ({ category, total })),
+    ...Object.entries(maintenanceByCategory).map(([category, total]) => ({
+      category,
+      total,
+    })),
   ];
 
   categoryBreakdown.sort((a, b) => b.total - a.total);

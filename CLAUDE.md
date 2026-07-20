@@ -6,9 +6,9 @@ For product requirements, data model, and API surface, read `context/specs/bike-
 
 ## Current state
 
-Past scaffolding, pre-business-logic. All 8 modules exist under `src/app/modules/` (`bike`, `fuelLog`, `mileageRecord`, `maintenanceType`, `engineOilType`, `maintenanceLog`, `spending`, `user`) with fully implemented Mongoose models and every planned endpoint wired into `src/app/router/index.ts` — the inherited `transaction` boilerplate module is gone. **Every controller/service is still a stub returning `501 Not Implemented`, except `user`**, whose register/login logic is real (inherited from the original clone, not scaffolded) but has known bugs being fixed under spec 02 (see below). `package.json` still says `l2-boiler` — cosmetic leftover, harmless.
+The MVP backend is functionally complete. All 8 modules under `src/app/modules/` (`bike`, `fuelLog`, `mileageRecord`, `maintenanceType`, `engineOilType`, `maintenanceLog`, `spending`, `user`) have real business logic implemented across specs 01–09 — no controller/service returns `501` anymore. `package.json` still says `l2-boiler` — cosmetic leftover, harmless.
 
-Real business-logic work is tracked as numbered specs under `context/specs/`: `01-module-scaffolding-and-models.md` is Complete; `02` through `09` (one per module) are written and awaiting approval/implementation. **`context/progress-tracker.md` is the single source of truth for exactly which spec/module is implemented vs. stub vs. proposed at any given moment** — check it before assuming a module's logic exists.
+Real business-logic work is tracked as numbered specs under `context/specs/`: `01` through `09` are all Complete. **`context/progress-tracker.md` is the single source of truth for exactly which spec/module is implemented vs. stub vs. proposed at any given moment** — check it before assuming a module's logic exists, and check its "Recent Activity"/"Known Gaps" sections for post-implementation bug-fix passes (e.g. an IDOR in the `fuelLog`/`maintenanceLog` list endpoints and a password-leak in registration were both found and fixed in a later audit pass, not caught during the original spec implementation).
 
 ## Commands
 
