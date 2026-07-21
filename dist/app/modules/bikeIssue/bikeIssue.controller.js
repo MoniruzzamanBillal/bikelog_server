@@ -62,26 +62,13 @@ const deleteBikeIssue = (0, catchAsync_1.default)((req, res) => __awaiter(void 0
         data: result,
     });
 }));
-// const resolveBikeIssue = catchAsync(async (req, res) => {
-//   const result = await bikeIssueServices.resolveBikeIssueInDB(
-//     req.params.bikeId,
-//     req.user.userId,
-//     req.params.id,
-//     req.body,
-//   );
-//   sendResponse(res, {
-//     status: httpStatus.OK,
-//     success: true,
-//     message: "Bike issue resolved successfully",
-//     data: result,
-//   });
-// });
-const reopenBikeIssue = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const result = yield bikeIssue_service_1.bikeIssueServices.reopenBikeIssueInDB(req.params.bikeId, req.user.userId, req.params.id);
+const updateBikeIssueStatus = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    const result = yield bikeIssue_service_1.bikeIssueServices.updateBikeIssueStatus(req.params.bikeId, req.user.userId, req.params.id, (_a = req.body) === null || _a === void 0 ? void 0 : _a.status);
     (0, sendResponse_1.default)(res, {
         status: http_status_1.default.OK,
         success: true,
-        message: "Bike issue reopened successfully",
+        message: "Bike issue status updated successfully",
         data: result,
     });
 }));
@@ -91,6 +78,5 @@ exports.bikeIssueController = {
     getBikeIssueById,
     updateBikeIssue,
     deleteBikeIssue,
-    // resolveBikeIssue,
-    reopenBikeIssue,
+    updateBikeIssueStatus,
 };

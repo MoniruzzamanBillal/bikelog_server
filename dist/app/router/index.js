@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.MainRouter = void 0;
 const express_1 = require("express");
 const bike_route_1 = require("../modules/bike/bike.route");
+const bikeAccessory_route_1 = require("../modules/bikeAccessory/bikeAccessory.route");
 const bikeIssue_route_1 = require("../modules/bikeIssue/bikeIssue.route");
 const engineOilType_route_1 = require("../modules/engineOilType/engineOilType.route");
 const fuelLog_route_1 = require("../modules/fuelLog/fuelLog.route");
@@ -52,6 +53,10 @@ const routeArray = [
     {
         path: "/bikes/:bikeId/issues",
         route: bikeIssue_route_1.bikeIssueRouter,
+    },
+    {
+        path: "/bikes/:bikeId/accessories",
+        route: bikeAccessory_route_1.bikeAccessoryRouter,
     },
 ];
 routeArray.forEach((item) => {

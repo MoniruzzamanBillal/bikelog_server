@@ -34,12 +34,5 @@ router.patch(
   bikeIssueController.updateBikeIssueStatus,
 );
 
-router.patch(
-  "/:id/reopen",
-  authCheck,
-  validateRequest(bikeIssueValidations.reopenBikeIssueSchema),
-  bikeIssueController.reopenBikeIssue,
-);
-
 //
 export const bikeIssueRouter = router;

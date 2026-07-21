@@ -1,5 +1,7 @@
 # Bike Issue Tracking
 
+> **Implementation note (post-hoc correction):** the module as actually built (and reviewed 2026-07-21) is simpler than the design below — there is **no `history` array or `resolvedInMaintenanceLog` field**, and resolve/reopen are **not** separate endpoints. Instead `TBikeIssue` has just `status: "open" | "resolved"`, and a single `PATCH /:id/status` endpoint (body `{ status }`, zod-enum-validated) drives both directions, guarded so setting a status equal to the issue's current status 400s instead of silently no-op'ing. This matches the actual usage pattern: log an issue (starts `open`) → mark it `resolved` once fixed → flip back to `open` if the same problem recurs, with no need to track how many times or via which maintenance visit. The `history`/`resolvedInMaintenanceLog`/dedicated-resolve-and-reopen design below is kept for record but is **not** what's implemented; don't build against it.
+
 ## Goal
 
 Add a new `bikeIssue` module so a rider can log a problem noticed while riding (e.g. "brake squeaks") without needing to visit a service center immediately, track it through an `open`/`resolved` lifecycle, and — when the same problem comes back days or weeks after being marked resolved — reopen the *same* document rather than creating a duplicate, preserving a full history of how many times it has recurred.

@@ -125,7 +125,7 @@ const deleteBikeIssueFromDB = async (
   return issue;
 };
 
-// ! for updating bike issue status
+// ! open -> resolved when fixed, resolved -> open again if the same problem recurs
 const updateBikeIssueStatus = async (
   bikeId: string,
   userId: string,
@@ -144,37 +144,15 @@ const updateBikeIssueStatus = async (
     throw new AppError(httpStatus.NOT_FOUND, "Bike issue not found");
   }
 
-  const result = await bikeIssueModel.findByIdAndUpdate(issue?.id, {
-    status,
-  });
-
-  return result;
-};
-
-const reopenBikeIssueInDB = async (
-  bikeId: string,
-  userId: string,
-  id: string,
-) => {
-  await findOwnedBikeOrThrow(bikeId, userId);
-
-  const issue = await bikeIssueModel.findOne({
-    _id: id,
-    bike: bikeId,
-    isDeleted: false,
-  });
-
-  if (!issue) {
-    throw new AppError(httpStatus.NOT_FOUND, "Bike issue not found");
+  if (issue.status === status) {
+    throw new AppError(httpStatus.BAD_REQUEST, `Issue is already ${status}`);
   }
 
-  if (issue.status === BikeIssueStatus.open) {
-    throw new AppError(httpStatus.BAD_REQUEST, "Issue is already open");
-  }
-
-  const result = await bikeIssueModel.findByIdAndUpdate(issue?.id, {
-    status: BikeIssueStatus.open,
-  });
+  const result = await bikeIssueModel.findByIdAndUpdate(
+    issue.id,
+    { status },
+    { new: true, runValidators: true },
+  );
 
   return result;
 };
@@ -186,5 +164,4 @@ export const bikeIssueServices = {
   updateBikeIssueInDB,
   deleteBikeIssueFromDB,
   updateBikeIssueStatus,
-  reopenBikeIssueInDB,
 };

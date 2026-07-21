@@ -95,21 +95,6 @@ const updateBikeIssueStatus = catchAsync(async (req, res) => {
   });
 });
 
-const reopenBikeIssue = catchAsync(async (req, res) => {
-  const result = await bikeIssueServices.reopenBikeIssueInDB(
-    req.params.bikeId,
-    req.user.userId,
-    req.params.id,
-  );
-
-  sendResponse(res, {
-    status: httpStatus.OK,
-    success: true,
-    message: "Bike issue reopened successfully",
-    data: result,
-  });
-});
-
 export const bikeIssueController = {
   createBikeIssue,
   getBikeIssues,
@@ -117,5 +102,4 @@ export const bikeIssueController = {
   updateBikeIssue,
   deleteBikeIssue,
   updateBikeIssueStatus,
-  reopenBikeIssue,
 };
