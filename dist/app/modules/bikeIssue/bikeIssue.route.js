@@ -16,7 +16,12 @@ router.get("/", authCheck_1.default, bikeIssue_controller_1.bikeIssueController.
 router.get("/:id", authCheck_1.default, bikeIssue_controller_1.bikeIssueController.getBikeIssueById);
 router.patch("/:id", authCheck_1.default, (0, validateRequest_1.default)(bikeIssue_validation_1.bikeIssueValidations.updateBikeIssueSchema), bikeIssue_controller_1.bikeIssueController.updateBikeIssue);
 router.delete("/:id", authCheck_1.default, bikeIssue_controller_1.bikeIssueController.deleteBikeIssue);
-router.patch("/:id/resolve", authCheck_1.default, (0, validateRequest_1.default)(bikeIssue_validation_1.bikeIssueValidations.resolveBikeIssueSchema), bikeIssue_controller_1.bikeIssueController.resolveBikeIssue);
+// router.patch(
+//   "/:id/resolve",
+//   authCheck,
+//   validateRequest(bikeIssueValidations.resolveBikeIssueSchema),
+//   bikeIssueController.resolveBikeIssue,
+// );
 router.patch("/:id/reopen", authCheck_1.default, (0, validateRequest_1.default)(bikeIssue_validation_1.bikeIssueValidations.reopenBikeIssueSchema), bikeIssue_controller_1.bikeIssueController.reopenBikeIssue);
 //
 exports.bikeIssueRouter = router;

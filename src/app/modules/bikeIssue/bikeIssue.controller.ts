@@ -79,18 +79,18 @@ const deleteBikeIssue = catchAsync(async (req, res) => {
   });
 });
 
-const resolveBikeIssue = catchAsync(async (req, res) => {
-  const result = await bikeIssueServices.resolveBikeIssueInDB(
+const updateBikeIssueStatus = catchAsync(async (req, res) => {
+  const result = await bikeIssueServices.updateBikeIssueStatus(
     req.params.bikeId,
     req.user.userId,
     req.params.id,
-    req.body,
+    req.body?.status,
   );
 
   sendResponse(res, {
     status: httpStatus.OK,
     success: true,
-    message: "Bike issue resolved successfully",
+    message: "Bike issue status updated successfully",
     data: result,
   });
 });
@@ -116,6 +116,6 @@ export const bikeIssueController = {
   getBikeIssueById,
   updateBikeIssue,
   deleteBikeIssue,
-  resolveBikeIssue,
+  updateBikeIssueStatus,
   reopenBikeIssue,
 };

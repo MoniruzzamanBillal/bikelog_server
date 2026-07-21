@@ -28,10 +28,10 @@ router.patch(
 router.delete("/:id", authCheck, bikeIssueController.deleteBikeIssue);
 
 router.patch(
-  "/:id/resolve",
+  "/:id/status",
   authCheck,
-  validateRequest(bikeIssueValidations.resolveBikeIssueSchema),
-  bikeIssueController.resolveBikeIssue,
+  validateRequest(bikeIssueValidations.updateBikeIssueStatusSchema),
+  bikeIssueController.updateBikeIssueStatus,
 );
 
 router.patch(

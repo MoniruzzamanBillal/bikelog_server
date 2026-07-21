@@ -2,10 +2,9 @@ import httpStatus from "http-status";
 import AppError from "../../Error/AppError";
 import QueryBuilder from "../../builder/Queryuilder";
 import { findOwnedBikeOrThrow } from "../bike/bike.utils";
-import { maintenanceLogModel } from "../maintenanceLog/maintenanceLog.model";
-import { BikeIssueStatus } from "./bikeIssue.constant";
+import { BikeIssueStatus, TBikeIssueStatus } from "./bikeIssue.constant";
+import { TBikeIssue } from "./bikeIssue.interface";
 import { bikeIssueModel } from "./bikeIssue.model";
-import { TBikeIssue, TBikeIssueHistoryEntry } from "./bikeIssue.interface";
 
 const createBikeIssueIntoDB = async (
   bikeId: string,
@@ -18,7 +17,7 @@ const createBikeIssueIntoDB = async (
     ...payload,
     bike: bikeId,
     status: BikeIssueStatus.open,
-    history: [],
+
     dateReported: payload.dateReported ?? new Date(),
   };
 
@@ -56,7 +55,11 @@ const getBikeIssuesFromDB = async (
   return { result, meta };
 };
 
-const getBikeIssueByIdFromDB = async (bikeId: string, userId: string, id: string) => {
+const getBikeIssueByIdFromDB = async (
+  bikeId: string,
+  userId: string,
+  id: string,
+) => {
   await findOwnedBikeOrThrow(bikeId, userId);
 
   const issue = await bikeIssueModel.findOne({
@@ -92,7 +95,6 @@ const updateBikeIssueInDB = async (
 
   const updateData = { ...payload };
   delete updateData.status;
-  delete updateData.history;
 
   Object.assign(issue, updateData);
   await issue.save();
@@ -100,7 +102,11 @@ const updateBikeIssueInDB = async (
   return issue;
 };
 
-const deleteBikeIssueFromDB = async (bikeId: string, userId: string, id: string) => {
+const deleteBikeIssueFromDB = async (
+  bikeId: string,
+  userId: string,
+  id: string,
+) => {
   await findOwnedBikeOrThrow(bikeId, userId);
 
   const issue = await bikeIssueModel.findOne({
@@ -119,11 +125,12 @@ const deleteBikeIssueFromDB = async (bikeId: string, userId: string, id: string)
   return issue;
 };
 
-const resolveBikeIssueInDB = async (
+// ! for updating bike issue status
+const updateBikeIssueStatus = async (
   bikeId: string,
   userId: string,
   id: string,
-  payload: { resolvedInMaintenanceLog?: string },
+  status: TBikeIssueStatus,
 ) => {
   await findOwnedBikeOrThrow(bikeId, userId);
 
@@ -137,35 +144,18 @@ const resolveBikeIssueInDB = async (
     throw new AppError(httpStatus.NOT_FOUND, "Bike issue not found");
   }
 
-  if (issue.status === BikeIssueStatus.resolved) {
-    throw new AppError(httpStatus.BAD_REQUEST, "Issue is already resolved");
-  }
+  const result = await bikeIssueModel.findByIdAndUpdate(issue?.id, {
+    status,
+  });
 
-  if (payload.resolvedInMaintenanceLog) {
-    const maintenanceLog = await maintenanceLogModel.findOne({
-      _id: payload.resolvedInMaintenanceLog,
-      bike: bikeId,
-      isDeleted: false,
-    });
-    if (!maintenanceLog) {
-      throw new AppError(httpStatus.NOT_FOUND, "Maintenance log not found");
-    }
-  }
-
-  issue.history.push({
-    resolvedAt: new Date(),
-    ...(payload.resolvedInMaintenanceLog && {
-      resolvedInMaintenanceLog: payload.resolvedInMaintenanceLog,
-    }),
-  } as unknown as TBikeIssueHistoryEntry);
-  issue.status = BikeIssueStatus.resolved;
-
-  await issue.save();
-
-  return issue;
+  return result;
 };
 
-const reopenBikeIssueInDB = async (bikeId: string, userId: string, id: string) => {
+const reopenBikeIssueInDB = async (
+  bikeId: string,
+  userId: string,
+  id: string,
+) => {
   await findOwnedBikeOrThrow(bikeId, userId);
 
   const issue = await bikeIssueModel.findOne({
@@ -182,18 +172,11 @@ const reopenBikeIssueInDB = async (bikeId: string, userId: string, id: string) =
     throw new AppError(httpStatus.BAD_REQUEST, "Issue is already open");
   }
 
-  const lastEntry = issue.history[issue.history.length - 1];
-  if (!lastEntry) {
-    throw new AppError(httpStatus.BAD_REQUEST, "Issue has no resolution history to reopen");
-  }
+  const result = await bikeIssueModel.findByIdAndUpdate(issue?.id, {
+    status: BikeIssueStatus.open,
+  });
 
-  lastEntry.reopenedAt = new Date();
-  issue.status = BikeIssueStatus.open;
-
-  issue.markModified("history");
-  await issue.save();
-
-  return issue;
+  return result;
 };
 
 export const bikeIssueServices = {
@@ -202,6 +185,6 @@ export const bikeIssueServices = {
   getBikeIssueByIdFromDB,
   updateBikeIssueInDB,
   deleteBikeIssueFromDB,
-  resolveBikeIssueInDB,
+  updateBikeIssueStatus,
   reopenBikeIssueInDB,
 };
