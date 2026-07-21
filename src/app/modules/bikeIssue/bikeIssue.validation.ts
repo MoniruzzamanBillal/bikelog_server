@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { BikeIssueStatus } from "./bikeIssue.constant";
 
 const createBikeIssueSchema = z.object({
   body: z.object({
@@ -18,12 +19,10 @@ const updateBikeIssueSchema = z.object({
 
 const updateBikeIssueStatusSchema = z.object({
   body: z.object({
-    status: z.string(),
+    status: z.enum(Object.values(BikeIssueStatus) as [string, ...string[]], {
+      required_error: "status is required",
+    }),
   }),
-});
-
-const reopenBikeIssueSchema = z.object({
-  body: z.object({}),
 });
 
 //
@@ -31,5 +30,4 @@ export const bikeIssueValidations = {
   createBikeIssueSchema,
   updateBikeIssueSchema,
   updateBikeIssueStatusSchema,
-  reopenBikeIssueSchema,
 };

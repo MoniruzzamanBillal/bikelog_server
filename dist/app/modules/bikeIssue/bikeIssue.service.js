@@ -85,7 +85,8 @@ const deleteBikeIssueFromDB = (bikeId, userId, id) => __awaiter(void 0, void 0, 
     yield issue.save();
     return issue;
 });
-const reopenBikeIssueInDB = (bikeId, userId, id) => __awaiter(void 0, void 0, void 0, function* () {
+// ! open -> resolved when fixed, resolved -> open again if the same problem recurs
+const updateBikeIssueStatus = (bikeId, userId, id, status) => __awaiter(void 0, void 0, void 0, function* () {
     yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
     const issue = yield bikeIssue_model_1.bikeIssueModel.findOne({
         _id: id,
@@ -95,12 +96,10 @@ const reopenBikeIssueInDB = (bikeId, userId, id) => __awaiter(void 0, void 0, vo
     if (!issue) {
         throw new AppError_1.default(http_status_1.default.NOT_FOUND, "Bike issue not found");
     }
-    if (issue.status === bikeIssue_constant_1.BikeIssueStatus.open) {
-        throw new AppError_1.default(http_status_1.default.BAD_REQUEST, "Issue is already open");
+    if (issue.status === status) {
+        throw new AppError_1.default(http_status_1.default.BAD_REQUEST, `Issue is already ${status}`);
     }
-    const result = yield bikeIssue_model_1.bikeIssueModel.findByIdAndUpdate(issue === null || issue === void 0 ? void 0 : issue.id, {
-        status: bikeIssue_constant_1.BikeIssueStatus.open,
-    });
+    const result = yield bikeIssue_model_1.bikeIssueModel.findByIdAndUpdate(issue.id, { status }, { new: true, runValidators: true });
     return result;
 });
 exports.bikeIssueServices = {
@@ -109,5 +108,5 @@ exports.bikeIssueServices = {
     getBikeIssueByIdFromDB,
     updateBikeIssueInDB,
     deleteBikeIssueFromDB,
-    reopenBikeIssueInDB,
+    updateBikeIssueStatus,
 };

@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.bikeIssueValidations = void 0;
 const zod_1 = require("zod");
+const bikeIssue_constant_1 = require("./bikeIssue.constant");
 const createBikeIssueSchema = zod_1.z.object({
     body: zod_1.z.object({
         title: zod_1.z.string({ required_error: "Title is required" }),
@@ -16,18 +17,16 @@ const updateBikeIssueSchema = zod_1.z.object({
         dateReported: zod_1.z.coerce.date().optional(),
     }),
 });
-const resolveBikeIssueSchema = zod_1.z.object({
+const updateBikeIssueStatusSchema = zod_1.z.object({
     body: zod_1.z.object({
-        resolvedInMaintenanceLog: zod_1.z.string().optional(),
+        status: zod_1.z.enum(Object.values(bikeIssue_constant_1.BikeIssueStatus), {
+            required_error: "status is required",
+        }),
     }),
-});
-const reopenBikeIssueSchema = zod_1.z.object({
-    body: zod_1.z.object({}),
 });
 //
 exports.bikeIssueValidations = {
     createBikeIssueSchema,
     updateBikeIssueSchema,
-    resolveBikeIssueSchema,
-    reopenBikeIssueSchema,
+    updateBikeIssueStatusSchema,
 };

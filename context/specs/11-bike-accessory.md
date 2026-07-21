@@ -4,7 +4,7 @@
 
 Add a new `bikeAccessory` module so a rider can log accessories they want to buy (e.g. phone mount, saddle bag) that they can't purchase immediately, tracking an urgency level and a purchase status per bike.
 
-This is a deliberate scope expansion beyond the original `bike-log-plan.md` — that doc only mentions "accessories" once, as an example *maintenance-type catalog category name* ("insurance/registration renewal, accessories/other"), unrelated to a purchase wishlist. This module is new design surface, added on direct user request, motivated by a real constraint: the user can't always go to the accessories shop the moment they think of something (needs money/weekend time), so wants need to be tracked with an urgency level until they can actually be bought.
+This is a deliberate scope expansion beyond the original `bike-log-plan.md` — that doc only mentions "accessories" once, as an example _maintenance-type catalog category name_ ("insurance/registration renewal, accessories/other"), unrelated to a purchase wishlist. This module is new design surface, added on direct user request, motivated by a real constraint: the user can't always go to the accessories shop the moment they think of something (needs money/weekend time), so wants need to be tracked with an urgency level until they can actually be bought.
 
 ## Design
 
