@@ -27,12 +27,12 @@ router.patch(
 
 router.delete("/:id", authCheck, bikeIssueController.deleteBikeIssue);
 
-router.patch(
-  "/:id/resolve",
-  authCheck,
-  validateRequest(bikeIssueValidations.resolveBikeIssueSchema),
-  bikeIssueController.resolveBikeIssue,
-);
+// router.patch(
+//   "/:id/resolve",
+//   authCheck,
+//   validateRequest(bikeIssueValidations.resolveBikeIssueSchema),
+//   bikeIssueController.resolveBikeIssue,
+// );
 
 router.patch(
   "/:id/reopen",

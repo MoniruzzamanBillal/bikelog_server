@@ -12,19 +12,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.bikeIssueModel = void 0;
 const mongoose_1 = require("mongoose");
 const bikeIssue_constant_1 = require("./bikeIssue.constant");
-const bikeIssueHistorySchema = new mongoose_1.Schema({
-    resolvedAt: {
-        type: Date,
-        required: [true, "resolvedAt is required "],
-    },
-    reopenedAt: {
-        type: Date,
-    },
-    resolvedInMaintenanceLog: {
-        type: mongoose_1.Schema.Types.ObjectId,
-        ref: "MaintenanceLog",
-    },
-}, { _id: false });
 const bikeIssueSchema = new mongoose_1.Schema({
     bike: {
         type: mongoose_1.Schema.Types.ObjectId,
@@ -48,7 +35,6 @@ const bikeIssueSchema = new mongoose_1.Schema({
         enum: Object.values(bikeIssue_constant_1.BikeIssueStatus),
         default: bikeIssue_constant_1.BikeIssueStatus.open,
     },
-    history: [bikeIssueHistorySchema],
     isDeleted: {
         type: Boolean,
         default: false,

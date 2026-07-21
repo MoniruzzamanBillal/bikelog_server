@@ -17,13 +17,12 @@ const http_status_1 = __importDefault(require("http-status"));
 const AppError_1 = __importDefault(require("../../Error/AppError"));
 const Queryuilder_1 = __importDefault(require("../../builder/Queryuilder"));
 const bike_utils_1 = require("../bike/bike.utils");
-const maintenanceLog_model_1 = require("../maintenanceLog/maintenanceLog.model");
 const bikeIssue_constant_1 = require("./bikeIssue.constant");
 const bikeIssue_model_1 = require("./bikeIssue.model");
 const createBikeIssueIntoDB = (bikeId, userId, payload) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
-    const issueData = Object.assign(Object.assign({}, payload), { bike: bikeId, status: bikeIssue_constant_1.BikeIssueStatus.open, history: [], dateReported: (_a = payload.dateReported) !== null && _a !== void 0 ? _a : new Date() });
+    const issueData = Object.assign(Object.assign({}, payload), { bike: bikeId, status: bikeIssue_constant_1.BikeIssueStatus.open, dateReported: (_a = payload.dateReported) !== null && _a !== void 0 ? _a : new Date() });
     const issue = yield bikeIssue_model_1.bikeIssueModel.create(issueData);
     return issue;
 });
@@ -68,7 +67,6 @@ const updateBikeIssueInDB = (bikeId, userId, id, payload) => __awaiter(void 0, v
     }
     const updateData = Object.assign({}, payload);
     delete updateData.status;
-    delete updateData.history;
     Object.assign(issue, updateData);
     yield issue.save();
     return issue;
@@ -87,36 +85,6 @@ const deleteBikeIssueFromDB = (bikeId, userId, id) => __awaiter(void 0, void 0, 
     yield issue.save();
     return issue;
 });
-const resolveBikeIssueInDB = (bikeId, userId, id, payload) => __awaiter(void 0, void 0, void 0, function* () {
-    yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
-    const issue = yield bikeIssue_model_1.bikeIssueModel.findOne({
-        _id: id,
-        bike: bikeId,
-        isDeleted: false,
-    });
-    if (!issue) {
-        throw new AppError_1.default(http_status_1.default.NOT_FOUND, "Bike issue not found");
-    }
-    if (issue.status === bikeIssue_constant_1.BikeIssueStatus.resolved) {
-        throw new AppError_1.default(http_status_1.default.BAD_REQUEST, "Issue is already resolved");
-    }
-    if (payload.resolvedInMaintenanceLog) {
-        const maintenanceLog = yield maintenanceLog_model_1.maintenanceLogModel.findOne({
-            _id: payload.resolvedInMaintenanceLog,
-            bike: bikeId,
-            isDeleted: false,
-        });
-        if (!maintenanceLog) {
-            throw new AppError_1.default(http_status_1.default.NOT_FOUND, "Maintenance log not found");
-        }
-    }
-    issue.history.push(Object.assign({ resolvedAt: new Date() }, (payload.resolvedInMaintenanceLog && {
-        resolvedInMaintenanceLog: payload.resolvedInMaintenanceLog,
-    })));
-    issue.status = bikeIssue_constant_1.BikeIssueStatus.resolved;
-    yield issue.save();
-    return issue;
-});
 const reopenBikeIssueInDB = (bikeId, userId, id) => __awaiter(void 0, void 0, void 0, function* () {
     yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
     const issue = yield bikeIssue_model_1.bikeIssueModel.findOne({
@@ -130,15 +98,10 @@ const reopenBikeIssueInDB = (bikeId, userId, id) => __awaiter(void 0, void 0, vo
     if (issue.status === bikeIssue_constant_1.BikeIssueStatus.open) {
         throw new AppError_1.default(http_status_1.default.BAD_REQUEST, "Issue is already open");
     }
-    const lastEntry = issue.history[issue.history.length - 1];
-    if (!lastEntry) {
-        throw new AppError_1.default(http_status_1.default.BAD_REQUEST, "Issue has no resolution history to reopen");
-    }
-    lastEntry.reopenedAt = new Date();
-    issue.status = bikeIssue_constant_1.BikeIssueStatus.open;
-    issue.markModified("history");
-    yield issue.save();
-    return issue;
+    const result = yield bikeIssue_model_1.bikeIssueModel.findByIdAndUpdate(issue === null || issue === void 0 ? void 0 : issue.id, {
+        status: bikeIssue_constant_1.BikeIssueStatus.open,
+    });
+    return result;
 });
 exports.bikeIssueServices = {
     createBikeIssueIntoDB,
@@ -146,6 +109,5 @@ exports.bikeIssueServices = {
     getBikeIssueByIdFromDB,
     updateBikeIssueInDB,
     deleteBikeIssueFromDB,
-    resolveBikeIssueInDB,
     reopenBikeIssueInDB,
 };

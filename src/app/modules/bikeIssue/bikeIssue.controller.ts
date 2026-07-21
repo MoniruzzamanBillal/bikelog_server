@@ -79,21 +79,21 @@ const deleteBikeIssue = catchAsync(async (req, res) => {
   });
 });
 
-const resolveBikeIssue = catchAsync(async (req, res) => {
-  const result = await bikeIssueServices.resolveBikeIssueInDB(
-    req.params.bikeId,
-    req.user.userId,
-    req.params.id,
-    req.body,
-  );
+// const resolveBikeIssue = catchAsync(async (req, res) => {
+//   const result = await bikeIssueServices.resolveBikeIssueInDB(
+//     req.params.bikeId,
+//     req.user.userId,
+//     req.params.id,
+//     req.body,
+//   );
 
-  sendResponse(res, {
-    status: httpStatus.OK,
-    success: true,
-    message: "Bike issue resolved successfully",
-    data: result,
-  });
-});
+//   sendResponse(res, {
+//     status: httpStatus.OK,
+//     success: true,
+//     message: "Bike issue resolved successfully",
+//     data: result,
+//   });
+// });
 
 const reopenBikeIssue = catchAsync(async (req, res) => {
   const result = await bikeIssueServices.reopenBikeIssueInDB(
@@ -116,6 +116,6 @@ export const bikeIssueController = {
   getBikeIssueById,
   updateBikeIssue,
   deleteBikeIssue,
-  resolveBikeIssue,
+  // resolveBikeIssue,
   reopenBikeIssue,
 };

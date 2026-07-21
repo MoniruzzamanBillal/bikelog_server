@@ -1,23 +1,6 @@
 import { model, Schema } from "mongoose";
 import { BikeIssueStatus } from "./bikeIssue.constant";
-import { TBikeIssue, TBikeIssueHistoryEntry } from "./bikeIssue.interface";
-
-const bikeIssueHistorySchema = new Schema<TBikeIssueHistoryEntry>(
-  {
-    resolvedAt: {
-      type: Date,
-      required: [true, "resolvedAt is required "],
-    },
-    reopenedAt: {
-      type: Date,
-    },
-    resolvedInMaintenanceLog: {
-      type: Schema.Types.ObjectId,
-      ref: "MaintenanceLog",
-    },
-  },
-  { _id: false },
-);
+import { TBikeIssue } from "./bikeIssue.interface";
 
 const bikeIssueSchema = new Schema<TBikeIssue>(
   {
@@ -43,7 +26,7 @@ const bikeIssueSchema = new Schema<TBikeIssue>(
       enum: Object.values(BikeIssueStatus),
       default: BikeIssueStatus.open,
     },
-    history: [bikeIssueHistorySchema],
+
     isDeleted: {
       type: Boolean,
       default: false,
