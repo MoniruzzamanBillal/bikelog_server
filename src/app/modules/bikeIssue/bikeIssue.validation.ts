@@ -16,9 +16,9 @@ const updateBikeIssueSchema = z.object({
   }),
 });
 
-const resolveBikeIssueSchema = z.object({
+const updateBikeIssueStatusSchema = z.object({
   body: z.object({
-    resolvedInMaintenanceLog: z.string().optional(),
+    status: z.string(),
   }),
 });
 
@@ -30,6 +30,6 @@ const reopenBikeIssueSchema = z.object({
 export const bikeIssueValidations = {
   createBikeIssueSchema,
   updateBikeIssueSchema,
-  resolveBikeIssueSchema,
+  updateBikeIssueStatusSchema,
   reopenBikeIssueSchema,
 };

@@ -2,7 +2,7 @@ import httpStatus from "http-status";
 import AppError from "../../Error/AppError";
 import QueryBuilder from "../../builder/Queryuilder";
 import { findOwnedBikeOrThrow } from "../bike/bike.utils";
-import { BikeIssueStatus } from "./bikeIssue.constant";
+import { BikeIssueStatus, TBikeIssueStatus } from "./bikeIssue.constant";
 import { TBikeIssue } from "./bikeIssue.interface";
 import { bikeIssueModel } from "./bikeIssue.model";
 
@@ -125,6 +125,32 @@ const deleteBikeIssueFromDB = async (
   return issue;
 };
 
+// ! for updating bike issue status
+const updateBikeIssueStatus = async (
+  bikeId: string,
+  userId: string,
+  id: string,
+  status: TBikeIssueStatus,
+) => {
+  await findOwnedBikeOrThrow(bikeId, userId);
+
+  const issue = await bikeIssueModel.findOne({
+    _id: id,
+    bike: bikeId,
+    isDeleted: false,
+  });
+
+  if (!issue) {
+    throw new AppError(httpStatus.NOT_FOUND, "Bike issue not found");
+  }
+
+  const result = await bikeIssueModel.findByIdAndUpdate(issue?.id, {
+    status,
+  });
+
+  return result;
+};
+
 const reopenBikeIssueInDB = async (
   bikeId: string,
   userId: string,
@@ -159,6 +185,6 @@ export const bikeIssueServices = {
   getBikeIssueByIdFromDB,
   updateBikeIssueInDB,
   deleteBikeIssueFromDB,
-
+  updateBikeIssueStatus,
   reopenBikeIssueInDB,
 };
