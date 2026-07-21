@@ -4,7 +4,7 @@ Update this file after every meaningful implementation change.
 
 ## Current Phase
 
-All 8 Bike Log modules (`user`, `bike`, `fuelLog`, `mileageRecord`, `maintenanceType`, `engineOilType`, `maintenanceLog`, `spending`) have real business-logic implementations across specs 02–09. No remaining stubs. Next work is whatever comes after the MVP backend.
+All 8 original Bike Log modules (`user`, `bike`, `fuelLog`, `mileageRecord`, `maintenanceType`, `engineOilType`, `maintenanceLog`, `spending`) have real business-logic implementations across specs 02–09. No remaining stubs. A 9th module, `bikeIssue`, was added per spec 10 as a post-MVP scope expansion (issue tracking with open/resolved lifecycle and recurrence history) — also complete.
 
 ## Spec Implementation Status
 
@@ -22,6 +22,7 @@ Tracks work items defined in `context/specs/`. Update the moment implementation 
 | [`07-engine-oil-type-catalog.md`](specs/07-engine-oil-type-catalog.md)             | Complete    |
 | [`08-maintenance-log-and-reminders.md`](specs/08-maintenance-log-and-reminders.md) | Complete    |
 | [`09-spending-summary.md`](specs/09-spending-summary.md)                           | Complete    |
+| [`10-bike-issue.md`](specs/10-bike-issue.md)                                       | Complete    |
 
 ## Completed
 
@@ -38,6 +39,8 @@ Tracks work items defined in `context/specs/`. Update the moment implementation 
 - **Spec 08 — maintenance log + reminders**: Implemented all 6 service functions in `maintenanceLog.service.ts` — `createMaintenanceLogIntoDB` (ownership + referential checks on `maintenanceType`/`oilType`, server-computed `nextDueOdometer`, odometer bump), `getMaintenanceLogsFromDB` (QueryBuilder with `-serviceDate` sort + optional `maintenanceType` filter), `getMaintenanceLogByIdFromDB`, `updateMaintenanceLogInDB` (recomputes `nextDueOdometer` if `odometerReading` or `intervalKmUsed` changes, referential checks on update, strips client-supplied `nextDueOdometer`), `deleteMaintenanceLogFromDB` (soft delete), `getRemindersFromDB` (groups by `maintenanceType` → most recent log, km-based status with 50km buffer, date-based status with 14-day buffer, omits entries that are neither due nor upcoming). Wired all 6 controller handlers in `maintenanceLog.controller.ts` with `sendResponse`. No validation/route/model changes needed. `yarn build` clean, `yarn lint` clean (no new errors).
 
 ## Recent Activity
+
+- **Spec 10 — bike issue tracking**: Implemented new `bikeIssue` module (a scope expansion beyond the original plan doc, per direct user request — see spec 10 for motivation). `bikeIssue.constant.ts` (`BikeIssueStatus` `as const`), `bikeIssue.interface.ts` (`TBikeIssueHistoryEntry`, `TBikeIssue`), `bikeIssue.model.ts` (sub-schema for `history` with `{ _id: false }`, soft-delete hooks), `bikeIssue.validation.ts` (create/update/resolve/reopen Zod schemas), `bikeIssue.service.ts` (7 functions: create forces `status: "open"`/`history: []`; `getBikeIssuesFromDB` strips `bike`/`isDeleted` from query before `QueryBuilder` — same IDOR-safe pattern as `fuelLog`/`maintenanceLog`; generic update strips `status`/`history`; `resolveBikeIssueInDB` pushes a new `history` entry with optional `resolvedInMaintenanceLog` validated against `maintenanceLogModel` scoped to the bike, rejects if already resolved; `reopenBikeIssueInDB` sets `reopenedAt` on the *last* history entry, calls `markModified("history")` before `save()`, rejects if already open), `bikeIssue.controller.ts` (7 thin `catchAsync` wrappers), `bikeIssue.route.ts` (single `Router({ mergeParams: true })`, dedicated `PATCH /:id/resolve` and `PATCH /:id/reopen` alongside generic CRUD). Wired into `router/index.ts` at `/bikes/:bikeId/issues`. Verified: `yarn build` clean, `yarn lint` shows only the 4 pre-existing repo-wide errors (none in `bikeIssue`); full manual smoke test against a running server covered every item in spec 10's Verify-when-done checklist — forced `open`/`[]` on create despite client-sent `status`/`history`, resolve→reopen→resolve cycle produced exactly 2 `history` entries with `reopenedAt` correctly set only on the entry it belongs to, double-resolve and double-reopen both 400, generic `PATCH /:id` left `status`/`history` untouched while updating `title`, a bogus `resolvedInMaintenanceLog` id 404'd, `?status=` filtering worked, and `?bike=<otherBikeId>` query-string IDOR + cross-bike `GET` both stayed correctly scoped to the URL's `:bikeId`.
 
 - **Full audit of specs 02–09 against their implementations** (all 8 modules, per the user's request to go through every implementation plan and fix any bugs found). Found and fixed 4 real issues:
   - **Security (IDOR): `getFuelLogsFromDB` and `getMaintenanceLogsFromDB`** passed raw `req.query` straight into `QueryBuilder.filter()`, which runs a second `.find(queryObj)` call on top of the ownership-scoped `.find({ bike: bikeId, isDeleted: false })`. Mongoose merges conflicting keys with last-write-wins, so an authenticated user who owns *some* bike could hit `GET /bikes/:bikeId/fuel-logs?bike=<anotherUsersBikeId>` (or the equivalent on maintenance-logs) and read another user's data — `findOwnedBikeOrThrow` only ever checked the URL's `:bikeId`, not the one smuggled through the query string. Verified experimentally against the installed Mongoose version before fixing. Fixed in both services by stripping `bike`/`isDeleted` from the query object before it reaches `QueryBuilder`.
@@ -78,4 +81,4 @@ Tracks work items defined in `context/specs/`. Update the moment implementation 
 
 ## Next Up
 
-All 8 Bike Log modules (specs 02–09) are implemented. No remaining MVP backend work. Next steps would be frontend integration, pre-existing lint cleanup, or Phase-2 features.
+All 8 original Bike Log modules (specs 02–09) plus the spec-10 `bikeIssue` addition are implemented. No remaining MVP backend work. Next steps would be frontend integration (including a `bikeIssue` domain hook/UI, not yet built), pre-existing lint cleanup, or further Phase-2 features.

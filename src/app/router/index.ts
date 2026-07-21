@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { bikeRouter } from "../modules/bike/bike.route";
+import { bikeIssueRouter } from "../modules/bikeIssue/bikeIssue.route";
 import { engineOilTypeRouter } from "../modules/engineOilType/engineOilType.route";
 import { fuelLogRouter } from "../modules/fuelLog/fuelLog.route";
 import {
@@ -49,6 +50,10 @@ const routeArray = [
   {
     path: "/bikes/:bikeId/spending-summary",
     route: spendingRouter,
+  },
+  {
+    path: "/bikes/:bikeId/issues",
+    route: bikeIssueRouter,
   },
 ];
 
