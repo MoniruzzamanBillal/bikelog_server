@@ -36,7 +36,7 @@ const getBikeIssuesFromDB = (bikeId, userId, query) => __awaiter(void 0, void 0,
     delete sanitizedQuery.isDeleted;
     const issuesQuery = new Queryuilder_1.default(bikeIssue_model_1.bikeIssueModel.find({ bike: bikeId, isDeleted: false }), sanitizedQuery)
         .filter()
-        .sort("-dateReported")
+        .sort("statusRank -dateReported")
         .pagination()
         .field();
     const result = yield issuesQuery.queryModel;
@@ -67,6 +67,7 @@ const updateBikeIssueInDB = (bikeId, userId, id, payload) => __awaiter(void 0, v
     }
     const updateData = Object.assign({}, payload);
     delete updateData.status;
+    delete updateData.statusRank;
     Object.assign(issue, updateData);
     yield issue.save();
     return issue;
@@ -99,8 +100,9 @@ const updateBikeIssueStatus = (bikeId, userId, id, status) => __awaiter(void 0, 
     if (issue.status === status) {
         throw new AppError_1.default(http_status_1.default.BAD_REQUEST, `Issue is already ${status}`);
     }
-    const result = yield bikeIssue_model_1.bikeIssueModel.findByIdAndUpdate(issue.id, { status }, { new: true, runValidators: true });
-    return result;
+    issue.status = status;
+    yield issue.save();
+    return issue;
 });
 exports.bikeIssueServices = {
     createBikeIssueIntoDB,
