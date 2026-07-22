@@ -22,6 +22,7 @@ app.use(
       "https://devmats.vercel.app",
       "https://dev-mats.vercel.app",
       "http://localhost:8081",
+      "https://bikelog-web.vercel.app",
     ],
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
