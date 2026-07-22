@@ -45,7 +45,7 @@ const getBikeIssuesFromDB = async (
     sanitizedQuery,
   )
     .filter()
-    .sort("-dateReported")
+    .sort("statusRank -dateReported")
     .pagination()
     .field();
 
@@ -95,6 +95,7 @@ const updateBikeIssueInDB = async (
 
   const updateData = { ...payload };
   delete updateData.status;
+  delete updateData.statusRank;
 
   Object.assign(issue, updateData);
   await issue.save();
@@ -148,13 +149,10 @@ const updateBikeIssueStatus = async (
     throw new AppError(httpStatus.BAD_REQUEST, `Issue is already ${status}`);
   }
 
-  const result = await bikeIssueModel.findByIdAndUpdate(
-    issue.id,
-    { status },
-    { new: true, runValidators: true },
-  );
+  issue.status = status;
+  await issue.save();
 
-  return result;
+  return issue;
 };
 
 export const bikeIssueServices = {

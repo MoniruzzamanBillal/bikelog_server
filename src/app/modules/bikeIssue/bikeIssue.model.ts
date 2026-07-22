@@ -26,6 +26,10 @@ const bikeIssueSchema = new Schema<TBikeIssue>(
       enum: Object.values(BikeIssueStatus),
       default: BikeIssueStatus.open,
     },
+    statusRank: {
+      type: Number,
+      default: 0,
+    },
 
     isDeleted: {
       type: Boolean,
@@ -34,6 +38,13 @@ const bikeIssueSchema = new Schema<TBikeIssue>(
   },
   { timestamps: true },
 );
+
+// ! keep statusRank in sync with status so the list endpoint can sort open-before-resolved
+// ! at the DB-query level (see context/specs/12-bike-issue-list-sort-order.md)
+bikeIssueSchema.pre("save", function (next) {
+  this.statusRank = Object.values(BikeIssueStatus).indexOf(this.status);
+  next();
+});
 
 // ! filter out soft-deleted bike issues
 bikeIssueSchema.pre("find", async function (next) {

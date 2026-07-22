@@ -10,21 +10,21 @@ All 8 original Bike Log modules (`user`, `bike`, `fuelLog`, `mileageRecord`, `ma
 
 Tracks work items defined in `context/specs/`. Update the moment implementation starts or finishes on a spec.
 
-| Spec                                                                               | Status      |
-| ---------------------------------------------------------------------------------- | ----------- |
-| [`00-build-plan.md`](specs/00-build-plan.md)                                       | Not Started |
-| [`01-module-scaffolding-and-models.md`](specs/01-module-scaffolding-and-models.md) | Complete    |
-| [`02-auth-hardening.md`](specs/02-auth-hardening.md)                               | Complete    |
-| [`03-bike-crud.md`](specs/03-bike-crud.md)                                         | Complete    |
-| [`04-fuel-log-and-mileage-closure.md`](specs/04-fuel-log-and-mileage-closure.md)   | Complete    |
-| [`05-mileage-stats.md`](specs/05-mileage-stats.md)                                 | Complete    |
-| [`06-maintenance-type-catalog.md`](specs/06-maintenance-type-catalog.md)           | Complete    |
-| [`07-engine-oil-type-catalog.md`](specs/07-engine-oil-type-catalog.md)             | Complete    |
-| [`08-maintenance-log-and-reminders.md`](specs/08-maintenance-log-and-reminders.md) | Complete    |
-| [`09-spending-summary.md`](specs/09-spending-summary.md)                           | Complete    |
-| [`10-bike-issue.md`](specs/10-bike-issue.md)                                       | Complete    |
-| [`11-bike-accessory.md`](specs/11-bike-accessory.md)                               | Complete    |
-| [`12-bike-issue-list-sort-order.md`](specs/12-bike-issue-list-sort-order.md)         | Not Started |
+| Spec                                                                                 | Status      |
+| ------------------------------------------------------------------------------------ | ----------- |
+| [`00-build-plan.md`](specs/00-build-plan.md)                                         | Not Started |
+| [`01-module-scaffolding-and-models.md`](specs/01-module-scaffolding-and-models.md)   | Complete    |
+| [`02-auth-hardening.md`](specs/02-auth-hardening.md)                                 | Complete    |
+| [`03-bike-crud.md`](specs/03-bike-crud.md)                                           | Complete    |
+| [`04-fuel-log-and-mileage-closure.md`](specs/04-fuel-log-and-mileage-closure.md)     | Complete    |
+| [`05-mileage-stats.md`](specs/05-mileage-stats.md)                                   | Complete    |
+| [`06-maintenance-type-catalog.md`](specs/06-maintenance-type-catalog.md)             | Complete    |
+| [`07-engine-oil-type-catalog.md`](specs/07-engine-oil-type-catalog.md)               | Complete    |
+| [`08-maintenance-log-and-reminders.md`](specs/08-maintenance-log-and-reminders.md)   | Complete    |
+| [`09-spending-summary.md`](specs/09-spending-summary.md)                             | Complete    |
+| [`10-bike-issue.md`](specs/10-bike-issue.md)                                         | Complete    |
+| [`11-bike-accessory.md`](specs/11-bike-accessory.md)                                 | Complete    |
+| [`12-bike-issue-list-sort-order.md`](specs/12-bike-issue-list-sort-order.md)         | Complete    |
 | [`13-bike-accessory-list-sort-order.md`](specs/13-bike-accessory-list-sort-order.md) | Not Started |
 
 ## Completed
@@ -42,6 +42,8 @@ Tracks work items defined in `context/specs/`. Update the moment implementation 
 - **Spec 08 — maintenance log + reminders**: Implemented all 6 service functions in `maintenanceLog.service.ts` — `createMaintenanceLogIntoDB` (ownership + referential checks on `maintenanceType`/`oilType`, server-computed `nextDueOdometer`, odometer bump), `getMaintenanceLogsFromDB` (QueryBuilder with `-serviceDate` sort + optional `maintenanceType` filter), `getMaintenanceLogByIdFromDB`, `updateMaintenanceLogInDB` (recomputes `nextDueOdometer` if `odometerReading` or `intervalKmUsed` changes, referential checks on update, strips client-supplied `nextDueOdometer`), `deleteMaintenanceLogFromDB` (soft delete), `getRemindersFromDB` (groups by `maintenanceType` → most recent log, km-based status with 50km buffer, date-based status with 14-day buffer, omits entries that are neither due nor upcoming). Wired all 6 controller handlers in `maintenanceLog.controller.ts` with `sendResponse`. No validation/route/model changes needed. `yarn build` clean, `yarn lint` clean (no new errors).
 
 ## Recent Activity
+
+- **2026-07-22 — Spec 12 (`bikeIssue` list sort order) implemented, scope limited strictly to spec 12.** Added `statusRank: number` to `TBikeIssue`/`bikeIssue.model.ts` (schema field, `default: 0`), kept in sync via a new `bikeIssueSchema.pre("save")` hook computing `Object.values(BikeIssueStatus).indexOf(this.status)` (open=0, resolved=1). `getBikeIssuesFromDB`'s sort changed from `.sort("-dateReported")` to `.sort("statusRank -dateReported")`. Bundled real bug fix: `updateBikeIssueStatus` previously called `bikeIssueModel.findByIdAndUpdate(...)`, which bypasses `pre("save")` document middleware entirely — rewrote it to the fetch-then-mutate-then-`.save()` pattern already used by every other mutator in the module (`issue.status = status; await issue.save();`), matching module convention and letting the hook fire on status flips. Added `delete updateData.statusRank` in `updateBikeIssueInDB` alongside the existing `delete updateData.status` so the field can't be spoofed via generic PATCH. No validation-schema changes (by design — `statusRank` is server-derived only). Skipped the spec's optional backfill script (`backfillBikeIssueStatusRank.ts`) as out of scope for this pass. Verified: `yarn build` clean; `npx eslint src/app/modules/bikeIssue` clean; full `yarn lint` shows only the same 4 pre-existing repo-wide errors, none new. Manually smoke-tested end-to-end against an isolated local instance (the already-running dev server on port 5000 hadn't picked up the change, so a temporary instance was started on port 5099 specifically to verify against current code): confirmed open-before-resolved ordering independent of `dateReported` (including a case where a resolved issue was reported *after* an open one), `-dateReported` descending order preserved as the secondary key within each status group, `statusRank` correctly flips 0→1 on `PATCH /:id/status` (proving the `.save()` fix actually re-triggers the hook), the already-resolved 400 guard still works, a spoofed `statusRank` in a generic `PATCH /:id` body has zero effect, pagination (`?limit=1` across 3 pages) reflects one continuous open-before-resolved order rather than a per-page reorder, and cross-bike/IDOR isolation (including a spoofed `?bike=<otherBikeId>` query param) remains intact.
 
 - **2026-07-22 — Wrote 2 new implementation-plan specs (`12-bike-issue-list-sort-order.md`, `13-bike-accessory-list-sort-order.md`), per direct user request.** Docs only, no source files touched. Design: add a materialized `statusRank` numeric field to each model (derived from the enum's own declared order via `Object.values(...).indexOf(status)`), kept in sync by a `pre("save")` hook (precedent: `user.model.ts`'s password-hashing hook), sorted with a compound Mongoose sort string (`"statusRank -dateReported"` / `"statusRank -createdAt"`) — rejected an in-memory JS sort (would break across paginated pages) and an aggregation pipeline (`Queryuilder` only wraps `Query`, never `Aggregate`; would be the first `.aggregate()` call in the codebase, against the documented house-style aversion to aggregation pipelines). Spec 12 also bundles a real bug fix: `updateBikeIssueStatus` currently uses `findByIdAndUpdate`, which bypasses `pre("save")` document middleware entirely, so it's rewritten to the fetch-then-mutate-then-`.save()` pattern already used elsewhere in the module. Spec 13 flags a regression risk unique to `bikeAccessory`: its list endpoint currently honors a client `?sort=` via `Queryuilder`'s fallback (unlike `bikeIssue`, which hardcodes its sort), so the fix must compose `statusRank` with the client's existing sort value rather than hardcoding it away.
 
