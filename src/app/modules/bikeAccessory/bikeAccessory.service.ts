@@ -1,7 +1,7 @@
 import httpStatus from "http-status";
 import AppError from "../../Error/AppError";
-import QueryBuilder from "../../builder/Queryuilder";
 import { findOwnedBikeOrThrow } from "../bike/bike.utils";
+import { AccessoryStatus, TAccessoryStatus } from "./bikeAccessory.constant";
 import { bikeAccessoryModel } from "./bikeAccessory.model";
 import { TBikeAccessory } from "./bikeAccessory.interface";
 
@@ -29,24 +29,61 @@ const getBikeAccessoriesFromDB = async (
 ) => {
   await findOwnedBikeOrThrow(bikeId, userId);
 
-  // ! strip client-controlled "bike"/"isDeleted" keys before they reach QueryBuilder.filter() —
-  // ! its .find(queryObj) call merges into the query and a later key wins, so an unsanitized
-  // ! `?bike=<otherBikeId>` would silently override the ownership-scoped filter below
+  // ! strip client-controlled "bike"/"isDeleted" keys before they reach the filter object —
+  // ! an unsanitized `?bike=<otherBikeId>` would otherwise override the ownership-scoped filter below
   const sanitizedQuery = { ...query };
   delete sanitizedQuery.bike;
   delete sanitizedQuery.isDeleted;
 
-  const accessoriesQuery = new QueryBuilder(
-    bikeAccessoryModel.find({ bike: bikeId, isDeleted: false }),
-    sanitizedQuery,
-  )
-    .filter()
-    .sort()
-    .pagination()
-    .field();
+  const filterQuery: Record<string, unknown> = { ...sanitizedQuery };
+  delete filterQuery.searchTerm;
+  delete filterQuery.sort;
+  delete filterQuery.limit;
+  delete filterQuery.page;
+  delete filterQuery.fields;
 
-  const result = await accessoriesQuery.queryModel;
-  const meta = await accessoriesQuery.countTotal();
+  // ! grouping is done by running one query per status (in the enum's declared order) and
+  // ! merging the results, rather than a persisted/derived rank field — this sorts correctly
+  // ! on documents that already existed before this change, with no migration step required
+  const statusOrder = Object.values(AccessoryStatus);
+  const requestedStatuses: TAccessoryStatus[] =
+    typeof filterQuery.status === "string" &&
+    (statusOrder as string[]).includes(filterQuery.status)
+      ? [filterQuery.status as TAccessoryStatus]
+      : statusOrder;
+  delete filterQuery.status;
+
+  const sortBy =
+    (typeof sanitizedQuery.sort === "string" ? sanitizedQuery.sort : "")
+      .split(",")
+      .join(" ") || "-createdAt";
+
+  const fields =
+    (typeof sanitizedQuery.fields === "string" ? sanitizedQuery.fields : "")
+      .split(",")
+      .join(" ") || "-__v";
+
+  const limit = Number(sanitizedQuery.limit) || 10;
+  const page = Number(sanitizedQuery.page) || 1;
+  const skip = (page - 1) * limit;
+
+  const baseFilter = { bike: bikeId, isDeleted: false, ...filterQuery };
+
+  const resultsByStatus = await Promise.all(
+    requestedStatuses.map((status) =>
+      bikeAccessoryModel
+        .find({ ...baseFilter, status })
+        .sort(sortBy)
+        .select(fields),
+    ),
+  );
+
+  const result = resultsByStatus.flat().slice(skip, skip + limit);
+
+  const meta = await bikeAccessoryModel.countDocuments({
+    ...baseFilter,
+    status: { $in: requestedStatuses },
+  });
 
   return { result, meta };
 };

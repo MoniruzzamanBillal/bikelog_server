@@ -36,7 +36,7 @@ const getBikeIssuesFromDB = (bikeId, userId, query) => __awaiter(void 0, void 0,
     delete sanitizedQuery.isDeleted;
     const issuesQuery = new Queryuilder_1.default(bikeIssue_model_1.bikeIssueModel.find({ bike: bikeId, isDeleted: false }), sanitizedQuery)
         .filter()
-        .sort("statusRank -dateReported")
+        .sort("status -dateReported")
         .pagination()
         .field();
     const result = yield issuesQuery.queryModel;
@@ -67,7 +67,6 @@ const updateBikeIssueInDB = (bikeId, userId, id, payload) => __awaiter(void 0, v
     }
     const updateData = Object.assign({}, payload);
     delete updateData.status;
-    delete updateData.statusRank;
     Object.assign(issue, updateData);
     yield issue.save();
     return issue;

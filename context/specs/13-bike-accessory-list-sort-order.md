@@ -2,53 +2,45 @@
 
 ## Goal
 
-Change `GET /bikes/:bikeId/accessories` so accessories always list `status: "pending"` first, then `"purchased"`, then `"cancelled"` — the point of the wishlist is to see what's still outstanding at a glance, and purchased/cancelled entries currently interleave with pending ones based on creation order alone.
+`GET /bikes/:bikeId/accessories` must list `status: "pending"` first, then `"purchased"`, then `"cancelled"`, regardless of creation order.
 
-This is a targeted ordering fix on top of the already-shipped spec 11 module, not a new endpoint or new client-facing field.
+## Design (revised — supersedes the original `statusRank` draft)
 
-## Design
+**Original draft and why it was not implemented as written.** This spec originally proposed the same pattern as spec 12's first pass for `bikeIssue`: a persisted `statusRank: number` field kept in sync by a `pre("save")` hook. Spec 12 shipped that way first, and it turned out to have a real migration gap — any document that existed before the fix shipped kept `statusRank` at its schema default until individually re-saved, so old documents silently sorted wrong until touched. Spec 12 was subsequently corrected to sort directly on the `status` string field instead, which works with zero migration because `"open" < "resolved"` alphabetically already matches the desired order for that enum.
 
-**Ownership and scoping are unchanged.** `getBikeAccessoriesFromDB` keeps its existing `findOwnedBikeOrThrow` call and the `bike`/`isDeleted` query-stripping IDOR guard from spec 11 exactly as-is.
+**That direct-field trick does not transfer here.** `AccessoryStatus` is `{ pending, purchased, cancelled }`, and alphabetically `"cancelled" < "pending" < "purchased"` — the opposite of the desired `pending → purchased → cancelled` order. A plain `.sort("status ...")` would put cancelled first, which is wrong. Per direct user instruction, no persisted rank field and no backfill/migration script — the fix must query correctly off `status` with no derived state.
 
-**Same DB-level-sort and no-aggregation rationale as spec 12** applies here: `.pagination()` slices before results return, so an in-memory JS re-sort would only reorder the current page, not the paginated whole; and `Queryuilder` only wraps `Query`, never `Aggregate` — introducing `.aggregate()` here would be the first such call in the codebase and would require manually re-adding `isDeleted: false` to `$match` since aggregation bypasses the soft-delete `pre("find")` hooks. A materialized field is the simpler fit, exactly as in spec 12.
+**Revised approach: one query per status, merged in the declared order.** `getBikeAccessoriesFromDB` now runs three separate `bikeAccessoryModel.find()` queries — one per value of `Object.values(AccessoryStatus)`, i.e. `pending`, then `purchased`, then `cancelled` — each scoped to `{ bike, isDeleted: false, ...otherFilters, status }` and sorted by the client's secondary sort (or `-createdAt` by default), then concatenates the three result arrays in that fixed order. This sorts correctly on any existing document immediately, since it reads only the real `status` field — no new field, no hook, no migration.
 
-**Materialized `statusRank`, kept in sync by a `pre("save")` hook.** Add a persisted `statusRank: number` field, computed as `Object.values(AccessoryStatus).indexOf(this.status)` — `pending` → `0`, `purchased` → `1`, `cancelled` → `2`, per the enum's own declared order. Recompute it unconditionally on every save inside a `bikeAccessorySchema.pre("save")` hook, same shape and same no-`isModified`-guard-needed reasoning as spec 12's `bikeIssue` hook. `Model.create()` calls `.save()` internally, so accessory creation is covered automatically.
+**Pagination moves out of `Queryuilder` for this endpoint.** Because the ordering now spans three separate queries, `.skip()`/`.limit()` can't be applied to any single one of them without breaking cross-group continuity (e.g. `?limit=1&page=4` needs to land inside the `purchased` group once `pending` is exhausted, not re-`skip()` within one query in isolation). Instead, all matching documents across the three status buckets are fetched in full, concatenated, and `.slice(skip, skip + limit)` is applied once over the merged array. This still produces exactly one continuous status-grouped order across pages (verified: `?limit=1` walked across 6 fixtures landed in the same pending→purchased→cancelled sequence one document at a time), it just does the slicing in application code instead of via a single Mongo query's `.skip()`/`.limit()`. Acceptable given the small, per-bike, personal-use scale of this collection (a handful of wishlist items per bike, not a paginated feed).
 
-**Real wrinkle specific to this module: preserving the client's existing `?sort=` capability.** Unlike `bikeIssue`'s list endpoint (which already hardcodes `.sort("-dateReported")` and has therefore never honored a client `?sort=`), `bikeAccessory.service.ts`'s `getBikeAccessoriesFromDB` currently calls `Queryuilder`'s `.sort()` with **no argument** — meaning it falls back to `this.query?.sort`, so `GET /bikes/:bikeId/accessories?sort=name` (or any other field) **is honored today**, with `-createdAt` used only when no `?sort=` is supplied. Hardcoding `.sort("statusRank -createdAt")` the same way spec 12 does for `bikeIssue` would silently regress that existing capability. Instead, build the compound sort string inside the service from the client's own sort value: read it from the (already-sanitized) query object before calling `.sort()`, and always prefix `statusRank` as the primary key while preserving/composing whatever secondary sort the client asked for, defaulting to `-createdAt` only when none was given:
-```ts
-const clientSort =
-  typeof sanitizedQuery.sort === "string" ? sanitizedQuery.sort : undefined;
-const sortBy = `statusRank ${clientSort ?? "-createdAt"}`;
-```
-then pass `.sort(sortBy)` explicitly instead of the current bare `.sort()`. This still routes through `Queryuilder.sort(sortBy)` unmodified — its existing `.split(",").join(" ")` normalization already handles a client value containing commas correctly when prefixed this way (e.g. `"statusRank name,-urgency"` splits on the one comma present and joins to `"statusRank name -urgency"`), so `Queryuilder.ts` itself needs no change.
+**Client `?sort=` capability is preserved.** `getBikeAccessoriesFromDB` never called `Queryuilder`'s `.filter()`/`.sort()`/`.pagination()`/`.field()` chain for this rewrite (a plain-Mongoose per-status implementation replaces it entirely for this one function), but the sort/fields/pagination defaults are computed with the exact same fallback logic `Queryuilder` used (`sort` → client value or `-createdAt`; `fields` → client value or `-__v`; `limit`/`page` → client value or `10`/`1`), so `GET /bikes/:bikeId/accessories?sort=name` still sorts each status group by `name` ascending, exactly as it did when `Queryuilder`'s bare `.sort()` fallback handled it. `Queryuilder.ts` itself is unchanged — it's simply no longer used by this one function.
 
-**`updateBikeAccessoryInDB` already routes through `.save()`** (`Object.assign(accessory, payload); await accessory.save();`), so the `pre("save")` hook already fires correctly on every update — no call-site change needed there, unlike `bikeIssue`'s status-mutation bug. It does, however, need `statusRank` defensively stripped from `payload` before `Object.assign`, the same as `owner`/`currentOdometer` are stripped in `bike.service.ts` and `status`/`statusRank` in `bikeIssue.service.ts`'s own generic update. **Flagged but not fixed here:** `updateBikeAccessoryInDB` currently has zero stripping of any field at all, not even `bike`/`isDeleted` — pre-existing scope creep beyond this spec's ordering fix; worth a follow-up if the user wants the broader hardening, but only `statusRank` stripping is in scope for this change.
+**Explicit `?status=` filtering is honored.** If the client passes `?status=purchased` (a value already filtered elsewhere via the existing enum), only that one status is queried instead of iterating all three — preserving the pre-existing (if implicit) ability to filter the list down to a single status.
 
-**`statusRank` must never be client-settable** — `bikeAccessory.validation.ts`'s Zod schemas must NOT gain a `statusRank` field in either `createBikeAccessorySchema` or `updateBikeAccessorySchema`. Deliberate omission, not an oversight.
+**No changes to `updateBikeAccessoryInDB`, `bikeAccessory.model.ts`, or `bikeAccessory.interface.ts`.** Since no `statusRank` field is introduced, there is nothing to strip from update payloads and nothing to add to the schema/interface — this spec no longer touches those files at all. The pre-existing note that `updateBikeAccessoryInDB` strips no fields at all (not even `bike`/`isDeleted`) remains flagged but out of scope, exactly as before.
 
-**Response shape and migration note** — identical reasoning to spec 12: `statusRank` will appear in every response the same way `isDeleted` already does (no regression, matches existing house style), and pre-existing documents keep `statusRank: 0` until next touched, for which an optional `src/scripts/backfillBikeAccessoryStatusRank.ts` (mirroring `seedMaintenanceTypes.ts`'s pattern) is the lightweight in-house-style fix.
+**`bikeAccessory.validation.ts`: unchanged**, confirmed no `statusRank` field in either Zod schema (never was).
 
 ## Implementation
 
-1. `bikeAccessory.interface.ts`: add `statusRank: number` to `TBikeAccessory`.
-2. `bikeAccessory.model.ts`: add schema field `statusRank: { type: Number, default: 0 }`; add a `pre("save")` hook setting `this.statusRank = Object.values(AccessoryStatus).indexOf(this.status)`.
-3. `bikeAccessory.service.ts`: in `getBikeAccessoriesFromDB`, replace the bare `.sort()` call with a computed `sortBy = "statusRank " + (clientSort ?? "-createdAt")` string and pass it explicitly, preserving any client `?sort=` as the secondary key; in `updateBikeAccessoryInDB`, add `delete payload.statusRank` before `Object.assign`.
-4. `bikeAccessory.validation.ts`: no changes — confirm `statusRank` is intentionally absent from every Zod schema.
-5. (Optional) `src/scripts/backfillBikeAccessoryStatusRank.ts`: one-off re-save script for pre-existing documents, analogous to spec 12's.
+1. `bikeAccessory.service.ts`: rewrite `getBikeAccessoriesFromDB` to run one `bikeAccessoryModel.find()` per status (in `Object.values(AccessoryStatus)` order, or just the client's requested status if `?status=` is given), each sorted by the client's `?sort=` value (default `-createdAt`) and `.select()`-projected (default `-__v`), concatenate the per-status result arrays in order, then apply `.slice(skip, skip + limit)` over the merged array for pagination. Total count (`meta`) computed via `bikeAccessoryModel.countDocuments()` over the same effective filter (all three statuses, or just the one requested).
+2. No changes to `bikeAccessory.interface.ts`, `bikeAccessory.model.ts`, or `bikeAccessory.validation.ts`.
+3. No backfill script — not needed; nothing is derived/persisted, so there is nothing to migrate.
 
 ## Dependencies
 
-Spec 11 (the `bikeAccessory` module itself must already exist — it does). No dependency on spec 12 — the two modules are independent and can be implemented/verified in either order.
+Spec 11 (the `bikeAccessory` module itself must already exist — it does). Independent of spec 12.
 
 ## Verify-when-done
 
-- [ ] `yarn build` / `yarn lint` clean.
-- [ ] `GET /bikes/:bikeId/accessories` returns `pending`, then `purchased`, then `cancelled`, regardless of creation order (create fixtures out of status order and confirm).
-- [ ] Within each status group, `-createdAt` descending order is preserved when no client `?sort=` is given.
-- [ ] `GET /bikes/:bikeId/accessories?sort=name` still honors the client's secondary sort field within each status group — confirms this fix didn't regress the pre-existing client-sort capability (a capability `bikeIssue`'s list never had to preserve, since it never had it).
-- [ ] `PATCH /:id` changing `status` (any direction — no state machine per spec 11) correctly updates `statusRank`, and the accessory re-sorts into its new group on the next list call.
-- [ ] `PATCH /:id` with a spoofed `statusRank` in the body has zero effect on the persisted value, while other fields in the same request still update.
-- [ ] Pagination across multiple pages (e.g. `?limit=1`) reflects one continuous status-group order across pages, not just within a single page.
-- [ ] `enum` validation (existing, unaffected) still rejects an invalid `urgency`/`status` value at the schema level.
-- [ ] `GET /bikes/:bikeId/accessories?bike=<anotherBikesId>` still never leaks another bike's accessories.
-- [ ] Accessories for bike A still never appear in bike B's list, even for the same authenticated user.
+- [x] `yarn build` / `yarn lint` clean.
+- [x] `GET /bikes/:bikeId/accessories` returns `pending`, then `purchased`, then `cancelled`, regardless of creation order — verified against real fixtures inserted with out-of-order `createdAt` timestamps.
+- [x] Within each status group, `-createdAt` descending order is preserved when no client `?sort=` is given.
+- [x] `GET /bikes/:bikeId/accessories?sort=name` still honors the client's secondary sort field within each status group.
+- [x] Pagination across multiple pages (`?limit=1` walked across 6 fixtures) reflects one continuous status-group order across pages, not just within a single page.
+- [x] An explicit `?status=purchased` filter still returns only that status.
+- [ ] `PATCH /:id` changing `status` (any direction — no state machine per spec 11) correctly re-sorts the accessory into its new group on the next list call — implied by querying live `status` directly (no cache/derived field to go stale), not separately re-verified via the HTTP layer in this pass.
+- [ ] `enum` validation (existing, unaffected) still rejects an invalid `urgency`/`status` value at the schema level — unchanged code path, not re-verified in this pass.
+- [ ] `GET /bikes/:bikeId/accessories?bike=<anotherBikesId>` still never leaks another bike's accessories — unchanged IDOR-stripping logic, not separately re-verified in this pass.
+- [ ] Accessories for bike A still never appear in bike B's list, even for the same authenticated user — same as above.
