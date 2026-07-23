@@ -6,5 +6,6 @@ export type TBikeAccessory = {
   name: string;
   urgency: TAccessoryUrgency;
   status: TAccessoryStatus;
+  price?: number;
   isDeleted: boolean;
 };

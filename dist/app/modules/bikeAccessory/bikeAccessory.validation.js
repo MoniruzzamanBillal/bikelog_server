@@ -12,6 +12,7 @@ const createBikeAccessorySchema = zod_1.z.object({
             required_error: "urgency is required",
         }),
         status: zod_1.z.enum(statusEnum).optional(),
+        price: zod_1.z.number().positive().optional(),
     }),
 });
 const updateBikeAccessorySchema = zod_1.z.object({
@@ -19,6 +20,7 @@ const updateBikeAccessorySchema = zod_1.z.object({
         name: zod_1.z.string().optional(),
         urgency: zod_1.z.enum(urgencyEnum).optional(),
         status: zod_1.z.enum(statusEnum).optional(),
+        price: zod_1.z.number().positive().optional(),
     }),
 });
 //

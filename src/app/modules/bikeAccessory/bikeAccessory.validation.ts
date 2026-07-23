@@ -11,6 +11,7 @@ const createBikeAccessorySchema = z.object({
       required_error: "urgency is required",
     }),
     status: z.enum(statusEnum).optional(),
+    price: z.number().positive().optional(),
   }),
 });
 
@@ -19,6 +20,7 @@ const updateBikeAccessorySchema = z.object({
     name: z.string().optional(),
     urgency: z.enum(urgencyEnum).optional(),
     status: z.enum(statusEnum).optional(),
+    price: z.number().positive().optional(),
   }),
 });
 

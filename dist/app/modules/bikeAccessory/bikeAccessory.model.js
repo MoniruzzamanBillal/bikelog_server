@@ -32,6 +32,9 @@ const bikeAccessorySchema = new mongoose_1.Schema({
         enum: Object.values(bikeAccessory_constant_1.AccessoryStatus),
         default: bikeAccessory_constant_1.AccessoryStatus.pending,
     },
+    price: {
+        type: Number,
+    },
     isDeleted: {
         type: Boolean,
         default: false,
