@@ -45,7 +45,7 @@ const getBikeIssuesFromDB = async (
     sanitizedQuery,
   )
     .filter()
-    .sort("statusRank -dateReported")
+    .sort("status -dateReported")
     .pagination()
     .field();
 
@@ -95,7 +95,6 @@ const updateBikeIssueInDB = async (
 
   const updateData = { ...payload };
   delete updateData.status;
-  delete updateData.statusRank;
 
   Object.assign(issue, updateData);
   await issue.save();

@@ -23,6 +23,9 @@ const bikeAccessorySchema = new Schema<TBikeAccessory>(
       enum: Object.values(AccessoryStatus),
       default: AccessoryStatus.pending,
     },
+    price: {
+      type: Number,
+    },
 
     isDeleted: {
       type: Boolean,

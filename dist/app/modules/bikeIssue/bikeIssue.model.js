@@ -35,21 +35,11 @@ const bikeIssueSchema = new mongoose_1.Schema({
         enum: Object.values(bikeIssue_constant_1.BikeIssueStatus),
         default: bikeIssue_constant_1.BikeIssueStatus.open,
     },
-    statusRank: {
-        type: Number,
-        default: 0,
-    },
     isDeleted: {
         type: Boolean,
         default: false,
     },
 }, { timestamps: true });
-// ! keep statusRank in sync with status so the list endpoint can sort open-before-resolved
-// ! at the DB-query level (see context/specs/12-bike-issue-list-sort-order.md)
-bikeIssueSchema.pre("save", function (next) {
-    this.statusRank = Object.values(bikeIssue_constant_1.BikeIssueStatus).indexOf(this.status);
-    next();
-});
 // ! filter out soft-deleted bike issues
 bikeIssueSchema.pre("find", function (next) {
     return __awaiter(this, void 0, void 0, function* () {

@@ -7,6 +7,5 @@ export type TBikeIssue = {
   description?: string;
   dateReported: Date;
   status: TBikeIssueStatus;
-  statusRank: number;
   isDeleted: boolean;
 };

@@ -30,6 +30,7 @@ app.use((0, cors_1.default)({
         "https://devmats.vercel.app",
         "https://dev-mats.vercel.app",
         "http://localhost:8081",
+        "https://bikelog-web.vercel.app",
     ],
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
