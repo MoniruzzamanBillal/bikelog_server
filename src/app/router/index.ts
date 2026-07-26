@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { aiRouter } from "../modules/ai/ai.route";
 import { bikeRouter } from "../modules/bike/bike.route";
 import { bikeAccessoryRouter } from "../modules/bikeAccessory/bikeAccessory.route";
 import { bikeIssueRouter } from "../modules/bikeIssue/bikeIssue.route";
@@ -59,6 +60,10 @@ const routeArray = [
   {
     path: "/bikes/:bikeId/accessories",
     route: bikeAccessoryRouter,
+  },
+  {
+    path: "/bikes/:bikeId/ai",
+    route: aiRouter,
   },
 ];
 

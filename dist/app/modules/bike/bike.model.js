@@ -57,6 +57,20 @@ const bikeSchema = new mongoose_1.Schema({
         type: Boolean,
         default: false,
     },
+    // ! count-based AI-insight cache: regenerate only when the underlying log count changes,
+    // ! not on a TTL — cheaper and avoids staleness between fixed intervals
+    aiSpendingInsight: {
+        type: String,
+    },
+    aiSpendingInsightLogCount: {
+        type: Number,
+    },
+    aiMileageInsight: {
+        type: String,
+    },
+    aiMileageInsightFuelLogCount: {
+        type: Number,
+    },
 }, { timestamps: true });
 // ! filter out soft-deleted bikes
 bikeSchema.pre("find", function (next) {

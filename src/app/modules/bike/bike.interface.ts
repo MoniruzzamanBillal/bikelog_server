@@ -11,6 +11,10 @@ export type TBike = {
   currentOdometer: number;
   initialOdometer: number;
   isDeleted: boolean;
+  aiSpendingInsight?: string;
+  aiSpendingInsightLogCount?: number;
+  aiMileageInsight?: string;
+  aiMileageInsightFuelLogCount?: number;
   createdAt: Date;
   updatedAt: Date;
 };
