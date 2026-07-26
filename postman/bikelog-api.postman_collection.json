@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Bike Log API",
-    "description": "Backend API for the Bike Log app (Express + TypeScript + Mongoose). Auth via JWT Bearer token — run Auth > Login first (after Auth > Register once), which auto-captures {{token}}. Then run Bikes > Create Bike, Maintenance Types > Create Maintenance Type, and Engine Oil Types > Create Engine Oil Type to auto-capture the ids the rest of the collection chains off of. See dummy-data.md in this folder for the full field reference.",
+    "description": "Backend API for the Bike Log app (Express + TypeScript + Mongoose). Auth via JWT Bearer token \u2014 run Auth > Login first (after Auth > Register once), which auto-captures {{token}}. Then run Bikes > Create Bike, Maintenance Types > Create Maintenance Type, and Engine Oil Types > Create Engine Oil Type to auto-capture the ids the rest of the collection chains off of. See dummy-data.md in this folder for the full field reference.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -370,7 +370,7 @@
                 "{{bikeId}}"
               ]
             },
-            "description": "Soft delete. Run this LAST if at all — every other folder below depends on {{bikeId}} still being usable."
+            "description": "Soft delete. Run this LAST if at all \u2014 every other folder below depends on {{bikeId}} still being usable."
           },
           "event": [
             {
@@ -413,7 +413,7 @@
                 "fuel-logs"
               ]
             },
-            "description": "Never send `totalCost` — it's always server-computed as litersAdded * pricePerLiter and any client value is discarded. Response shape is `data.fuelLog` (+ `data.mileageRecordClosed` if isFullTank closed a period).",
+            "description": "Never send `totalCost` \u2014 it's always server-computed as litersAdded * pricePerLiter and any client value is discarded. Response shape is `data.fuelLog` (+ `data.mileageRecordClosed` if isFullTank closed a period).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"odometerReading\": 1550,\n  \"litersAdded\": 8.5,\n  \"isFullTank\": true,\n  \"pricePerLiter\": 125.5,\n  \"fuelStation\": \"Padma Filling Station\",\n  \"date\": \"2026-07-01\",\n  \"notes\": \"Full tank before highway trip\"\n}",
@@ -633,7 +633,7 @@
                 "mileage"
               ]
             },
-            "description": "No write endpoints exist for this module — records are auto-created when a full-tank fuel log closes a period."
+            "description": "No write endpoints exist for this module \u2014 records are auto-created when a full-tank fuel log closes a period."
           },
           "event": [
             {
@@ -714,6 +714,46 @@
               ]
             },
             "description": "targetYear is required, format YYYY."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mileage Trend",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/mileage/trend?months=3",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "mileage",
+                "trend"
+              ],
+              "query": [
+                {
+                  "key": "months",
+                  "value": "3",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "months is optional (default 3, range 1-24). Returns a rolling window of the last N months ending at the current month, not calendar-year-bound."
           },
           "event": [
             {
@@ -964,7 +1004,7 @@
                 "maintenance-logs"
               ]
             },
-            "description": "Run 'Create Maintenance Type' and 'Create Engine Oil Type' first so {{maintenanceTypeId}}/{{engineOilTypeId}} are populated (or replace with real ids from the List requests, e.g. a seeded catalog id). `oilType` is optional. Never send `nextDueOdometer` — it's computed server-side from odometerReading + intervalKmUsed.",
+            "description": "Run 'Create Maintenance Type' and 'Create Engine Oil Type' first so {{maintenanceTypeId}}/{{engineOilTypeId}} are populated (or replace with real ids from the List requests, e.g. a seeded catalog id). `oilType` is optional. Never send `nextDueOdometer` \u2014 it's computed server-side from odometerReading + intervalKmUsed.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"maintenanceType\": \"{{maintenanceTypeId}}\",\n  \"odometerReading\": 1800,\n  \"oilType\": \"{{engineOilTypeId}}\",\n  \"intervalKmUsed\": 3000,\n  \"nextDueDate\": \"2026-10-01\",\n  \"cost\": 1500,\n  \"serviceDate\": \"2026-07-15\",\n  \"serviceCenter\": \"City Bike Care\",\n  \"partsReplaced\": [\n    \"Oil Filter\",\n    \"Engine Oil\"\n  ],\n  \"notes\": \"Routine service\"\n}",
@@ -1303,6 +1343,46 @@
               ]
             },
             "description": "period must be exactly one of month/year/lifetime, or the request 400s."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Spending Trend",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/spending-summary/trend?months=3",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "spending-summary",
+                "trend"
+              ],
+              "query": [
+                {
+                  "key": "months",
+                  "value": "3",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "months is optional (default 3, range 1-24). Returns a rolling window of the last N months ending at the current month, not calendar-year-bound."
           },
           "event": [
             {

@@ -20,5 +20,8 @@ router.get(
   mileageRecordController.getLifetimeMileage,
 );
 
+// ! rolling last-N-months mileage trend for charting
+router.get("/trend", authCheck, mileageRecordController.getMileageTrend);
+
 //
 export const mileageRecordRouter = router;

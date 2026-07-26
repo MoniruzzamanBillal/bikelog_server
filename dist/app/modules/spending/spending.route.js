@@ -10,5 +10,7 @@ const spending_controller_1 = require("./spending.controller");
 const router = (0, express_1.Router)({ mergeParams: true });
 // ! for getting the spending summary (total + category breakdown) for a bike
 router.get("/", authCheck_1.default, spending_controller_1.spendingController.getSpendingSummary);
+// ! rolling last-N-months spending trend for charting
+router.get("/trend", authCheck_1.default, spending_controller_1.spendingController.getSpendingTrend);
 //
 exports.spendingRouter = router;

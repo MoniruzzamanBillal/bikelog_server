@@ -4,48 +4,14 @@ import { findOwnedBikeOrThrow } from "../bike/bike.utils";
 import { fuelLogModel } from "../fuelLog/fuelLog.model";
 import { maintenanceLogModel } from "../maintenanceLog/maintenanceLog.model";
 
-const getSpendingSummaryFromDB = async (
+const computeSpendingForRange = async (
   bikeId: string,
-  userId: string,
-  period: "month" | "year" | "lifetime",
-  targetMonth?: string,
-  targetYear?: string,
-) => {
-  await findOwnedBikeOrThrow(bikeId, userId);
-
-  let startDate: Date | undefined;
-  let endDate: Date | undefined;
-
-  if (period === "month") {
-    if (!targetMonth) {
-      throw new AppError(httpStatus.BAD_REQUEST, "targetMonth is required for period=month");
-    }
-
-    const [yearStr, monthStr] = targetMonth.split("-");
-    const year = parseInt(yearStr, 10);
-    const month = parseInt(monthStr, 10);
-
-    if (isNaN(year) || isNaN(month) || month < 1 || month > 12 || year < 2000 || year > 2100) {
-      throw new AppError(httpStatus.BAD_REQUEST, "Invalid targetMonth format. Use YYYY-MM");
-    }
-
-    startDate = new Date(year, month - 1, 1, 0, 0, 0, 0);
-    endDate = new Date(year, month, 0, 23, 59, 59, 999);
-  } else if (period === "year") {
-    if (!targetYear) {
-      throw new AppError(httpStatus.BAD_REQUEST, "targetYear is required for period=year");
-    }
-
-    const year = parseInt(targetYear, 10);
-
-    if (isNaN(year) || year < 2000 || year > 2100) {
-      throw new AppError(httpStatus.BAD_REQUEST, "Invalid targetYear format. Use YYYY");
-    }
-
-    startDate = new Date(year, 0, 1, 0, 0, 0, 0);
-    endDate = new Date(year, 11, 31, 23, 59, 59, 999);
-  }
-
+  startDate?: Date,
+  endDate?: Date,
+): Promise<{
+  totalSpending: number;
+  categoryBreakdown: { category: string; total: number }[];
+}> => {
   const fuelLogsPromise = fuelLogModel
     .find({
       bike: bikeId,
@@ -93,6 +59,57 @@ const getSpendingSummaryFromDB = async (
   const maintenanceTotal = maintenanceLogs.reduce((sum, log) => sum + log.cost, 0);
   const totalSpending = fuelTotal + maintenanceTotal;
 
+  return { totalSpending, categoryBreakdown };
+};
+
+const getSpendingSummaryFromDB = async (
+  bikeId: string,
+  userId: string,
+  period: "month" | "year" | "lifetime",
+  targetMonth?: string,
+  targetYear?: string,
+) => {
+  await findOwnedBikeOrThrow(bikeId, userId);
+
+  let startDate: Date | undefined;
+  let endDate: Date | undefined;
+
+  if (period === "month") {
+    if (!targetMonth) {
+      throw new AppError(httpStatus.BAD_REQUEST, "targetMonth is required for period=month");
+    }
+
+    const [yearStr, monthStr] = targetMonth.split("-");
+    const year = parseInt(yearStr, 10);
+    const month = parseInt(monthStr, 10);
+
+    if (isNaN(year) || isNaN(month) || month < 1 || month > 12 || year < 2000 || year > 2100) {
+      throw new AppError(httpStatus.BAD_REQUEST, "Invalid targetMonth format. Use YYYY-MM");
+    }
+
+    startDate = new Date(year, month - 1, 1, 0, 0, 0, 0);
+    endDate = new Date(year, month, 0, 23, 59, 59, 999);
+  } else if (period === "year") {
+    if (!targetYear) {
+      throw new AppError(httpStatus.BAD_REQUEST, "targetYear is required for period=year");
+    }
+
+    const year = parseInt(targetYear, 10);
+
+    if (isNaN(year) || year < 2000 || year > 2100) {
+      throw new AppError(httpStatus.BAD_REQUEST, "Invalid targetYear format. Use YYYY");
+    }
+
+    startDate = new Date(year, 0, 1, 0, 0, 0, 0);
+    endDate = new Date(year, 11, 31, 23, 59, 59, 999);
+  }
+
+  const { totalSpending, categoryBreakdown } = await computeSpendingForRange(
+    bikeId,
+    startDate,
+    endDate,
+  );
+
   return {
     period,
     ...(targetMonth ? { targetMonth } : {}),
@@ -102,6 +119,32 @@ const getSpendingSummaryFromDB = async (
   };
 };
 
+const getSpendingTrendFromDB = async (
+  bikeId: string,
+  userId: string,
+  months: number,
+) => {
+  await findOwnedBikeOrThrow(bikeId, userId);
+  const now = new Date();
+  const monthlySummary = [];
+  for (let i = months - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const year = d.getFullYear();
+    const month = d.getMonth() + 1;
+    const targetMonth = `${year}-${String(month).padStart(2, "0")}`;
+    const startDate = new Date(year, month - 1, 1, 0, 0, 0, 0);
+    const endDate = new Date(year, month, 0, 23, 59, 59, 999);
+    const { totalSpending, categoryBreakdown } = await computeSpendingForRange(
+      bikeId,
+      startDate,
+      endDate,
+    );
+    monthlySummary.push({ targetMonth, totalSpending, categoryBreakdown });
+  }
+  return { months, monthlySummary };
+};
+
 export const spendingServices = {
   getSpendingSummaryFromDB,
+  getSpendingTrendFromDB,
 };
