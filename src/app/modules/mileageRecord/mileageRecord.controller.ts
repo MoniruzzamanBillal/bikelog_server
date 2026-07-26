@@ -69,9 +69,33 @@ const getLifetimeMileage = catchAsync(async (req, res) => {
   });
 });
 
+const getMileageTrend = catchAsync(async (req, res) => {
+  await findOwnedBikeOrThrow(req.params.bikeId, req.user.userId);
+
+  const monthsRaw = req.query.months as string | undefined;
+  const months = monthsRaw ? parseInt(monthsRaw, 10) : 3;
+
+  if (isNaN(months) || months < 1 || months > 24) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      "months must be a number between 1 and 24",
+    );
+  }
+
+  const result = await mileageRecordServices.getMileageTrendFromDB(req.params.bikeId, months);
+
+  sendResponse(res, {
+    status: httpStatus.OK,
+    success: true,
+    message: "Mileage trend retrieved successfully",
+    data: result,
+  });
+});
+
 export const mileageRecordController = {
   getMileageRecords,
   getMonthlyMileage,
   getYearlyMileage,
   getLifetimeMileage,
+  getMileageTrend,
 };

@@ -16,5 +16,7 @@ router.get("/monthly", authCheck_1.default, mileageRecord_controller_1.mileageRe
 router.get("/yearly", authCheck_1.default, mileageRecord_controller_1.mileageRecordController.getYearlyMileage);
 // ! lifetime (since-purchase) mileage totals
 router.get("/lifetime", authCheck_1.default, mileageRecord_controller_1.mileageRecordController.getLifetimeMileage);
+// ! rolling last-N-months mileage trend for charting
+router.get("/trend", authCheck_1.default, mileageRecord_controller_1.mileageRecordController.getMileageTrend);
 //
 exports.mileageRecordRouter = router;

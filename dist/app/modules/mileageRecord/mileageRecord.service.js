@@ -144,9 +144,25 @@ const getLifetimeMileageFromDB = (bikeId) => __awaiter(void 0, void 0, void 0, f
     const fuelLogCount = allLogs.length;
     return { totalDistanceKm, totalLitersConsumed, fuelLogCount };
 });
+const getMileageTrendFromDB = (bikeId, months) => __awaiter(void 0, void 0, void 0, function* () {
+    const now = new Date();
+    const monthlySummary = [];
+    for (let i = months - 1; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const year = d.getFullYear();
+        const month = d.getMonth() + 1;
+        const targetMonth = `${year}-${String(month).padStart(2, "0")}`;
+        const startDate = new Date(year, month - 1, 1, 0, 0, 0, 0);
+        const endDate = new Date(year, month, 0, 23, 59, 59, 999);
+        const summary = yield computeMileageForRange(bikeId, startDate, endDate);
+        monthlySummary.push(Object.assign({ targetMonth }, summary));
+    }
+    return { months, monthlySummary };
+});
 exports.mileageRecordServices = {
     getMileageRecordsFromDB,
     getMonthlyMileageFromDB,
     getYearlyMileageFromDB,
     getLifetimeMileageFromDB,
+    getMileageTrendFromDB,
 };

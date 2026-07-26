@@ -21,6 +21,11 @@ interface YearlyMileageResult {
 
 interface LifetimeMileageResult extends MileageSummary {}
 
+interface TrendMileageResult {
+  months: number;
+  monthlySummary: MonthlyMileageResult[];
+}
+
 const computeMileageForRange = async (
   bikeId: string,
   startDate: Date,
@@ -211,9 +216,29 @@ const getLifetimeMileageFromDB = async (
   return { totalDistanceKm, totalLitersConsumed, fuelLogCount };
 };
 
+const getMileageTrendFromDB = async (
+  bikeId: string,
+  months: number,
+): Promise<TrendMileageResult> => {
+  const now = new Date();
+  const monthlySummary: MonthlyMileageResult[] = [];
+  for (let i = months - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const year = d.getFullYear();
+    const month = d.getMonth() + 1;
+    const targetMonth = `${year}-${String(month).padStart(2, "0")}`;
+    const startDate = new Date(year, month - 1, 1, 0, 0, 0, 0);
+    const endDate = new Date(year, month, 0, 23, 59, 59, 999);
+    const summary = await computeMileageForRange(bikeId, startDate, endDate);
+    monthlySummary.push({ targetMonth, ...summary });
+  }
+  return { months, monthlySummary };
+};
+
 export const mileageRecordServices = {
   getMileageRecordsFromDB,
   getMonthlyMileageFromDB,
   getYearlyMileageFromDB,
   getLifetimeMileageFromDB,
+  getMileageTrendFromDB,
 };

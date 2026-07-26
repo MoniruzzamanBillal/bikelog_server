@@ -67,9 +67,25 @@ const getLifetimeMileage = (0, catchAsync_1.default)((req, res) => __awaiter(voi
         data: result,
     });
 }));
+const getMileageTrend = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    yield (0, bike_utils_1.findOwnedBikeOrThrow)(req.params.bikeId, req.user.userId);
+    const monthsRaw = req.query.months;
+    const months = monthsRaw ? parseInt(monthsRaw, 10) : 3;
+    if (isNaN(months) || months < 1 || months > 24) {
+        throw new AppError_1.default(http_status_1.default.BAD_REQUEST, "months must be a number between 1 and 24");
+    }
+    const result = yield mileageRecord_service_1.mileageRecordServices.getMileageTrendFromDB(req.params.bikeId, months);
+    (0, sendResponse_1.default)(res, {
+        status: http_status_1.default.OK,
+        success: true,
+        message: "Mileage trend retrieved successfully",
+        data: result,
+    });
+}));
 exports.mileageRecordController = {
     getMileageRecords,
     getMonthlyMileage,
     getYearlyMileage,
     getLifetimeMileage,
+    getMileageTrend,
 };

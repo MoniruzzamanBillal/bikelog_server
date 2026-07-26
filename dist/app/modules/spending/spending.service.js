@@ -18,34 +18,7 @@ const AppError_1 = __importDefault(require("../../Error/AppError"));
 const bike_utils_1 = require("../bike/bike.utils");
 const fuelLog_model_1 = require("../fuelLog/fuelLog.model");
 const maintenanceLog_model_1 = require("../maintenanceLog/maintenanceLog.model");
-const getSpendingSummaryFromDB = (bikeId, userId, period, targetMonth, targetYear) => __awaiter(void 0, void 0, void 0, function* () {
-    yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
-    let startDate;
-    let endDate;
-    if (period === "month") {
-        if (!targetMonth) {
-            throw new AppError_1.default(http_status_1.default.BAD_REQUEST, "targetMonth is required for period=month");
-        }
-        const [yearStr, monthStr] = targetMonth.split("-");
-        const year = parseInt(yearStr, 10);
-        const month = parseInt(monthStr, 10);
-        if (isNaN(year) || isNaN(month) || month < 1 || month > 12 || year < 2000 || year > 2100) {
-            throw new AppError_1.default(http_status_1.default.BAD_REQUEST, "Invalid targetMonth format. Use YYYY-MM");
-        }
-        startDate = new Date(year, month - 1, 1, 0, 0, 0, 0);
-        endDate = new Date(year, month, 0, 23, 59, 59, 999);
-    }
-    else if (period === "year") {
-        if (!targetYear) {
-            throw new AppError_1.default(http_status_1.default.BAD_REQUEST, "targetYear is required for period=year");
-        }
-        const year = parseInt(targetYear, 10);
-        if (isNaN(year) || year < 2000 || year > 2100) {
-            throw new AppError_1.default(http_status_1.default.BAD_REQUEST, "Invalid targetYear format. Use YYYY");
-        }
-        startDate = new Date(year, 0, 1, 0, 0, 0, 0);
-        endDate = new Date(year, 11, 31, 23, 59, 59, 999);
-    }
+const computeSpendingForRange = (bikeId, startDate, endDate) => __awaiter(void 0, void 0, void 0, function* () {
     const fuelLogsPromise = fuelLog_model_1.fuelLogModel
         .find(Object.assign({ bike: bikeId, isDeleted: false }, (startDate && endDate ? { date: { $gte: startDate, $lte: endDate } } : {})))
         .lean();
@@ -75,9 +48,57 @@ const getSpendingSummaryFromDB = (bikeId, userId, period, targetMonth, targetYea
     categoryBreakdown.sort((a, b) => b.total - a.total);
     const maintenanceTotal = maintenanceLogs.reduce((sum, log) => sum + log.cost, 0);
     const totalSpending = fuelTotal + maintenanceTotal;
+    return { totalSpending, categoryBreakdown };
+});
+const getSpendingSummaryFromDB = (bikeId, userId, period, targetMonth, targetYear) => __awaiter(void 0, void 0, void 0, function* () {
+    yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
+    let startDate;
+    let endDate;
+    if (period === "month") {
+        if (!targetMonth) {
+            throw new AppError_1.default(http_status_1.default.BAD_REQUEST, "targetMonth is required for period=month");
+        }
+        const [yearStr, monthStr] = targetMonth.split("-");
+        const year = parseInt(yearStr, 10);
+        const month = parseInt(monthStr, 10);
+        if (isNaN(year) || isNaN(month) || month < 1 || month > 12 || year < 2000 || year > 2100) {
+            throw new AppError_1.default(http_status_1.default.BAD_REQUEST, "Invalid targetMonth format. Use YYYY-MM");
+        }
+        startDate = new Date(year, month - 1, 1, 0, 0, 0, 0);
+        endDate = new Date(year, month, 0, 23, 59, 59, 999);
+    }
+    else if (period === "year") {
+        if (!targetYear) {
+            throw new AppError_1.default(http_status_1.default.BAD_REQUEST, "targetYear is required for period=year");
+        }
+        const year = parseInt(targetYear, 10);
+        if (isNaN(year) || year < 2000 || year > 2100) {
+            throw new AppError_1.default(http_status_1.default.BAD_REQUEST, "Invalid targetYear format. Use YYYY");
+        }
+        startDate = new Date(year, 0, 1, 0, 0, 0, 0);
+        endDate = new Date(year, 11, 31, 23, 59, 59, 999);
+    }
+    const { totalSpending, categoryBreakdown } = yield computeSpendingForRange(bikeId, startDate, endDate);
     return Object.assign(Object.assign(Object.assign({ period }, (targetMonth ? { targetMonth } : {})), (targetYear ? { targetYear } : {})), { totalSpending,
         categoryBreakdown });
 });
+const getSpendingTrendFromDB = (bikeId, userId, months) => __awaiter(void 0, void 0, void 0, function* () {
+    yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
+    const now = new Date();
+    const monthlySummary = [];
+    for (let i = months - 1; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const year = d.getFullYear();
+        const month = d.getMonth() + 1;
+        const targetMonth = `${year}-${String(month).padStart(2, "0")}`;
+        const startDate = new Date(year, month - 1, 1, 0, 0, 0, 0);
+        const endDate = new Date(year, month, 0, 23, 59, 59, 999);
+        const { totalSpending, categoryBreakdown } = yield computeSpendingForRange(bikeId, startDate, endDate);
+        monthlySummary.push({ targetMonth, totalSpending, categoryBreakdown });
+    }
+    return { months, monthlySummary };
+});
 exports.spendingServices = {
     getSpendingSummaryFromDB,
+    getSpendingTrendFromDB,
 };
