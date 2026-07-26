@@ -18,10 +18,11 @@ const openRouterClient = new OpenAI({
   apiKey: config.openRouterApiKey,
   timeout: 20_000,
   maxRetries: 0,
-  // defaultHeaders: {
-  //   "HTTP-Referer": "https://reimentl2.vercel.app",
-  //   "X-Title": "Reiment",
-  // },
+  defaultHeaders: {
+    // ! placeholder — swap for bikelog_client-web-'s deployed URL once it has one
+    "HTTP-Referer": "https://bikelog-server.vercel.app",
+    "X-Title": "Bike Log",
+  },
 });
 
 // ! free models to try in order - if one is rate limited/down, fall back to the next

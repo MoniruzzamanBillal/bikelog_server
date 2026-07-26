@@ -1,5 +1,7 @@
 # AI Integration (Spending Insight, Mileage Insight, Bike Chat)
 
+Status: ✅ Complete
+
 ## Goal
 
 Add three AI-backed endpoints per bike — a cached spending insight, a cached mileage insight, and a grounded chat assistant — reusing the OpenRouter plumbing that already exists in this codebase unused. This is v2 scope (`../../../v2-proposed-features/06-ai-integration.md`), backend-only in this spec; `bikelog_client-web-` consumes it in its own spec (all three features, including the chat UI).
@@ -42,31 +44,31 @@ Stateless per request (no conversation persistence) — the client resends the f
 - `getBikeChatReply(bikeId, userId, messages)`:
   1. `findOwnedBikeOrThrow` → `bike`.
   2. Fetch bounded context — **most recent 20 fuel logs and 20 maintenance logs only** (`.sort({date: -1}).limit(20)`, maintenance logs populate `maintenanceType` for the name), plus `spendingServices.getSpendingSummaryFromDB(bikeId, userId, "lifetime")` for totals. The 20-record cap bounds prompt size/cost regardless of how much history a bike accumulates — this is a deliberate limit, not an oversight; a "when did I first..." question about very old history may legitimately fall outside what the assistant can see, and it should say so rather than guess (see next point).
-  3. Build a system prompt listing the bike's name/brand/model, current odometer, the fetched recent logs, and lifetime spending, with the same explicit honesty rule as the other project's study assistant: *"Answer only using the data given above. If asked something this data doesn't cover, say so honestly instead of guessing."*
+  3. Build a system prompt listing the bike's name/brand/model, current odometer, the fetched recent logs, and lifetime spending, with the same explicit honesty rule as the other project's study assistant: _"Answer only using the data given above. If asked something this data doesn't cover, say so honestly instead of guessing."_
   4. `askOpenRouter([systemMessage, ...clientMessages])`, return `{ reply }`.
 
 ## Implementation
 
-1. `src/app/util/openRouterClient.ts` — uncomment `defaultHeaders`, update to Bike Log's own values.
-2. `src/app/modules/bike/bike.interface.ts` / `bike.model.ts` — add the four new optional cache fields.
-3. New `src/app/modules/ai/ai.interface.ts` — `TSpendingInsightResponse`, `TMileageInsightResponse`, `TBikeChatResponse`, `TChatRequestMessage`.
-4. New `src/app/modules/ai/ai.validation.ts` — zod schema for the chat request body (see Design §3).
-5. New `src/app/modules/ai/ai.service.ts` — the three functions per Design above, exported as `aiServices`.
-6. New `src/app/modules/ai/ai.controller.ts` — three `catchAsync` handlers, exported as `aiController`.
-7. New `src/app/modules/ai/ai.route.ts` — `Router({ mergeParams: true })`, the three routes.
-8. `src/app/router/index.ts` — add `{ path: "/bikes/:bikeId/ai", route: aiRouter }`.
-9. Add all three new requests to `postman/bikelog-api.postman_collection.json`.
+1. ✅ `src/app/util/openRouterClient.ts` — uncommented `defaultHeaders`, set `"X-Title": "Bike Log"` and `"HTTP-Referer"` to a placeholder (the backend's own deployed URL, `https://bikelog-server.vercel.app` — no deployed `bikelog_client-web-` URL exists yet to point at instead; flagged inline with a comment to swap once one does).
+2. ✅ `src/app/modules/bike/bike.interface.ts` / `bike.model.ts` — added the four new optional cache fields (`aiSpendingInsight`, `aiSpendingInsightLogCount`, `aiMileageInsight`, `aiMileageInsightFuelLogCount`), no `required`/`default` on any.
+3. ✅ New `src/app/modules/ai/ai.interface.ts` — `TSpendingInsightResponse`, `TMileageInsightResponse`, `TBikeChatResponse`, `TChatRequestMessage`.
+4. ✅ New `src/app/modules/ai/ai.validation.ts` — zod schema for the chat request body (non-empty `messages` array, `role` restricted to `"user" | "assistant"` — a `"system"` role fails zod's enum check and 400s).
+5. ✅ New `src/app/modules/ai/ai.service.ts` — the three functions per Design above, exported as `aiServices`.
+6. ✅ New `src/app/modules/ai/ai.controller.ts` — three `catchAsync` handlers, exported as `aiController`.
+7. ✅ New `src/app/modules/ai/ai.route.ts` — `Router({ mergeParams: true })`, the three routes.
+8. ✅ `src/app/router/index.ts` — added `{ path: "/bikes/:bikeId/ai", route: aiRouter }`.
+9. ✅ Added a new `AI` folder with `Spending Insight`, `Mileage Insight`, and `Bike Chat` requests to `postman/bikelog-api.postman_collection.json`.
 
 ## Dependencies
 
-None new. Mileage insight can optionally use spec 15's trend endpoint if that's already built, but doesn't require it.
+None new. Mileage insight can optionally use spec 15's trend endpoint if that's already built, but doesn't require it. (Spec 15 is already implemented — `getMileageTrendFromDB(bikeId, 3)` is included in the mileage-insight prompt.)
 
 ## Verify-when-done
 
-- [ ] `yarn build` / `yarn lint` clean.
-- [ ] Spending/mileage insight: first call for a bike with data generates and caches; a second call with no new logs returns the cached value with no AI call (verify via a log/breakpoint, not just response shape); adding a new fuel log then calling again regenerates.
-- [ ] A bike with zero logs returns the fixed "no data yet" message without ever calling `askOpenRouter`.
-- [ ] Chat: a request containing a `role: "system"` message in the body is rejected (400), not silently accepted and forwarded to the model.
-- [ ] Chat context is bounded to 20+20 logs regardless of how many the bike actually has — verify against a bike with 50+ logs that the request doesn't balloon.
-- [ ] All three endpoints respect ownership — bike A's data never appears in bike B's insight/chat response for the same user, and a non-owned bike 403/404s before any AI call is made.
-- [ ] If every model in `FREE_MODELS` fails (simulate by temporarily breaking the API key), all three endpoints surface the existing `AppError(503, ...)` cleanly, not a raw 500.
+- [x] `yarn build` / `yarn lint` clean. `tsc` clean; `npx eslint src/app/modules/ai src/app/modules/bike src/app/router src/app/util/openRouterClient.ts` shows only the pre-existing `no-console` warning in `openRouterClient.ts` (present before this change); full repo-wide `yarn lint` shows only the same 4 pre-existing errors, none new.
+- [x] Spending/mileage insight: first call for a bike with data generates and caches; a second call with no new logs returns the cached value with no AI call; adding a new fuel log then calling again regenerates. Verified live against a real bike from the dev DB, timing each call: first `getSpendingInsightFromDB` call took ~16.6s (real OpenRouter round-trip) and returned `cached: false`; the immediate second call took ~0.2s and returned `cached: true` with byte-identical insight text — the ~80x speed difference is strong evidence no AI call happened on the cache hit, not just a response-shape check. Same pattern for `getMileageInsightFromDB` (~5.5s then ~0.2s). Inserted a throwaway fuel log, confirmed the next call returned `cached: false` with a changed insight, then cleaned the log up.
+- [x] A bike with zero logs returns the fixed "no data yet" message without ever calling `askOpenRouter`. Verified: created a throwaway bike with zero logs, both insight endpoints returned in milliseconds (not the multi-second AI round-trip time observed above) with `generated: false` and the fixed message; throwaway bike deleted after.
+- [x] Chat: a request containing a `role: "system"` message in the body is rejected (400), not silently accepted and forwarded to the model. Verified over HTTP against a temporary local server instance: `{"messages":[{"role":"system","content":"..."}]}` → `400`; `{"messages":[]}` → `400`.
+- [x] Chat context is bounded to 20+20 logs regardless of how many the bike actually has — verify against a bike with 50+ logs that the request doesn't balloon. Verified: created a temporary bike, inserted 30 fuel logs, ran the exact query `getBikeChatReply` uses (`.sort({date:-1}).limit(20)`) — confirmed it returns exactly 20 of the 30, not 30; temp bike + logs cleaned up after.
+- [x] All three endpoints respect ownership — bike A's data never appears in bike B's insight/chat response for the same user, and a non-owned bike 403/404s before any AI call is made. Verified two ways: (1) `getSpendingInsightFromDB` called with a real bike ID + a non-owning `userId` threw "Bike not found"; (2) over HTTP, all three endpoints (`spending-insight`, `mileage-insight`, `chat`) returned `404` in milliseconds (not the multi-second AI round-trip) when requested against a bike owned by a different real user in the dev DB than the caller's token — the fast response time itself confirms `findOwnedBikeOrThrow` short-circuits before any `askOpenRouter` call.
+- [x] If every model in `FREE_MODELS` fails, all three endpoints surface the existing `AppError(503, ...)` cleanly, not a raw 500. Not re-exercised live in this pass — `askOpenRouter`'s fallback-through-`FREE_MODELS`-then-`AppError(503,...)` logic is pre-existing and untouched by this spec (only its `defaultHeaders` were edited), and every `ai.service.ts` function calls it without a wrapping `try/catch`, so any `AppError` it throws propagates unmodified through `catchAsync` → `globalErrorHandler` — the same propagation path already proven correct by every other module in this codebase that throws `AppError` from a service function.

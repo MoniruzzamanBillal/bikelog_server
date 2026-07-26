@@ -1399,6 +1399,125 @@
           ]
         }
       ]
+    },
+    {
+      "name": "AI",
+      "item": [
+        {
+          "name": "Spending Insight",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/ai/spending-insight",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "ai",
+                "spending-insight"
+              ]
+            },
+            "description": "Cached by log count, not TTL. First call for a bike with data generates and caches; repeat calls with no new logs return the cached value with no AI call. A bike with zero logs returns a fixed 'no data yet' message with generated: false, no AI call made."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mileage Insight",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/ai/mileage-insight",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "ai",
+                "mileage-insight"
+              ]
+            },
+            "description": "Cached by fuel-log count, not TTL. Same shape as Spending Insight."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Bike Chat",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/ai/chat",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "ai",
+                "chat"
+              ]
+            },
+            "description": "Stateless per request \u2014 resend the full message history each call. `messages` must be non-empty; any message with role \"system\" is rejected with 400 (the system prompt is always server-constructed from real bike data). Context is bounded to the 20 most recent fuel logs + 20 most recent maintenance logs plus lifetime spending totals.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"How much have I spent on this bike so far?\" }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ]
 }

@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MainRouter = void 0;
 const express_1 = require("express");
+const ai_route_1 = require("../modules/ai/ai.route");
 const bike_route_1 = require("../modules/bike/bike.route");
 const bikeAccessory_route_1 = require("../modules/bikeAccessory/bikeAccessory.route");
 const bikeIssue_route_1 = require("../modules/bikeIssue/bikeIssue.route");
@@ -57,6 +58,10 @@ const routeArray = [
     {
         path: "/bikes/:bikeId/accessories",
         route: bikeAccessory_route_1.bikeAccessoryRouter,
+    },
+    {
+        path: "/bikes/:bikeId/ai",
+        route: ai_route_1.aiRouter,
     },
 ];
 routeArray.forEach((item) => {
