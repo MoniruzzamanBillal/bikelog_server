@@ -48,6 +48,13 @@ const fuelLogSchema = new mongoose_1.Schema({
     notes: {
         type: String,
     },
+    receiptImage: {
+        type: {
+            url: { type: String },
+            publicId: { type: String },
+        },
+        _id: false,
+    },
     isDeleted: {
         type: Boolean,
         default: false,

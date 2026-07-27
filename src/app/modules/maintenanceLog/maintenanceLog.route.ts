@@ -1,6 +1,7 @@
 import { Router } from "express";
 import authCheck from "../../middleware/authCheck";
 import validateRequest from "../../middleware/validateRequest";
+import { upload } from "../../middleware/upload";
 import { maintenanceLogController } from "./maintenanceLog.controller";
 import { maintenanceLogValidations } from "./maintenanceLog.validation";
 
@@ -33,6 +34,21 @@ crudRouter.delete(
   "/:id",
   authCheck,
   maintenanceLogController.deleteMaintenanceLog,
+);
+
+// ! for uploading/replacing the service image
+crudRouter.put(
+  "/:id/image",
+  authCheck,
+  upload.single("image"),
+  maintenanceLogController.uploadMaintenanceLogImage,
+);
+
+// ! for removing the service image
+crudRouter.delete(
+  "/:id/image",
+  authCheck,
+  maintenanceLogController.deleteMaintenanceLogImage,
 );
 
 // ! reminders router — mounted separately at /bikes/:bikeId/reminders

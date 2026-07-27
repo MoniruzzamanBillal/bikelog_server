@@ -1,6 +1,7 @@
 import { Router } from "express";
 import authCheck from "../../middleware/authCheck";
 import validateRequest from "../../middleware/validateRequest";
+import { upload } from "../../middleware/upload";
 import { bikeAccessoryController } from "./bikeAccessory.controller";
 import { bikeAccessoryValidations } from "./bikeAccessory.validation";
 
@@ -26,6 +27,21 @@ router.patch(
 );
 
 router.delete("/:id", authCheck, bikeAccessoryController.deleteBikeAccessory);
+
+// ! for uploading/replacing the product image
+router.put(
+  "/:id/image",
+  authCheck,
+  upload.single("image"),
+  bikeAccessoryController.uploadBikeAccessoryImage,
+);
+
+// ! for removing the product image
+router.delete(
+  "/:id/image",
+  authCheck,
+  bikeAccessoryController.deleteBikeAccessoryImage,
+);
 
 //
 export const bikeAccessoryRouter = router;

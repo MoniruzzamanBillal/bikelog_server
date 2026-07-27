@@ -20,6 +20,7 @@ const bike_utils_1 = require("../bike/bike.utils");
 const maintenanceType_model_1 = require("../maintenanceType/maintenanceType.model");
 const engineOilType_model_1 = require("../engineOilType/engineOilType.model");
 const maintenanceLog_model_1 = require("./maintenanceLog.model");
+const cloudinary_1 = require("../../util/cloudinary");
 const computeNextDueOdometer = (odometerReading, intervalKmUsed) => {
     return odometerReading + intervalKmUsed;
 };
@@ -175,6 +176,44 @@ const getRemindersFromDB = (bikeId, userId) => __awaiter(void 0, void 0, void 0,
     }
     return { reminders };
 });
+const uploadMaintenanceLogImageIntoDB = (bikeId, userId, id, file) => __awaiter(void 0, void 0, void 0, function* () {
+    yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
+    if (!file) {
+        throw new AppError_1.default(http_status_1.default.BAD_REQUEST, "Image file is required");
+    }
+    const log = yield maintenanceLog_model_1.maintenanceLogModel.findOne({
+        _id: id,
+        bike: bikeId,
+        isDeleted: false,
+    });
+    if (!log) {
+        throw new AppError_1.default(http_status_1.default.NOT_FOUND, "Maintenance log not found");
+    }
+    if (log.serviceImage) {
+        yield (0, cloudinary_1.deleteCloudinaryImage)(log.serviceImage.publicId);
+    }
+    log.serviceImage = { url: file.path, publicId: file.filename };
+    yield log.save();
+    return log;
+});
+const deleteMaintenanceLogImageFromDB = (bikeId, userId, id) => __awaiter(void 0, void 0, void 0, function* () {
+    yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
+    const log = yield maintenanceLog_model_1.maintenanceLogModel.findOne({
+        _id: id,
+        bike: bikeId,
+        isDeleted: false,
+    });
+    if (!log) {
+        throw new AppError_1.default(http_status_1.default.NOT_FOUND, "Maintenance log not found");
+    }
+    if (!log.serviceImage) {
+        throw new AppError_1.default(http_status_1.default.NOT_FOUND, "Service image not found");
+    }
+    yield (0, cloudinary_1.deleteCloudinaryImage)(log.serviceImage.publicId);
+    log.serviceImage = undefined;
+    yield log.save();
+    return log;
+});
 exports.maintenanceLogServices = {
     createMaintenanceLogIntoDB,
     getMaintenanceLogsFromDB,
@@ -182,4 +221,6 @@ exports.maintenanceLogServices = {
     updateMaintenanceLogInDB,
     deleteMaintenanceLogFromDB,
     getRemindersFromDB,
+    uploadMaintenanceLogImageIntoDB,
+    deleteMaintenanceLogImageFromDB,
 };

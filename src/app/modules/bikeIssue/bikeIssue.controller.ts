@@ -95,6 +95,38 @@ const updateBikeIssueStatus = catchAsync(async (req, res) => {
   });
 });
 
+const addBikeIssueImages = catchAsync(async (req, res) => {
+  const result = await bikeIssueServices.addBikeIssueImagesIntoDB(
+    req.params.bikeId,
+    req.user.userId,
+    req.params.id,
+    req.files as Express.Multer.File[] | undefined,
+  );
+
+  sendResponse(res, {
+    status: httpStatus.OK,
+    success: true,
+    message: "Bike issue images added successfully",
+    data: result,
+  });
+});
+
+const deleteBikeIssueImage = catchAsync(async (req, res) => {
+  const result = await bikeIssueServices.deleteBikeIssueImageFromDB(
+    req.params.bikeId,
+    req.user.userId,
+    req.params.id,
+    req.params.imageId,
+  );
+
+  sendResponse(res, {
+    status: httpStatus.OK,
+    success: true,
+    message: "Bike issue image deleted successfully",
+    data: result,
+  });
+});
+
 export const bikeIssueController = {
   createBikeIssue,
   getBikeIssues,
@@ -102,4 +134,6 @@ export const bikeIssueController = {
   updateBikeIssue,
   deleteBikeIssue,
   updateBikeIssueStatus,
+  addBikeIssueImages,
+  deleteBikeIssueImage,
 };

@@ -7,6 +7,7 @@ exports.reminderRouter = exports.maintenanceLogRouter = void 0;
 const express_1 = require("express");
 const authCheck_1 = __importDefault(require("../../middleware/authCheck"));
 const validateRequest_1 = __importDefault(require("../../middleware/validateRequest"));
+const upload_1 = require("../../middleware/upload");
 const maintenanceLog_controller_1 = require("./maintenanceLog.controller");
 const maintenanceLog_validation_1 = require("./maintenanceLog.validation");
 // ! CRUD router — mounted at /bikes/:bikeId/maintenance-logs
@@ -16,6 +17,10 @@ crudRouter.get("/", authCheck_1.default, maintenanceLog_controller_1.maintenance
 crudRouter.get("/:id", authCheck_1.default, maintenanceLog_controller_1.maintenanceLogController.getMaintenanceLogById);
 crudRouter.patch("/:id", authCheck_1.default, (0, validateRequest_1.default)(maintenanceLog_validation_1.maintenanceLogValidations.updateMaintenanceLogSchema), maintenanceLog_controller_1.maintenanceLogController.updateMaintenanceLog);
 crudRouter.delete("/:id", authCheck_1.default, maintenanceLog_controller_1.maintenanceLogController.deleteMaintenanceLog);
+// ! for uploading/replacing the service image
+crudRouter.put("/:id/image", authCheck_1.default, upload_1.upload.single("image"), maintenanceLog_controller_1.maintenanceLogController.uploadMaintenanceLogImage);
+// ! for removing the service image
+crudRouter.delete("/:id/image", authCheck_1.default, maintenanceLog_controller_1.maintenanceLogController.deleteMaintenanceLogImage);
 // ! reminders router — mounted separately at /bikes/:bikeId/reminders
 const remindersRouter = (0, express_1.Router)({ mergeParams: true });
 remindersRouter.get("/", authCheck_1.default, maintenanceLog_controller_1.maintenanceLogController.getReminders);

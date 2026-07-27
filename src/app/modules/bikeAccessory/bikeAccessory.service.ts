@@ -4,6 +4,7 @@ import { findOwnedBikeOrThrow } from "../bike/bike.utils";
 import { AccessoryStatus, TAccessoryStatus } from "./bikeAccessory.constant";
 import { bikeAccessoryModel } from "./bikeAccessory.model";
 import { TBikeAccessory } from "./bikeAccessory.interface";
+import { deleteCloudinaryImage } from "../../util/cloudinary";
 
 const createBikeAccessoryIntoDB = async (
   bikeId: string,
@@ -155,10 +156,73 @@ const deleteBikeAccessoryFromDB = async (
   return accessory;
 };
 
+const uploadBikeAccessoryImageIntoDB = async (
+  bikeId: string,
+  userId: string,
+  id: string,
+  file: Express.Multer.File | undefined,
+) => {
+  await findOwnedBikeOrThrow(bikeId, userId);
+
+  if (!file) {
+    throw new AppError(httpStatus.BAD_REQUEST, "Image file is required");
+  }
+
+  const accessory = await bikeAccessoryModel.findOne({
+    _id: id,
+    bike: bikeId,
+    isDeleted: false,
+  });
+
+  if (!accessory) {
+    throw new AppError(httpStatus.NOT_FOUND, "Bike accessory not found");
+  }
+
+  if (accessory.productImage) {
+    await deleteCloudinaryImage(accessory.productImage.publicId);
+  }
+
+  accessory.productImage = { url: file.path, publicId: file.filename };
+  await accessory.save();
+
+  return accessory;
+};
+
+const deleteBikeAccessoryImageFromDB = async (
+  bikeId: string,
+  userId: string,
+  id: string,
+) => {
+  await findOwnedBikeOrThrow(bikeId, userId);
+
+  const accessory = await bikeAccessoryModel.findOne({
+    _id: id,
+    bike: bikeId,
+    isDeleted: false,
+  });
+
+  if (!accessory) {
+    throw new AppError(httpStatus.NOT_FOUND, "Bike accessory not found");
+  }
+
+  if (!accessory.productImage) {
+    throw new AppError(httpStatus.NOT_FOUND, "Product image not found");
+  }
+
+  await deleteCloudinaryImage(accessory.productImage.publicId);
+
+  accessory.productImage = undefined;
+  await accessory.save();
+
+  return accessory;
+};
+
 export const bikeAccessoryServices = {
   createBikeAccessoryIntoDB,
   getBikeAccessoriesFromDB,
   getBikeAccessoryByIdFromDB,
   updateBikeAccessoryInDB,
   deleteBikeAccessoryFromDB,
+  uploadBikeAccessoryImageIntoDB,
+  deleteBikeAccessoryImageFromDB,
 };

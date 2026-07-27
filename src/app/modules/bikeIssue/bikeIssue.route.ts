@@ -1,6 +1,7 @@
 import { Router } from "express";
 import authCheck from "../../middleware/authCheck";
 import validateRequest from "../../middleware/validateRequest";
+import { upload } from "../../middleware/upload";
 import { bikeIssueController } from "./bikeIssue.controller";
 import { bikeIssueValidations } from "./bikeIssue.validation";
 
@@ -32,6 +33,21 @@ router.patch(
   authCheck,
   validateRequest(bikeIssueValidations.updateBikeIssueStatusSchema),
   bikeIssueController.updateBikeIssueStatus,
+);
+
+// ! for adding one or more evidence images (up to 5 per request)
+router.post(
+  "/:id/images",
+  authCheck,
+  upload.array("images", 5),
+  bikeIssueController.addBikeIssueImages,
+);
+
+// ! for removing a single evidence image by its own subdocument id
+router.delete(
+  "/:id/images/:imageId",
+  authCheck,
+  bikeIssueController.deleteBikeIssueImage,
 );
 
 //

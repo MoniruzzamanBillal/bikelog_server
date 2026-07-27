@@ -1,5 +1,8 @@
 import { ObjectId } from "mongoose";
 import { TBikeIssueStatus } from "./bikeIssue.constant";
+import { TCloudinaryImage } from "../../interface/image.interface";
+
+export type TBikeIssueImage = TCloudinaryImage & { _id?: ObjectId };
 
 export type TBikeIssue = {
   bike: ObjectId;
@@ -7,5 +10,6 @@ export type TBikeIssue = {
   description?: string;
   dateReported: Date;
   status: TBikeIssueStatus;
+  images?: TBikeIssueImage[];
   isDeleted: boolean;
 };

@@ -35,6 +35,13 @@ const bikeAccessorySchema = new mongoose_1.Schema({
     price: {
         type: Number,
     },
+    productImage: {
+        type: {
+            url: { type: String },
+            publicId: { type: String },
+        },
+        _id: false,
+    },
     isDeleted: {
         type: Boolean,
         default: false,

@@ -18,6 +18,7 @@ const AppError_1 = __importDefault(require("../../Error/AppError"));
 const bike_utils_1 = require("../bike/bike.utils");
 const bikeAccessory_constant_1 = require("./bikeAccessory.constant");
 const bikeAccessory_model_1 = require("./bikeAccessory.model");
+const cloudinary_1 = require("../../util/cloudinary");
 const createBikeAccessoryIntoDB = (bikeId, userId, payload) => __awaiter(void 0, void 0, void 0, function* () {
     yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
     const accessoryData = Object.assign(Object.assign({}, payload), { bike: bikeId });
@@ -104,10 +105,50 @@ const deleteBikeAccessoryFromDB = (bikeId, userId, id) => __awaiter(void 0, void
     yield accessory.save();
     return accessory;
 });
+const uploadBikeAccessoryImageIntoDB = (bikeId, userId, id, file) => __awaiter(void 0, void 0, void 0, function* () {
+    yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
+    if (!file) {
+        throw new AppError_1.default(http_status_1.default.BAD_REQUEST, "Image file is required");
+    }
+    const accessory = yield bikeAccessory_model_1.bikeAccessoryModel.findOne({
+        _id: id,
+        bike: bikeId,
+        isDeleted: false,
+    });
+    if (!accessory) {
+        throw new AppError_1.default(http_status_1.default.NOT_FOUND, "Bike accessory not found");
+    }
+    if (accessory.productImage) {
+        yield (0, cloudinary_1.deleteCloudinaryImage)(accessory.productImage.publicId);
+    }
+    accessory.productImage = { url: file.path, publicId: file.filename };
+    yield accessory.save();
+    return accessory;
+});
+const deleteBikeAccessoryImageFromDB = (bikeId, userId, id) => __awaiter(void 0, void 0, void 0, function* () {
+    yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
+    const accessory = yield bikeAccessory_model_1.bikeAccessoryModel.findOne({
+        _id: id,
+        bike: bikeId,
+        isDeleted: false,
+    });
+    if (!accessory) {
+        throw new AppError_1.default(http_status_1.default.NOT_FOUND, "Bike accessory not found");
+    }
+    if (!accessory.productImage) {
+        throw new AppError_1.default(http_status_1.default.NOT_FOUND, "Product image not found");
+    }
+    yield (0, cloudinary_1.deleteCloudinaryImage)(accessory.productImage.publicId);
+    accessory.productImage = undefined;
+    yield accessory.save();
+    return accessory;
+});
 exports.bikeAccessoryServices = {
     createBikeAccessoryIntoDB,
     getBikeAccessoriesFromDB,
     getBikeAccessoryByIdFromDB,
     updateBikeAccessoryInDB,
     deleteBikeAccessoryFromDB,
+    uploadBikeAccessoryImageIntoDB,
+    deleteBikeAccessoryImageFromDB,
 };

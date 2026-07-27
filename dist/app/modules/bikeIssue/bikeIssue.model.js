@@ -35,6 +35,12 @@ const bikeIssueSchema = new mongoose_1.Schema({
         enum: Object.values(bikeIssue_constant_1.BikeIssueStatus),
         default: bikeIssue_constant_1.BikeIssueStatus.open,
     },
+    images: [
+        {
+            url: { type: String },
+            publicId: { type: String },
+        },
+    ],
     isDeleted: {
         type: Boolean,
         default: false,

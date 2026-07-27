@@ -50,6 +50,21 @@
       "key": "maintenanceLogId",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "bikeAccessoryId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "bikeIssueId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "bikeIssueImageId",
+      "value": "",
+      "type": "string"
     }
   ],
   "item": [
@@ -595,6 +610,83 @@
                 "{{bikeId}}",
                 "fuel-logs",
                 "{{fuelLogId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Upload/Replace Receipt Image",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/fuel-logs/{{fuelLogId}}/image",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "fuel-logs",
+                "{{fuelLogId}}",
+                "image"
+              ]
+            },
+            "description": "multipart/form-data, field name `image`, image files only (5MB max). Replacing an existing receiptImage deletes the old Cloudinary asset first.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Receipt Image",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/fuel-logs/{{fuelLogId}}/image",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "fuel-logs",
+                "{{fuelLogId}}",
+                "image"
               ]
             }
           },
@@ -1197,6 +1289,83 @@
           ]
         },
         {
+          "name": "Upload/Replace Service Image",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/maintenance-logs/{{maintenanceLogId}}/image",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "maintenance-logs",
+                "{{maintenanceLogId}}",
+                "image"
+              ]
+            },
+            "description": "multipart/form-data, field name `image`, image files only (5MB max). Replacing an existing serviceImage deletes the old Cloudinary asset first.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Service Image",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/maintenance-logs/{{maintenanceLogId}}/image",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "maintenance-logs",
+                "{{maintenanceLogId}}",
+                "image"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Get Reminders",
           "request": {
             "method": "GET",
@@ -1383,6 +1552,181 @@
               ]
             },
             "description": "months is optional (default 3, range 1-24). Returns a rolling window of the last N months ending at the current month, not calendar-year-bound."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Bike Accessories",
+      "item": [
+        {
+          "name": "Upload/Replace Product Image",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/accessories/{{bikeAccessoryId}}/image",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "accessories",
+                "{{bikeAccessoryId}}",
+                "image"
+              ]
+            },
+            "description": "multipart/form-data, field name `image`, image files only (5MB max). {{bikeAccessoryId}} isn't auto-captured yet (no Create Bike Accessory request in this collection) — paste in a real accessory _id from POST/GET .../bikes/{{bikeId}}/accessories. Replacing an existing productImage deletes the old Cloudinary asset first.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Product Image",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/accessories/{{bikeAccessoryId}}/image",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "accessories",
+                "{{bikeAccessoryId}}",
+                "image"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Bike Issues",
+      "item": [
+        {
+          "name": "Add Bike Issue Images",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/issues/{{bikeIssueId}}/images",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "issues",
+                "{{bikeIssueId}}",
+                "images"
+              ]
+            },
+            "description": "multipart/form-data, field name `images` (repeat the key for multiple files, up to 5 per request), image files only (5MB max each). {{bikeIssueId}} isn't auto-captured yet (no Create Bike Issue request in this collection) — paste in a real issue _id from POST/GET .../bikes/{{bikeId}}/issues. Appends to the issue's existing images array — does not replace it.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code < 300) {",
+                  "    const body = pm.response.json();",
+                  "    const images = body.data.images;",
+                  "    if (images && images.length) {",
+                  "        const value = images[images.length - 1]._id;",
+                  "        pm.collectionVariables.set(\"bikeIssueImageId\", value);",
+                  "        console.log(\"Captured bikeIssueImageId =\", value);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Bike Issue Image",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/issues/{{bikeIssueId}}/images/{{bikeIssueImageId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "issues",
+                "{{bikeIssueId}}",
+                "images",
+                "{{bikeIssueImageId}}"
+              ]
+            },
+            "description": "Removes a single image by its own subdocument _id (captured automatically by Add Bike Issue Images, or paste one from the issue's images array manually)."
           },
           "event": [
             {

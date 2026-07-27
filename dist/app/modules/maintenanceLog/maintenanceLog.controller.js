@@ -71,6 +71,24 @@ const getReminders = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, v
         data: result,
     });
 }));
+const uploadMaintenanceLogImage = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const result = yield maintenanceLog_service_1.maintenanceLogServices.uploadMaintenanceLogImageIntoDB(req.params.bikeId, req.user.userId, req.params.id, req.file);
+    (0, sendResponse_1.default)(res, {
+        status: http_status_1.default.OK,
+        success: true,
+        message: "Service image uploaded successfully",
+        data: result,
+    });
+}));
+const deleteMaintenanceLogImage = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const result = yield maintenanceLog_service_1.maintenanceLogServices.deleteMaintenanceLogImageFromDB(req.params.bikeId, req.user.userId, req.params.id);
+    (0, sendResponse_1.default)(res, {
+        status: http_status_1.default.OK,
+        success: true,
+        message: "Service image deleted successfully",
+        data: result,
+    });
+}));
 exports.maintenanceLogController = {
     createMaintenanceLog,
     getMaintenanceLogs,
@@ -78,4 +96,6 @@ exports.maintenanceLogController = {
     updateMaintenanceLog,
     deleteMaintenanceLog,
     getReminders,
+    uploadMaintenanceLogImage,
+    deleteMaintenanceLogImage,
 };

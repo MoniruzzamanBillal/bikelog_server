@@ -19,6 +19,7 @@ const http_status_1 = __importDefault(require("http-status"));
 const AppError_1 = __importDefault(require("../../Error/AppError"));
 const Queryuilder_1 = __importDefault(require("../../builder/Queryuilder"));
 const bike_utils_1 = require("../bike/bike.utils");
+const cloudinary_1 = require("../../util/cloudinary");
 const createFuelLogIntoDB = (bikeId, userId, payload) => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b, _c;
     const bike = yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
@@ -146,10 +147,50 @@ const deleteFuelLogFromDB = (bikeId, userId, id) => __awaiter(void 0, void 0, vo
     }
     return fuelLog;
 });
+const uploadFuelLogImageIntoDB = (bikeId, userId, id, file) => __awaiter(void 0, void 0, void 0, function* () {
+    yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
+    if (!file) {
+        throw new AppError_1.default(http_status_1.default.BAD_REQUEST, "Image file is required");
+    }
+    const fuelLog = yield fuelLog_model_1.fuelLogModel.findOne({
+        _id: id,
+        bike: bikeId,
+        isDeleted: false,
+    });
+    if (!fuelLog) {
+        throw new AppError_1.default(http_status_1.default.NOT_FOUND, "Fuel log not found");
+    }
+    if (fuelLog.receiptImage) {
+        yield (0, cloudinary_1.deleteCloudinaryImage)(fuelLog.receiptImage.publicId);
+    }
+    fuelLog.receiptImage = { url: file.path, publicId: file.filename };
+    yield fuelLog.save();
+    return fuelLog;
+});
+const deleteFuelLogImageFromDB = (bikeId, userId, id) => __awaiter(void 0, void 0, void 0, function* () {
+    yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
+    const fuelLog = yield fuelLog_model_1.fuelLogModel.findOne({
+        _id: id,
+        bike: bikeId,
+        isDeleted: false,
+    });
+    if (!fuelLog) {
+        throw new AppError_1.default(http_status_1.default.NOT_FOUND, "Fuel log not found");
+    }
+    if (!fuelLog.receiptImage) {
+        throw new AppError_1.default(http_status_1.default.NOT_FOUND, "Receipt image not found");
+    }
+    yield (0, cloudinary_1.deleteCloudinaryImage)(fuelLog.receiptImage.publicId);
+    fuelLog.receiptImage = undefined;
+    yield fuelLog.save();
+    return fuelLog;
+});
 exports.fuelLogServices = {
     createFuelLogIntoDB,
     getFuelLogsFromDB,
     getFuelLogByIdFromDB,
     updateFuelLogInDB,
     deleteFuelLogFromDB,
+    uploadFuelLogImageIntoDB,
+    deleteFuelLogImageFromDB,
 };

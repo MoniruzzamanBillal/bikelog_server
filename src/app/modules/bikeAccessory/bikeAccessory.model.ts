@@ -26,6 +26,13 @@ const bikeAccessorySchema = new Schema<TBikeAccessory>(
     price: {
       type: Number,
     },
+    productImage: {
+      type: {
+        url: { type: String },
+        publicId: { type: String },
+      },
+      _id: false,
+    },
 
     isDeleted: {
       type: Boolean,

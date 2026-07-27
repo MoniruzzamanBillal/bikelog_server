@@ -6,6 +6,7 @@ import httpStatus from "http-status";
 import AppError from "../../Error/AppError";
 import QueryBuilder from "../../builder/Queryuilder";
 import { findOwnedBikeOrThrow, bumpOdometerIfHigher } from "../bike/bike.utils";
+import { deleteCloudinaryImage } from "../../util/cloudinary";
 
 const createFuelLogIntoDB = async (
   bikeId: string,
@@ -208,10 +209,73 @@ const deleteFuelLogFromDB = async (bikeId: string, userId: string, id: string) =
   return fuelLog;
 };
 
+const uploadFuelLogImageIntoDB = async (
+  bikeId: string,
+  userId: string,
+  id: string,
+  file: Express.Multer.File | undefined,
+) => {
+  await findOwnedBikeOrThrow(bikeId, userId);
+
+  if (!file) {
+    throw new AppError(httpStatus.BAD_REQUEST, "Image file is required");
+  }
+
+  const fuelLog = await fuelLogModel.findOne({
+    _id: id,
+    bike: bikeId,
+    isDeleted: false,
+  });
+
+  if (!fuelLog) {
+    throw new AppError(httpStatus.NOT_FOUND, "Fuel log not found");
+  }
+
+  if (fuelLog.receiptImage) {
+    await deleteCloudinaryImage(fuelLog.receiptImage.publicId);
+  }
+
+  fuelLog.receiptImage = { url: file.path, publicId: file.filename };
+  await fuelLog.save();
+
+  return fuelLog;
+};
+
+const deleteFuelLogImageFromDB = async (
+  bikeId: string,
+  userId: string,
+  id: string,
+) => {
+  await findOwnedBikeOrThrow(bikeId, userId);
+
+  const fuelLog = await fuelLogModel.findOne({
+    _id: id,
+    bike: bikeId,
+    isDeleted: false,
+  });
+
+  if (!fuelLog) {
+    throw new AppError(httpStatus.NOT_FOUND, "Fuel log not found");
+  }
+
+  if (!fuelLog.receiptImage) {
+    throw new AppError(httpStatus.NOT_FOUND, "Receipt image not found");
+  }
+
+  await deleteCloudinaryImage(fuelLog.receiptImage.publicId);
+
+  fuelLog.receiptImage = undefined;
+  await fuelLog.save();
+
+  return fuelLog;
+};
+
 export const fuelLogServices = {
   createFuelLogIntoDB,
   getFuelLogsFromDB,
   getFuelLogByIdFromDB,
   updateFuelLogInDB,
   deleteFuelLogFromDB,
+  uploadFuelLogImageIntoDB,
+  deleteFuelLogImageFromDB,
 };
