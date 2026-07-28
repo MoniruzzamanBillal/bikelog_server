@@ -1,4 +1,5 @@
 import { ObjectId } from "mongoose";
+import { TCloudinaryImage } from "../../interface/image.interface";
 
 export type TFuelLog = {
   bike: ObjectId;
@@ -10,5 +11,6 @@ export type TFuelLog = {
   fuelStation?: string;
   date: Date;
   notes?: string;
+  receiptImage?: TCloudinaryImage;
   isDeleted: boolean;
 };

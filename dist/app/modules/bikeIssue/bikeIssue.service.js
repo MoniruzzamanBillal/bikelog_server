@@ -19,6 +19,7 @@ const Queryuilder_1 = __importDefault(require("../../builder/Queryuilder"));
 const bike_utils_1 = require("../bike/bike.utils");
 const bikeIssue_constant_1 = require("./bikeIssue.constant");
 const bikeIssue_model_1 = require("./bikeIssue.model");
+const cloudinary_1 = require("../../util/cloudinary");
 const createBikeIssueIntoDB = (bikeId, userId, payload) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
@@ -103,6 +104,48 @@ const updateBikeIssueStatus = (bikeId, userId, id, status) => __awaiter(void 0, 
     yield issue.save();
     return issue;
 });
+const addBikeIssueImagesIntoDB = (bikeId, userId, id, files) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
+    if (!files || files.length === 0) {
+        throw new AppError_1.default(http_status_1.default.BAD_REQUEST, "At least one image file is required");
+    }
+    const issue = yield bikeIssue_model_1.bikeIssueModel.findOne({
+        _id: id,
+        bike: bikeId,
+        isDeleted: false,
+    });
+    if (!issue) {
+        throw new AppError_1.default(http_status_1.default.NOT_FOUND, "Bike issue not found");
+    }
+    const newImages = files.map((file) => ({
+        url: file.path,
+        publicId: file.filename,
+    }));
+    issue.images = [...((_a = issue.images) !== null && _a !== void 0 ? _a : []), ...newImages];
+    yield issue.save();
+    return issue;
+});
+const deleteBikeIssueImageFromDB = (bikeId, userId, id, imageId) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a, _b;
+    yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
+    const issue = yield bikeIssue_model_1.bikeIssueModel.findOne({
+        _id: id,
+        bike: bikeId,
+        isDeleted: false,
+    });
+    if (!issue) {
+        throw new AppError_1.default(http_status_1.default.NOT_FOUND, "Bike issue not found");
+    }
+    const targetImage = (_a = issue.images) === null || _a === void 0 ? void 0 : _a.find((image) => { var _a; return ((_a = image._id) === null || _a === void 0 ? void 0 : _a.toString()) === imageId; });
+    if (!targetImage) {
+        throw new AppError_1.default(http_status_1.default.NOT_FOUND, "Image not found");
+    }
+    yield (0, cloudinary_1.deleteCloudinaryImage)(targetImage.publicId);
+    issue.images = (_b = issue.images) === null || _b === void 0 ? void 0 : _b.filter((image) => { var _a; return ((_a = image._id) === null || _a === void 0 ? void 0 : _a.toString()) !== imageId; });
+    yield issue.save();
+    return issue;
+});
 exports.bikeIssueServices = {
     createBikeIssueIntoDB,
     getBikeIssuesFromDB,
@@ -110,4 +153,6 @@ exports.bikeIssueServices = {
     updateBikeIssueInDB,
     deleteBikeIssueFromDB,
     updateBikeIssueStatus,
+    addBikeIssueImagesIntoDB,
+    deleteBikeIssueImageFromDB,
 };

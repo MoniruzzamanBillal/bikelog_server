@@ -11,4 +11,7 @@ export default {
   jwt_secret: process.env.JWT_ACCESS_SECRET,
   jwt_expires_in: process.env.JWT_EXPIRES_IN || "10d",
   openRouterApiKey: process.env.openRouterApiKey,
+  cloudinary_cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  cloudinary_api_key: process.env.CLOUDINARY_API_KEY,
+  cloudinary_api_secret: process.env.CLOUDINARY_API_SECRET,
 };

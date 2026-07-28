@@ -93,6 +93,37 @@ const getReminders = catchAsync(async (req, res) => {
   });
 });
 
+const uploadMaintenanceLogImage = catchAsync(async (req, res) => {
+  const result = await maintenanceLogServices.uploadMaintenanceLogImageIntoDB(
+    req.params.bikeId,
+    req.user.userId,
+    req.params.id,
+    req.file,
+  );
+
+  sendResponse(res, {
+    status: httpStatus.OK,
+    success: true,
+    message: "Service image uploaded successfully",
+    data: result,
+  });
+});
+
+const deleteMaintenanceLogImage = catchAsync(async (req, res) => {
+  const result = await maintenanceLogServices.deleteMaintenanceLogImageFromDB(
+    req.params.bikeId,
+    req.user.userId,
+    req.params.id,
+  );
+
+  sendResponse(res, {
+    status: httpStatus.OK,
+    success: true,
+    message: "Service image deleted successfully",
+    data: result,
+  });
+});
+
 export const maintenanceLogController = {
   createMaintenanceLog,
   getMaintenanceLogs,
@@ -100,4 +131,6 @@ export const maintenanceLogController = {
   updateMaintenanceLog,
   deleteMaintenanceLog,
   getReminders,
+  uploadMaintenanceLogImage,
+  deleteMaintenanceLogImage,
 };

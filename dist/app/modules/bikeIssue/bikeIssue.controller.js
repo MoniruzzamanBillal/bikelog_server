@@ -72,6 +72,24 @@ const updateBikeIssueStatus = (0, catchAsync_1.default)((req, res) => __awaiter(
         data: result,
     });
 }));
+const addBikeIssueImages = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const result = yield bikeIssue_service_1.bikeIssueServices.addBikeIssueImagesIntoDB(req.params.bikeId, req.user.userId, req.params.id, req.files);
+    (0, sendResponse_1.default)(res, {
+        status: http_status_1.default.OK,
+        success: true,
+        message: "Bike issue images added successfully",
+        data: result,
+    });
+}));
+const deleteBikeIssueImage = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const result = yield bikeIssue_service_1.bikeIssueServices.deleteBikeIssueImageFromDB(req.params.bikeId, req.user.userId, req.params.id, req.params.imageId);
+    (0, sendResponse_1.default)(res, {
+        status: http_status_1.default.OK,
+        success: true,
+        message: "Bike issue image deleted successfully",
+        data: result,
+    });
+}));
 exports.bikeIssueController = {
     createBikeIssue,
     getBikeIssues,
@@ -79,4 +97,6 @@ exports.bikeIssueController = {
     updateBikeIssue,
     deleteBikeIssue,
     updateBikeIssueStatus,
+    addBikeIssueImages,
+    deleteBikeIssueImage,
 };

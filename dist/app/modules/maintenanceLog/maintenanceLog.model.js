@@ -61,6 +61,13 @@ const maintenanceLogSchema = new mongoose_1.Schema({
     notes: {
         type: String,
     },
+    serviceImage: {
+        type: {
+            url: { type: String },
+            publicId: { type: String },
+        },
+        _id: false,
+    },
     isDeleted: {
         type: Boolean,
         default: false,

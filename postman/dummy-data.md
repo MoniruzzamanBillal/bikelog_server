@@ -284,6 +284,26 @@ Response is totals only (`totalSpending`, `categoryBreakdown` per maintenance ty
 
 ---
 
+## Image uploads (Cloudinary) — fuel logs, maintenance logs, accessories, issues
+
+Four modules support attaching a Cloudinary-backed image; all upload/replace requests are `multipart/form-data`, not JSON, and all image fields are optional (older records simply have none).
+
+| Route                                                              | Field name(s)     | Cardinality              |
+| ------------------------------------------------------------------- | ------------------ | ------------------------- |
+| `PUT/DELETE .../fuel-logs/:id/image`                                | `receiptImage`      | one per fuel log          |
+| `PUT/DELETE .../maintenance-logs/:id/image`                         | `serviceImage`      | one per maintenance log   |
+| `PUT/DELETE .../accessories/:id/image`                              | `productImage`      | one per accessory         |
+| `POST .../issues/:id/images`, `DELETE .../issues/:id/images/:imageId` | `images` (array)  | many per issue (up to 5 per POST request) |
+
+Notes:
+
+- Upload form field is `image` (singular endpoints) or `images` (bike issue's multi-image endpoint — repeat the form key once per file, up to 5 per request).
+- Only image mimetypes are accepted (5MB max per file) — anything else 400s before reaching Cloudinary.
+- Every stored image is `{ url, publicId }`, never a bare string — `publicId` is what lets the server actually delete the old Cloudinary asset when you replace or remove an image, instead of leaving it orphaned.
+- Replacing a single-image field (`PUT .../image`) deletes the old Cloudinary asset first, then uploads the new one.
+- Bike issue images are additive (`POST` appends, never replaces) — each image gets its own subdocument `_id`, used to delete just that one image via `DELETE .../images/:imageId`.
+- `bikeAccessoryId`/`bikeIssueId` aren't auto-captured by this collection (neither module has a `Create`/`List` request here yet — a pre-existing gap, not introduced by the image feature) — paste in a real id from that bike's `/accessories` or `/issues` endpoint manually.
+
 ## Fields you will never see accepted in any request body
 
 | Module                   | Field                                    | Why                                                                                 |

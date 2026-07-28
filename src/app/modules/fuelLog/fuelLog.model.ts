@@ -39,6 +39,13 @@ const fuelLogSchema = new Schema<TFuelLog>(
     notes: {
       type: String,
     },
+    receiptImage: {
+      type: {
+        url: { type: String },
+        publicId: { type: String },
+      },
+      _id: false,
+    },
     isDeleted: {
       type: Boolean,
       default: false,

@@ -1,4 +1,5 @@
 import { ObjectId } from "mongoose";
+import { TCloudinaryImage } from "../../interface/image.interface";
 
 export type TMaintenanceLog = {
   bike: ObjectId;
@@ -13,5 +14,6 @@ export type TMaintenanceLog = {
   serviceCenter?: string;
   partsReplaced?: string[];
   notes?: string;
+  serviceImage?: TCloudinaryImage;
   isDeleted: boolean;
 };

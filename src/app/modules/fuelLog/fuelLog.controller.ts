@@ -79,10 +79,43 @@ const deleteFuelLog = catchAsync(async (req, res) => {
   });
 });
 
+const uploadFuelLogImage = catchAsync(async (req, res) => {
+  const result = await fuelLogServices.uploadFuelLogImageIntoDB(
+    req.params.bikeId,
+    req.user.userId,
+    req.params.id,
+    req.file,
+  );
+
+  sendResponse(res, {
+    status: httpStatus.OK,
+    success: true,
+    message: "Receipt image uploaded successfully",
+    data: result,
+  });
+});
+
+const deleteFuelLogImage = catchAsync(async (req, res) => {
+  const result = await fuelLogServices.deleteFuelLogImageFromDB(
+    req.params.bikeId,
+    req.user.userId,
+    req.params.id,
+  );
+
+  sendResponse(res, {
+    status: httpStatus.OK,
+    success: true,
+    message: "Receipt image deleted successfully",
+    data: result,
+  });
+});
+
 export const fuelLogController = {
   createFuelLog,
   getFuelLogs,
   getFuelLogById,
   updateFuelLog,
   deleteFuelLog,
+  uploadFuelLogImage,
+  deleteFuelLogImage,
 };

@@ -26,6 +26,12 @@ const bikeIssueSchema = new Schema<TBikeIssue>(
       enum: Object.values(BikeIssueStatus),
       default: BikeIssueStatus.open,
     },
+    images: [
+      {
+        url: { type: String },
+        publicId: { type: String },
+      },
+    ],
     isDeleted: {
       type: Boolean,
       default: false,

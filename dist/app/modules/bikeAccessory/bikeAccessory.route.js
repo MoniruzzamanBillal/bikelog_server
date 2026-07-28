@@ -7,6 +7,7 @@ exports.bikeAccessoryRouter = void 0;
 const express_1 = require("express");
 const authCheck_1 = __importDefault(require("../../middleware/authCheck"));
 const validateRequest_1 = __importDefault(require("../../middleware/validateRequest"));
+const upload_1 = require("../../middleware/upload");
 const bikeAccessory_controller_1 = require("./bikeAccessory.controller");
 const bikeAccessory_validation_1 = require("./bikeAccessory.validation");
 // ! mounted at /bikes/:bikeId/accessories
@@ -16,5 +17,9 @@ router.get("/", authCheck_1.default, bikeAccessory_controller_1.bikeAccessoryCon
 router.get("/:id", authCheck_1.default, bikeAccessory_controller_1.bikeAccessoryController.getBikeAccessoryById);
 router.patch("/:id", authCheck_1.default, (0, validateRequest_1.default)(bikeAccessory_validation_1.bikeAccessoryValidations.updateBikeAccessorySchema), bikeAccessory_controller_1.bikeAccessoryController.updateBikeAccessory);
 router.delete("/:id", authCheck_1.default, bikeAccessory_controller_1.bikeAccessoryController.deleteBikeAccessory);
+// ! for uploading/replacing the product image
+router.put("/:id/image", authCheck_1.default, upload_1.upload.single("image"), bikeAccessory_controller_1.bikeAccessoryController.uploadBikeAccessoryImage);
+// ! for removing the product image
+router.delete("/:id/image", authCheck_1.default, bikeAccessory_controller_1.bikeAccessoryController.deleteBikeAccessoryImage);
 //
 exports.bikeAccessoryRouter = router;

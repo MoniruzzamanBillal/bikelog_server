@@ -62,10 +62,30 @@ const deleteBikeAccessory = (0, catchAsync_1.default)((req, res) => __awaiter(vo
         data: result,
     });
 }));
+const uploadBikeAccessoryImage = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const result = yield bikeAccessory_service_1.bikeAccessoryServices.uploadBikeAccessoryImageIntoDB(req.params.bikeId, req.user.userId, req.params.id, req.file);
+    (0, sendResponse_1.default)(res, {
+        status: http_status_1.default.OK,
+        success: true,
+        message: "Product image uploaded successfully",
+        data: result,
+    });
+}));
+const deleteBikeAccessoryImage = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const result = yield bikeAccessory_service_1.bikeAccessoryServices.deleteBikeAccessoryImageFromDB(req.params.bikeId, req.user.userId, req.params.id);
+    (0, sendResponse_1.default)(res, {
+        status: http_status_1.default.OK,
+        success: true,
+        message: "Product image deleted successfully",
+        data: result,
+    });
+}));
 exports.bikeAccessoryController = {
     createBikeAccessory,
     getBikeAccessories,
     getBikeAccessoryById,
     updateBikeAccessory,
     deleteBikeAccessory,
+    uploadBikeAccessoryImage,
+    deleteBikeAccessoryImage,
 };

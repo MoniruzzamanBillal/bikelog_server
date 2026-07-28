@@ -5,6 +5,7 @@ import { findOwnedBikeOrThrow } from "../bike/bike.utils";
 import { BikeIssueStatus, TBikeIssueStatus } from "./bikeIssue.constant";
 import { TBikeIssue } from "./bikeIssue.interface";
 import { bikeIssueModel } from "./bikeIssue.model";
+import { deleteCloudinaryImage } from "../../util/cloudinary";
 
 const createBikeIssueIntoDB = async (
   bikeId: string,
@@ -154,6 +155,78 @@ const updateBikeIssueStatus = async (
   return issue;
 };
 
+const addBikeIssueImagesIntoDB = async (
+  bikeId: string,
+  userId: string,
+  id: string,
+  files: Express.Multer.File[] | undefined,
+) => {
+  await findOwnedBikeOrThrow(bikeId, userId);
+
+  if (!files || files.length === 0) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      "At least one image file is required",
+    );
+  }
+
+  const issue = await bikeIssueModel.findOne({
+    _id: id,
+    bike: bikeId,
+    isDeleted: false,
+  });
+
+  if (!issue) {
+    throw new AppError(httpStatus.NOT_FOUND, "Bike issue not found");
+  }
+
+  const newImages = files.map((file) => ({
+    url: file.path,
+    publicId: file.filename,
+  }));
+
+  issue.images = [...(issue.images ?? []), ...newImages];
+  await issue.save();
+
+  return issue;
+};
+
+const deleteBikeIssueImageFromDB = async (
+  bikeId: string,
+  userId: string,
+  id: string,
+  imageId: string,
+) => {
+  await findOwnedBikeOrThrow(bikeId, userId);
+
+  const issue = await bikeIssueModel.findOne({
+    _id: id,
+    bike: bikeId,
+    isDeleted: false,
+  });
+
+  if (!issue) {
+    throw new AppError(httpStatus.NOT_FOUND, "Bike issue not found");
+  }
+
+  const targetImage = issue.images?.find(
+    (image) => image._id?.toString() === imageId,
+  );
+
+  if (!targetImage) {
+    throw new AppError(httpStatus.NOT_FOUND, "Image not found");
+  }
+
+  await deleteCloudinaryImage(targetImage.publicId);
+
+  issue.images = issue.images?.filter(
+    (image) => image._id?.toString() !== imageId,
+  );
+  await issue.save();
+
+  return issue;
+};
+
 export const bikeIssueServices = {
   createBikeIssueIntoDB,
   getBikeIssuesFromDB,
@@ -161,4 +234,6 @@ export const bikeIssueServices = {
   updateBikeIssueInDB,
   deleteBikeIssueFromDB,
   updateBikeIssueStatus,
+  addBikeIssueImagesIntoDB,
+  deleteBikeIssueImageFromDB,
 };

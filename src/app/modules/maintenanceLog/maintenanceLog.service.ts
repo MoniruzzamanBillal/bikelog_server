@@ -6,6 +6,7 @@ import { maintenanceTypeModel } from "../maintenanceType/maintenanceType.model";
 import { engineOilTypeModel } from "../engineOilType/engineOilType.model";
 import { maintenanceLogModel } from "./maintenanceLog.model";
 import { TMaintenanceLog } from "./maintenanceLog.interface";
+import { deleteCloudinaryImage } from "../../util/cloudinary";
 
 const computeNextDueOdometer = (odometerReading: number, intervalKmUsed: number): number => {
   return odometerReading + intervalKmUsed;
@@ -246,6 +247,67 @@ const getRemindersFromDB = async (bikeId: string, userId: string) => {
   return { reminders };
 };
 
+const uploadMaintenanceLogImageIntoDB = async (
+  bikeId: string,
+  userId: string,
+  id: string,
+  file: Express.Multer.File | undefined,
+) => {
+  await findOwnedBikeOrThrow(bikeId, userId);
+
+  if (!file) {
+    throw new AppError(httpStatus.BAD_REQUEST, "Image file is required");
+  }
+
+  const log = await maintenanceLogModel.findOne({
+    _id: id,
+    bike: bikeId,
+    isDeleted: false,
+  });
+
+  if (!log) {
+    throw new AppError(httpStatus.NOT_FOUND, "Maintenance log not found");
+  }
+
+  if (log.serviceImage) {
+    await deleteCloudinaryImage(log.serviceImage.publicId);
+  }
+
+  log.serviceImage = { url: file.path, publicId: file.filename };
+  await log.save();
+
+  return log;
+};
+
+const deleteMaintenanceLogImageFromDB = async (
+  bikeId: string,
+  userId: string,
+  id: string,
+) => {
+  await findOwnedBikeOrThrow(bikeId, userId);
+
+  const log = await maintenanceLogModel.findOne({
+    _id: id,
+    bike: bikeId,
+    isDeleted: false,
+  });
+
+  if (!log) {
+    throw new AppError(httpStatus.NOT_FOUND, "Maintenance log not found");
+  }
+
+  if (!log.serviceImage) {
+    throw new AppError(httpStatus.NOT_FOUND, "Service image not found");
+  }
+
+  await deleteCloudinaryImage(log.serviceImage.publicId);
+
+  log.serviceImage = undefined;
+  await log.save();
+
+  return log;
+};
+
 export const maintenanceLogServices = {
   createMaintenanceLogIntoDB,
   getMaintenanceLogsFromDB,
@@ -253,4 +315,6 @@ export const maintenanceLogServices = {
   updateMaintenanceLogInDB,
   deleteMaintenanceLogFromDB,
   getRemindersFromDB,
+  uploadMaintenanceLogImageIntoDB,
+  deleteMaintenanceLogImageFromDB,
 };

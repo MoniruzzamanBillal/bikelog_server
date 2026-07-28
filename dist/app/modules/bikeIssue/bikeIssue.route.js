@@ -7,6 +7,7 @@ exports.bikeIssueRouter = void 0;
 const express_1 = require("express");
 const authCheck_1 = __importDefault(require("../../middleware/authCheck"));
 const validateRequest_1 = __importDefault(require("../../middleware/validateRequest"));
+const upload_1 = require("../../middleware/upload");
 const bikeIssue_controller_1 = require("./bikeIssue.controller");
 const bikeIssue_validation_1 = require("./bikeIssue.validation");
 // ! mounted at /bikes/:bikeId/issues
@@ -17,5 +18,9 @@ router.get("/:id", authCheck_1.default, bikeIssue_controller_1.bikeIssueControll
 router.patch("/:id", authCheck_1.default, (0, validateRequest_1.default)(bikeIssue_validation_1.bikeIssueValidations.updateBikeIssueSchema), bikeIssue_controller_1.bikeIssueController.updateBikeIssue);
 router.delete("/:id", authCheck_1.default, bikeIssue_controller_1.bikeIssueController.deleteBikeIssue);
 router.patch("/:id/status", authCheck_1.default, (0, validateRequest_1.default)(bikeIssue_validation_1.bikeIssueValidations.updateBikeIssueStatusSchema), bikeIssue_controller_1.bikeIssueController.updateBikeIssueStatus);
+// ! for adding one or more evidence images (up to 5 per request)
+router.post("/:id/images", authCheck_1.default, upload_1.upload.array("images", 5), bikeIssue_controller_1.bikeIssueController.addBikeIssueImages);
+// ! for removing a single evidence image by its own subdocument id
+router.delete("/:id/images/:imageId", authCheck_1.default, bikeIssue_controller_1.bikeIssueController.deleteBikeIssueImage);
 //
 exports.bikeIssueRouter = router;
