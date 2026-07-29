@@ -310,6 +310,24 @@ Notes:
 
 Once a manual is uploaded, `POST /api/bikes/:bikeId/ai/chat` automatically pulls the most relevant excerpt(s) into its system prompt via in-process keyword scoring (no separate "search the manual" endpoint to call) — ask something the manual actually covers (e.g. a service interval) to see it grounded in the real text instead of a generic answer.
 
+## Bike Documents (`/api/bikes/:bikeId/documents`) — papers/IDs with expiry tracking, mixed image+PDF files
+
+Two-step create-then-attach, same pattern as bike issues: `POST .../documents` is plain JSON (`{ title, description?, expiryDate? }`, no file field), then files are attached separately via a dedicated sub-route.
+
+| Route                                                              | Field name | Cardinality                     |
+| ------------------------------------------------------------------- | ---------- | -------------------------------- |
+| `POST .../documents/:id/files`, `DELETE .../documents/:id/files/:fileId` | `files` (array) | many per document (up to 10 per POST request) |
+
+Notes:
+
+- `title` is required and free-text (e.g. "Bike Registration Paper", "Bank Receipt", "Driving License") — there's no fixed category enum, matching how the feature was actually asked for.
+- `expiryDate` is optional and unconstrained (a past date is accepted, for backfilling an already-expired paper).
+- Attach form field is `files` — repeat the key once per file, up to 10 per request. Unlike every other upload feature in this collection, **both images and PDFs are accepted in the same field** (20MB max per file, vs. the 5MB image-only limit elsewhere).
+- Every stored file is `{ url, publicId, resourceType, originalName, mimeType }` — `resourceType` (`"image"` or `"raw"`) is new compared to the other upload features' plain `{url, publicId}` and is what lets the server delete a PDF asset correctly (Cloudinary requires the right resource type on destroy).
+- Files are additive (`POST` appends, never replaces) — each file gets its own subdocument `_id`, used to delete just that one file via `DELETE .../files/:fileId`.
+- `GET .../documents` defaults to soonest-expiry-first ordering (documents with no `expiryDate` sort last); pass `?sort=` to override with a plain field sort instead.
+- `bikeDocumentId`/`bikeDocumentFileId` **are** auto-captured by this collection's `Create Bike Document`/`Add Bike Document Files` requests, unlike the pre-existing `bikeAccessoryId`/`bikeIssueId` gap noted above.
+
 ## Fields you will never see accepted in any request body
 
 | Module                   | Field                                    | Why                                                                                 |
@@ -318,6 +336,6 @@ Once a manual is uploaded, `POST /api/bikes/:bikeId/ai/chat` automatically pulls
 | bike                     | `owner`                                  | derived from the JWT                                                                |
 | bike                     | `currentOdometer` (on `PATCH`)           | stripped server-side; only settable as the initial value on create                  |
 | fuelLog                  | `totalCost`                              | always recomputed from `litersAdded * pricePerLiter`                                |
-| fuelLog / maintenanceLog | `bike`                                   | comes from the URL's `:bikeId`, not the body                                        |
+| fuelLog / maintenanceLog / bikeDocument | `bike`                    | comes from the URL's `:bikeId`, not the body                                        |
 | maintenanceLog           | `nextDueOdometer`                        | always recomputed from `odometerReading + intervalKmUsed`                           |
 | mileageRecord            | everything                               | no write endpoints exist — records are only created by closing a full-tank fuel log |

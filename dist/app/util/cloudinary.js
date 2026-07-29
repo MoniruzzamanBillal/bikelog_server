@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.cloudinary = exports.uploadRawBuffer = exports.deleteCloudinaryImage = void 0;
+exports.cloudinary = exports.uploadDocumentBuffer = exports.uploadRawBuffer = exports.deleteCloudinaryImage = void 0;
 const cloudinary_1 = require("cloudinary");
 Object.defineProperty(exports, "cloudinary", { enumerable: true, get: function () { return cloudinary_1.v2; } });
 const config_1 = __importDefault(require("../config"));
@@ -47,3 +47,23 @@ const uploadRawBuffer = (buffer, originalName) => {
     });
 };
 exports.uploadRawBuffer = uploadRawBuffer;
+// ! for mixed image/PDF multi-file uploads (bikeDocument) — picks resource_type per file's
+// ! mimetype so an image is stored/served as "image" and a PDF as "raw", unlike uploadRawBuffer
+// ! above which always hardcodes "raw" (fine for bikeManual, which is PDF-only)
+const uploadDocumentBuffer = (buffer, originalName, mimetype) => {
+    return new Promise((resolve, reject) => {
+        const resourceType = mimetype.startsWith("image/")
+            ? "image"
+            : "raw";
+        const publicId = Math.random().toString(36).substring(2) + "-" + Date.now() + "-" + originalName;
+        const uploadStream = cloudinary_1.v2.uploader.upload_stream({ resource_type: resourceType, public_id: publicId }, (error, result) => {
+            if (error || !result) {
+                reject(error !== null && error !== void 0 ? error : new Error("Cloudinary document upload failed"));
+                return;
+            }
+            resolve({ url: result.secure_url, publicId: result.public_id, resourceType });
+        });
+        uploadStream.end(buffer);
+    });
+};
+exports.uploadDocumentBuffer = uploadDocumentBuffer;
