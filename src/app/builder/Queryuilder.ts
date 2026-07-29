@@ -11,7 +11,7 @@ class Queryuilder<T> {
 
   // ! for searching
   search(searchableFiels: string[]) {
-    let searchTerm = this.query?.searchTerm;
+    const searchTerm = this.query?.searchTerm;
 
     if (searchTerm) {
       this.queryModel = this.queryModel.find({

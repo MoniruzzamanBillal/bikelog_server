@@ -52,7 +52,7 @@ app.get("/", (req, res, next) => __awaiter(void 0, void 0, void 0, function* () 
 //! global error handler
 app.use(globalErrorHandler_1.default);
 // ! not found route
-app.use((req, res, next) => {
+app.use((req, res) => {
     res.status(http_status_1.default.NOT_FOUND).json({
         success: false,
         message: "API NOT FOUND!",

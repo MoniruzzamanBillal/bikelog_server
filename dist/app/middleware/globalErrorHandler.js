@@ -18,7 +18,10 @@ const handleCatError_1 = require("../Error/handleCatError");
 const handleDuplicateError_1 = require("../Error/handleDuplicateError");
 const handleValidationError_1 = require("../Error/handleValidationError");
 const handleZodError_1 = require("../Error/handleZodError");
-const globalErrorHandler = (error, req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
+const globalErrorHandler = (error, req, res, 
+// ! unused but required — Express only recognizes error-handling middleware by 4-argument arity
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+next) => __awaiter(void 0, void 0, void 0, function* () {
     let status = error.status || 500;
     let message = error.message || "Something went wrong!!";
     let errorSources = [
