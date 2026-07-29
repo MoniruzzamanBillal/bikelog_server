@@ -17,7 +17,7 @@ class Queryuilder {
     // ! for searching
     search(searchableFiels) {
         var _a;
-        let searchTerm = (_a = this.query) === null || _a === void 0 ? void 0 : _a.searchTerm;
+        const searchTerm = (_a = this.query) === null || _a === void 0 ? void 0 : _a.searchTerm;
         if (searchTerm) {
             this.queryModel = this.queryModel.find({
                 $or: searchableFiels.map((field) => ({

@@ -304,6 +304,12 @@ Notes:
 - Bike issue images are additive (`POST` appends, never replaces) — each image gets its own subdocument `_id`, used to delete just that one image via `DELETE .../images/:imageId`.
 - `bikeAccessoryId`/`bikeIssueId` aren't auto-captured by this collection (neither module has a `Create`/`List` request here yet — a pre-existing gap, not introduced by the image feature) — paste in a real id from that bike's `/accessories` or `/issues` endpoint manually.
 
+## Bike Manual (`/api/bikes/:bikeId/manual`) — one PDF per bike, grounds AI chat
+
+`POST .../manual` is `multipart/form-data`, field name `manual`, PDF only (20MB max, vs. the 5MB image limit above) — anything else 400s before reaching Cloudinary. Upload-or-replace semantics: re-`POST`ing to the same bike deletes the old raw Cloudinary asset + regenerated text chunks first, then uploads/chunks the new PDF. `GET` returns metadata only (`hasManual`, `manual: {url, publicId, originalName, uploadedAt, chunkCount}` or `null`) — it's `200` with `hasManual: false` when nothing's been uploaded yet, not a `404`. `DELETE` 404s if the bike has no manual.
+
+Once a manual is uploaded, `POST /api/bikes/:bikeId/ai/chat` automatically pulls the most relevant excerpt(s) into its system prompt via in-process keyword scoring (no separate "search the manual" endpoint to call) — ask something the manual actually covers (e.g. a service interval) to see it grounded in the real text instead of a generic answer.
+
 ## Fields you will never see accepted in any request body
 
 | Module                   | Field                                    | Why                                                                                 |

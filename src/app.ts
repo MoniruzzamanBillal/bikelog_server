@@ -49,7 +49,7 @@ app.get("/", async (req: Request, res: Response, next: NextFunction) => {
 app.use(globalErrorHandler);
 
 // ! not found route
-app.use((req: Request, res: Response, next: NextFunction) => {
+app.use((req: Request, res: Response) => {
   res.status(httpStatus.NOT_FOUND).json({
     success: false,
     message: "API NOT FOUND!",

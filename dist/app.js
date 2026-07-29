@@ -25,6 +25,7 @@ app.use(express_1.default.json());
 app.use((0, cors_1.default)({
     origin: [
         "http://localhost:5173",
+        "http://localhost:5174",
         "http://localhost:3000",
         "http://localhost:3001",
         "https://devmats.vercel.app",
@@ -51,7 +52,7 @@ app.get("/", (req, res, next) => __awaiter(void 0, void 0, void 0, function* () 
 //! global error handler
 app.use(globalErrorHandler_1.default);
 // ! not found route
-app.use((req, res, next) => {
+app.use((req, res) => {
     res.status(http_status_1.default.NOT_FOUND).json({
         success: false,
         message: "API NOT FOUND!",

@@ -48,9 +48,8 @@ const userSchema = new mongoose_1.Schema({
 // ! hash password before save
 userSchema.pre("save", function (next) {
     return __awaiter(this, void 0, void 0, function* () {
-        const user = this;
-        if (user.isModified("password")) {
-            user.password = yield argon2_1.default.hash(user === null || user === void 0 ? void 0 : user.password);
+        if (this.isModified("password")) {
+            this.password = yield argon2_1.default.hash(this.password);
         }
         next();
     });

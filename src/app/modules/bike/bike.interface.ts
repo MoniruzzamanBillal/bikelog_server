@@ -1,4 +1,5 @@
 import { ObjectId } from "mongoose";
+import { TBikeManualMeta } from "../bikeManual/bikeManual.interface";
 
 export type TBike = {
   owner: ObjectId;
@@ -15,6 +16,7 @@ export type TBike = {
   aiSpendingInsightLogCount?: number;
   aiMileageInsight?: string;
   aiMileageInsightFuelLogCount?: number;
+  manual?: TBikeManualMeta;
   createdAt: Date;
   updatedAt: Date;
 };

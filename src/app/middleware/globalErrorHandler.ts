@@ -11,6 +11,8 @@ const globalErrorHandler: ErrorRequestHandler = async (
   error,
   req,
   res,
+  // ! unused but required — Express only recognizes error-handling middleware by 4-argument arity
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   next
 ) => {
   let status = error.status || 500;
