@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.cloudinary = exports.deleteCloudinaryImage = void 0;
+exports.cloudinary = exports.uploadRawBuffer = exports.deleteCloudinaryImage = void 0;
 const cloudinary_1 = require("cloudinary");
 Object.defineProperty(exports, "cloudinary", { enumerable: true, get: function () { return cloudinary_1.v2; } });
 const config_1 = __importDefault(require("../config"));
@@ -22,12 +22,28 @@ cloudinary_1.v2.config({
     api_secret: config_1.default.cloudinary_api_secret,
 });
 // ! best-effort cleanup — a failed delete shouldn't block the caller's own delete/replace action
-const deleteCloudinaryImage = (publicId) => __awaiter(void 0, void 0, void 0, function* () {
+const deleteCloudinaryImage = (publicId_1, ...args_1) => __awaiter(void 0, [publicId_1, ...args_1], void 0, function* (publicId, resourceType = "image") {
     try {
-        yield cloudinary_1.v2.uploader.destroy(publicId);
+        yield cloudinary_1.v2.uploader.destroy(publicId, { resource_type: resourceType });
     }
     catch (error) {
         console.error(`Failed to delete Cloudinary image "${publicId}":`, error);
     }
 });
 exports.deleteCloudinaryImage = deleteCloudinaryImage;
+// ! for non-image files (e.g. PDFs) that need the raw resource type and local buffer upload,
+// ! unlike upload.ts's CloudinaryStorage which streams image files directly
+const uploadRawBuffer = (buffer, originalName) => {
+    return new Promise((resolve, reject) => {
+        const publicId = Math.random().toString(36).substring(2) + "-" + Date.now() + "-" + originalName;
+        const uploadStream = cloudinary_1.v2.uploader.upload_stream({ resource_type: "raw", public_id: publicId }, (error, result) => {
+            if (error || !result) {
+                reject(error !== null && error !== void 0 ? error : new Error("Cloudinary raw upload failed"));
+                return;
+            }
+            resolve({ url: result.secure_url, publicId: result.public_id });
+        });
+        uploadStream.end(buffer);
+    });
+};
+exports.uploadRawBuffer = uploadRawBuffer;

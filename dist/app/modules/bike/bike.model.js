@@ -71,6 +71,17 @@ const bikeSchema = new mongoose_1.Schema({
     aiMileageInsightFuelLogCount: {
         type: Number,
     },
+    // ! additive/optional — a bike with no manual uploaded simply omits this field
+    manual: {
+        type: {
+            url: { type: String },
+            publicId: { type: String },
+            originalName: { type: String },
+            uploadedAt: { type: Date },
+            chunkCount: { type: Number },
+        },
+        _id: false,
+    },
 }, { timestamps: true });
 // ! filter out soft-deleted bikes
 bikeSchema.pre("find", function (next) {

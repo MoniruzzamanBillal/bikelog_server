@@ -1,6 +1,6 @@
 # Bike Owner Manual Upload + AI Chat Grounding
 
-Status: 📝 Proposed (not started)
+Status: ✅ Complete
 
 ## Goal
 
@@ -107,32 +107,32 @@ New file, doesn't touch `upload.ts`. `multer({ storage: multer.memoryStorage(), 
 
 ## Implementation
 
-1. [ ] `package.json` — add `pdf-parse` + `@types/pdf-parse`.
-2. [ ] New `src/app/middleware/uploadManual.ts` — memory-storage multer, PDF-only `fileFilter`, 20MB limit.
-3. [ ] `src/app/util/cloudinary.ts` — add `uploadRawBuffer`, generalize `deleteCloudinaryImage` with an optional `resourceType` param (default `"image"`).
-4. [ ] New `src/app/modules/bikeManual/bikeManual.interface.ts` — `TBikeManualMeta`, `TBikeManualChunk`.
-5. [ ] New `src/app/modules/bikeManual/bikeManual.model.ts` — `bikeManualChunkModel`.
-6. [ ] New `src/app/modules/bikeManual/bikeManual.utils.ts` — `chunkManualText`, `tokenize`, `scoreAndRankChunks`.
-7. [ ] New `src/app/modules/bikeManual/bikeManual.service.ts` — `uploadBikeManualIntoDB`, `getBikeManualMetaFromDB`, `deleteBikeManualFromDB`, `getRelevantManualChunksForChat`.
-8. [ ] New `src/app/modules/bikeManual/bikeManual.controller.ts`.
-9. [ ] New `src/app/modules/bikeManual/bikeManual.route.ts` — `POST /`, `GET /`, `DELETE /`.
-10. [ ] `src/app/modules/bike/bike.interface.ts` / `.model.ts` — add optional `manual` field.
-11. [ ] `src/app/router/index.ts` — register `bikeManualRouter` at `/bikes/:bikeId/manual`.
-12. [ ] `src/app/modules/ai/ai.service.ts` — `getBikeChatReply` fetches relevant manual chunks and injects them into the system prompt.
-13. [ ] Add the new requests to `postman/bikelog-api.postman_collection.json` (`multipart/form-data` for upload), plus a short note in `postman/dummy-data.md`.
+1. [x] `package.json` — add `pdf-parse` + `@types/pdf-parse`.
+2. [x] New `src/app/middleware/uploadManual.ts` — memory-storage multer, PDF-only `fileFilter`, 20MB limit.
+3. [x] `src/app/util/cloudinary.ts` — add `uploadRawBuffer`, generalize `deleteCloudinaryImage` with an optional `resourceType` param (default `"image"`).
+4. [x] New `src/app/modules/bikeManual/bikeManual.interface.ts` — `TBikeManualMeta`, `TBikeManualChunk`.
+5. [x] New `src/app/modules/bikeManual/bikeManual.model.ts` — `bikeManualChunkModel`.
+6. [x] New `src/app/modules/bikeManual/bikeManual.utils.ts` — `chunkManualText`, `tokenize`, `scoreAndRankChunks`.
+7. [x] New `src/app/modules/bikeManual/bikeManual.service.ts` — `uploadBikeManualIntoDB`, `getBikeManualMetaFromDB`, `deleteBikeManualFromDB`, `getRelevantManualChunksForChat`.
+8. [x] New `src/app/modules/bikeManual/bikeManual.controller.ts`.
+9. [x] New `src/app/modules/bikeManual/bikeManual.route.ts` — `POST /`, `GET /`, `DELETE /`.
+10. [x] `src/app/modules/bike/bike.interface.ts` / `.model.ts` — add optional `manual` field.
+11. [x] `src/app/router/index.ts` — register `bikeManualRouter` at `/bikes/:bikeId/manual`.
+12. [x] `src/app/modules/ai/ai.service.ts` — `getBikeChatReply` fetches relevant manual chunks and injects them into the system prompt.
+13. [x] Add the new requests to `postman/bikelog-api.postman_collection.json` (`multipart/form-data` for upload), plus a short note in `postman/dummy-data.md`.
 
 ## Verify-when-done
 
-- [ ] `yarn build` / `yarn lint` clean.
-- [ ] `POST /bikes/:bikeId/manual` with a real motorcycle owner's manual PDF (form field `manual`) → 200, `chunkCount > 0`.
-- [ ] `GET /bikes/:bikeId/manual` → reflects uploaded metadata; returns `hasManual: false` (200, not 404) before any upload.
-- [ ] `POST /bikes/:bikeId/ai/chat` with a question the manual actually answers (e.g. spark plug/air filter service interval) → reply references the manual's actual interval, not a generic/invented one.
-- [ ] Ask an unrelated question the manual doesn't cover → reply says so honestly rather than hallucinating (per the existing prompt convention).
-- [ ] Re-upload a different PDF to the same bike → old Cloudinary raw file + old chunks are gone, replaced cleanly.
-- [ ] `DELETE /bikes/:bikeId/manual` → subsequent chat calls stop including any manual section; `GET` shows `hasManual: false` again.
-- [ ] A non-PDF file upload attempt is rejected by `fileFilter` before ever reaching Cloudinary (clean 400, not 500).
-- [ ] New endpoints 404 when attempted against a bike owned by a different user, matching existing `findOwnedBikeOrThrow` behavior.
-- [ ] Confirm existing image-upload endpoints (`fuelLog`/`maintenanceLog`/`bikeAccessory`/`bikeIssue`) still work unaffected (`upload.ts` untouched, `deleteCloudinaryImage`'s new param is backward-compatible).
+- [x] `yarn build` / `yarn lint` clean.
+- [x] `POST /bikes/:bikeId/manual` with a real motorcycle owner's manual PDF (form field `manual`) → 200, `chunkCount > 0`.
+- [x] `GET /bikes/:bikeId/manual` → reflects uploaded metadata; returns `hasManual: false` (200, not 404) before any upload.
+- [x] `POST /bikes/:bikeId/ai/chat` with a question the manual actually answers (e.g. spark plug/air filter service interval) → reply references the manual's actual interval, not a generic/invented one.
+- [x] Ask an unrelated question the manual doesn't cover → reply says so honestly rather than hallucinating (per the existing prompt convention).
+- [x] Re-upload a different PDF to the same bike → old Cloudinary raw file + old chunks are gone, replaced cleanly.
+- [x] `DELETE /bikes/:bikeId/manual` → subsequent chat calls stop including any manual section; `GET` shows `hasManual: false` again.
+- [x] A non-PDF file upload attempt is rejected by `fileFilter` before ever reaching Cloudinary (clean 400, not 500).
+- [x] New endpoints 404 when attempted against a bike owned by a different user, matching existing `findOwnedBikeOrThrow` behavior.
+- [x] Confirm existing image-upload endpoints (`fuelLog`/`maintenanceLog`/`bikeAccessory`/`bikeIssue`) still work unaffected (`upload.ts` untouched, `deleteCloudinaryImage`'s new param is backward-compatible).
 
 ## Dependencies
 

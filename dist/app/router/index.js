@@ -6,6 +6,7 @@ const ai_route_1 = require("../modules/ai/ai.route");
 const bike_route_1 = require("../modules/bike/bike.route");
 const bikeAccessory_route_1 = require("../modules/bikeAccessory/bikeAccessory.route");
 const bikeIssue_route_1 = require("../modules/bikeIssue/bikeIssue.route");
+const bikeManual_route_1 = require("../modules/bikeManual/bikeManual.route");
 const engineOilType_route_1 = require("../modules/engineOilType/engineOilType.route");
 const fuelLog_route_1 = require("../modules/fuelLog/fuelLog.route");
 const maintenanceLog_route_1 = require("../modules/maintenanceLog/maintenanceLog.route");
@@ -62,6 +63,10 @@ const routeArray = [
     {
         path: "/bikes/:bikeId/ai",
         route: ai_route_1.aiRouter,
+    },
+    {
+        path: "/bikes/:bikeId/manual",
+        route: bikeManual_route_1.bikeManualRouter,
     },
 ];
 routeArray.forEach((item) => {

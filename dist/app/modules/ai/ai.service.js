@@ -16,6 +16,7 @@ const fuelLog_model_1 = require("../fuelLog/fuelLog.model");
 const maintenanceLog_model_1 = require("../maintenanceLog/maintenanceLog.model");
 const mileageRecord_service_1 = require("../mileageRecord/mileageRecord.service");
 const spending_service_1 = require("../spending/spending.service");
+const bikeManual_service_1 = require("../bikeManual/bikeManual.service");
 const openRouterClient_1 = require("../../util/openRouterClient");
 const NO_DATA_SPENDING_MESSAGE = "No spending data yet for this bike — log a fuel-up or maintenance entry to get an AI-generated spending insight.";
 const NO_DATA_MILEAGE_MESSAGE = "No mileage data yet for this bike — log a fuel-up to get an AI-generated mileage insight.";
@@ -23,6 +24,8 @@ const NO_DATA_MILEAGE_MESSAGE = "No mileage data yet for this bike — log a fue
 // ! history a bike accumulates; a question about older history should be answered honestly
 // ! as out-of-scope rather than guessed (see the system prompt below)
 const CHAT_LOG_LIMIT = 20;
+// ! how many manual excerpts to inject per chat question — bounds prompt size
+const MANUAL_CHUNK_TOP_K = 4;
 const getSpendingInsightFromDB = (bikeId, userId) => __awaiter(void 0, void 0, void 0, function* () {
     const bike = yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
     const [fuelLogCount, maintenanceLogCount] = yield Promise.all([
@@ -86,8 +89,10 @@ const getMileageInsightFromDB = (bikeId, userId) => __awaiter(void 0, void 0, vo
     return { insight, generated: true, cached: false };
 });
 const getBikeChatReply = (bikeId, userId, messages) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a, _b, _c;
     const bike = yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
-    const [recentFuelLogs, recentMaintenanceLogs, lifetimeSpending] = yield Promise.all([
+    const latestUserQuestion = (_b = (_a = [...messages].reverse().find((m) => m.role === "user")) === null || _a === void 0 ? void 0 : _a.content) !== null && _b !== void 0 ? _b : "";
+    const [recentFuelLogs, recentMaintenanceLogs, lifetimeSpending, relevantManualChunks] = yield Promise.all([
         fuelLog_model_1.fuelLogModel
             .find({ bike: bikeId, isDeleted: false })
             .sort({ date: -1 })
@@ -100,7 +105,17 @@ const getBikeChatReply = (bikeId, userId, messages) => __awaiter(void 0, void 0,
             .populate("maintenanceType", "name")
             .lean(),
         spending_service_1.spendingServices.getSpendingSummaryFromDB(bikeId, userId, "lifetime"),
+        bike.manual
+            ? bikeManual_service_1.bikeManualServices.getRelevantManualChunksForChat(bikeId, latestUserQuestion, MANUAL_CHUNK_TOP_K)
+            : Promise.resolve([]),
     ]);
+    // ! only non-empty when relevant chunks were actually found — otherwise the section
+    // ! is omitted entirely rather than injecting an empty/misleading heading
+    const manualSection = relevantManualChunks.length > 0
+        ? `Relevant excerpts from the owner's manual ("${(_c = bike.manual) === null || _c === void 0 ? void 0 : _c.originalName}"):\n` +
+            relevantManualChunks.map((chunk) => chunk.chunkText).join("\n---\n") +
+            `\n\n`
+        : "";
     const systemMessage = {
         role: "system",
         content: `You are a helpful assistant for a motorcycle called "${bike.nickname}" ` +
@@ -108,6 +123,7 @@ const getBikeChatReply = (bikeId, userId, messages) => __awaiter(void 0, void 0,
             `Recent fuel logs (up to ${CHAT_LOG_LIMIT} most recent): ${JSON.stringify(recentFuelLogs)}\n\n` +
             `Recent maintenance logs (up to ${CHAT_LOG_LIMIT} most recent): ${JSON.stringify(recentMaintenanceLogs)}\n\n` +
             `Lifetime spending: ${JSON.stringify(lifetimeSpending)}\n\n` +
+            manualSection +
             `Answer only using the data given above. If asked something this data doesn't cover, ` +
             `say so honestly instead of guessing.`,
     };
