@@ -5,6 +5,7 @@ const express_1 = require("express");
 const ai_route_1 = require("../modules/ai/ai.route");
 const bike_route_1 = require("../modules/bike/bike.route");
 const bikeAccessory_route_1 = require("../modules/bikeAccessory/bikeAccessory.route");
+const bikeDocument_route_1 = require("../modules/bikeDocument/bikeDocument.route");
 const bikeIssue_route_1 = require("../modules/bikeIssue/bikeIssue.route");
 const bikeManual_route_1 = require("../modules/bikeManual/bikeManual.route");
 const engineOilType_route_1 = require("../modules/engineOilType/engineOilType.route");
@@ -67,6 +68,10 @@ const routeArray = [
     {
         path: "/bikes/:bikeId/manual",
         route: bikeManual_route_1.bikeManualRouter,
+    },
+    {
+        path: "/bikes/:bikeId/documents",
+        route: bikeDocument_route_1.bikeDocumentRouter,
     },
 ];
 routeArray.forEach((item) => {

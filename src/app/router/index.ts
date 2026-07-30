@@ -2,6 +2,7 @@ import { Router } from "express";
 import { aiRouter } from "../modules/ai/ai.route";
 import { bikeRouter } from "../modules/bike/bike.route";
 import { bikeAccessoryRouter } from "../modules/bikeAccessory/bikeAccessory.route";
+import { bikeDocumentRouter } from "../modules/bikeDocument/bikeDocument.route";
 import { bikeIssueRouter } from "../modules/bikeIssue/bikeIssue.route";
 import { bikeManualRouter } from "../modules/bikeManual/bikeManual.route";
 import { engineOilTypeRouter } from "../modules/engineOilType/engineOilType.route";
@@ -69,6 +70,10 @@ const routeArray = [
   {
     path: "/bikes/:bikeId/manual",
     route: bikeManualRouter,
+  },
+  {
+    path: "/bikes/:bikeId/documents",
+    route: bikeDocumentRouter,
   },
 ];
 

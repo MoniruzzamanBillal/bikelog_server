@@ -65,6 +65,16 @@
       "key": "bikeIssueImageId",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "bikeDocumentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "bikeDocumentFileId",
+      "value": "",
+      "type": "string"
     }
   ],
   "item": [
@@ -1957,6 +1967,316 @@
               ]
             },
             "description": "404 if this bike has no manual uploaded."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Bike Documents",
+      "item": [
+        {
+          "name": "Create Bike Document",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/documents",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "documents"
+              ]
+            },
+            "description": "title is required; description/expiryDate are optional. No file field here \u2014 attach files afterwards via Add Bike Document Files.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Bike Registration Paper\",\n  \"description\": \"Original registration certificate\",\n  \"expiryDate\": \"2028-07-27\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.expect([201]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code < 300) {",
+                  "    const body = pm.response.json();",
+                  "    const value = body.data._id;",
+                  "    if (value) {",
+                  "        pm.collectionVariables.set(\"bikeDocumentId\", value);",
+                  "        console.log(\"Captured bikeDocumentId =\", value);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Bike Documents",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/documents?page=1&limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "documents"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": false
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "disabled": false
+                },
+                {
+                  "key": "sort",
+                  "value": "-createdAt",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Defaults to soonest-expiry-first ordering (documents with no expiryDate sort last). Pass ?sort= to override with a plain field sort instead."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Bike Document By Id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/documents/{{bikeDocumentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "documents",
+                "{{bikeDocumentId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Bike Document",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/documents/{{bikeDocumentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "documents",
+                "{{bikeDocumentId}}"
+              ]
+            },
+            "description": "title/description/expiryDate are all optional here. Never touches files \u2014 use the files sub-routes for that.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Renewed at the district office\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Bike Document",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/documents/{{bikeDocumentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "documents",
+                "{{bikeDocumentId}}"
+              ]
+            },
+            "description": "Soft delete; also best-effort destroys every remaining file's Cloudinary asset."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add Bike Document Files",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/documents/{{bikeDocumentId}}/files",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "documents",
+                "{{bikeDocumentId}}",
+                "files"
+              ]
+            },
+            "description": "multipart/form-data, field name `files` (repeat the key for multiple files, up to 10 per request), image or PDF files only (20MB max each). Appends to the document's existing files array \u2014 does not replace it.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "files",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code < 300) {",
+                  "    const body = pm.response.json();",
+                  "    const files = body.data.files;",
+                  "    if (files && files.length) {",
+                  "        const value = files[files.length - 1]._id;",
+                  "        pm.collectionVariables.set(\"bikeDocumentFileId\", value);",
+                  "        console.log(\"Captured bikeDocumentFileId =\", value);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Bike Document File",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/documents/{{bikeDocumentId}}/files/{{bikeDocumentFileId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "documents",
+                "{{bikeDocumentId}}",
+                "files",
+                "{{bikeDocumentFileId}}"
+              ]
+            },
+            "description": "Removes a single file by its own subdocument _id (captured automatically by Add Bike Document Files, or paste one from the document's files array manually)."
           },
           "event": [
             {

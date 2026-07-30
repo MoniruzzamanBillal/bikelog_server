@@ -44,4 +44,34 @@ export const uploadRawBuffer = (
   });
 };
 
+// ! for mixed image/PDF multi-file uploads (bikeDocument) — picks resource_type per file's
+// ! mimetype so an image is stored/served as "image" and a PDF as "raw", unlike uploadRawBuffer
+// ! above which always hardcodes "raw" (fine for bikeManual, which is PDF-only)
+export const uploadDocumentBuffer = (
+  buffer: Buffer,
+  originalName: string,
+  mimetype: string,
+): Promise<{ url: string; publicId: string; resourceType: "image" | "raw" }> => {
+  return new Promise((resolve, reject) => {
+    const resourceType: "image" | "raw" = mimetype.startsWith("image/")
+      ? "image"
+      : "raw";
+    const publicId =
+      Math.random().toString(36).substring(2) + "-" + Date.now() + "-" + originalName;
+
+    const uploadStream = cloudinary.uploader.upload_stream(
+      { resource_type: resourceType, public_id: publicId },
+      (error, result) => {
+        if (error || !result) {
+          reject(error ?? new Error("Cloudinary document upload failed"));
+          return;
+        }
+        resolve({ url: result.secure_url, publicId: result.public_id, resourceType });
+      },
+    );
+
+    uploadStream.end(buffer);
+  });
+};
+
 export { cloudinary };
