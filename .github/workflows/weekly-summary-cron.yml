@@ -1,16 +1,17 @@
 name: Weekly Bike Summary Notification
 
 # Fires the backend's POST /api/cron/weekly-summary endpoint once a week, which computes
-# each user's bikes' last completed Friday–Thursday week and sends an Expo push notification
-# per bike that had at least one fuel log that week. See context/specs/21-weekly-bike-summary-notification.md.
+# each user's bikes' current Friday–Thursday week (the one about to end that same night) and
+# sends an Expo push notification per bike that had at least one fuel log that week.
+# See context/specs/21-weekly-bike-summary-notification.md.
 #
 # Requires 2 repository secrets:
 #   - API_BASE_URL — the deployed API's base URL, e.g. https://your-app.vercel.app/api
 #   - CRON_SECRET  — must match the server's own CRON_SECRET env var (Vercel project settings)
 on:
   schedule:
-    # 08:00 Asia/Dhaka (UTC+6) every Friday = 02:00 UTC Friday
-    - cron: "0 2 * * 5"
+    # 22:00 (10pm) Asia/Dhaka (UTC+6) every Thursday = 16:00 UTC Thursday
+    - cron: "0 16 * * 4"
   workflow_dispatch: {} # manual "Run workflow" button, handy for testing
 
 jobs:

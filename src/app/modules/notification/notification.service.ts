@@ -3,7 +3,7 @@ import { bikeModel } from "../bike/bike.model";
 import { userModel } from "../user/user.model";
 import { mileageRecordServices } from "../mileageRecord/mileageRecord.service";
 import { spendingServices } from "../spending/spending.service";
-import { getLastCompletedWeekRange } from "./notification.utils";
+import { getCurrentWeekRange } from "./notification.utils";
 
 const expo = new Expo();
 
@@ -14,16 +14,17 @@ type TWeeklySummaryResult = {
   notificationsFailed: number;
 };
 
-// ! sends one Expo push per bike that had at least one fuel log in the last completed
-// ! Friday–Thursday week, to every user with a registered expoPushToken. Bikes with zero
-// ! fuel logs that week are skipped (nothing meaningful to summarize) rather than sent an
-// ! empty digest — see notification.utils.ts / spec 21 for the exact week-boundary logic.
+// ! sends one Expo push per bike that had at least one fuel log in the current Friday–Thursday
+// ! week (the one about to end that same Thursday night, since the cron fires 10pm local time),
+// ! to every user with a registered expoPushToken. Bikes with zero fuel logs that week are
+// ! skipped (nothing meaningful to summarize) rather than sent an empty digest — see
+// ! notification.utils.ts / spec 21 for the exact week-boundary logic.
 const sendWeeklySummaries = async (): Promise<TWeeklySummaryResult> => {
   const users = await userModel
     .find({ expoPushToken: { $ne: null }, isDeleted: false })
     .lean();
 
-  const { startDate, endDate } = getLastCompletedWeekRange(new Date());
+  const { startDate, endDate } = getCurrentWeekRange(new Date());
 
   let bikesSkipped = 0;
   let notificationsFailed = 0;

@@ -2369,7 +2369,7 @@
                 "weekly-summary"
               ]
             },
-            "description": "Machine-to-machine endpoint hit by the scheduled GitHub Actions workflow (.github/workflows/weekly-summary-cron.yml), not by a logged-in user — protected by the x-cron-secret header (must match the server's CRON_SECRET env var) instead of a JWT. Computes each user's bikes' last completed Friday–Thursday week and pushes an Expo notification per bike that had at least one fuel log that week. Set the cronSecret collection variable to the same value as your local .env's CRON_SECRET before running this manually.",
+            "description": "Machine-to-machine endpoint hit by the scheduled GitHub Actions workflow (.github/workflows/weekly-summary-cron.yml, Thursday 10pm Asia/Dhaka), not by a logged-in user — protected by the x-cron-secret header (must match the server's CRON_SECRET env var) instead of a JWT. Computes each user's bikes' current Friday–Thursday week (the one about to end that same night) and pushes an Expo notification per bike that had at least one fuel log that week. Set the cronSecret collection variable to the same value as your local .env's CRON_SECRET before running this manually.",
             "auth": {
               "type": "noauth"
             }

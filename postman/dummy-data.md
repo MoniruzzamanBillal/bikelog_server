@@ -344,7 +344,7 @@ Notes:
 
 No body. Requires an `x-cron-secret` header matching the server's `CRON_SECRET` env var (set the collection's `cronSecret` variable to the same value before running this manually) — a `401` with no header or the wrong value, same as a bad JWT would 401 elsewhere.
 
-For every user with a registered `expoPushToken`, computes each of their bikes' most recently completed **Friday–Thursday** week (not the calendar week) and sends one Expo push notification per bike that had at least one fuel log that week — skipped silently (not an error) for a bike with zero fuel logs in that window. Meant to be hit once a week by a scheduled job (`.github/workflows/weekly-summary-cron.yml`), not by the app. Returns `{usersProcessed, bikesSkipped, notificationsSent, notificationsFailed}` so the calling job's own logs show what happened.
+For every user with a registered `expoPushToken`, computes each of their bikes' current **Friday–Thursday** week (not the calendar week) — the week about to finish that same night, since the scheduled job fires **Thursday 10pm Asia/Dhaka** — and sends one Expo push notification per bike that had at least one fuel log that week, skipped silently (not an error) for a bike with zero fuel logs in that window. Meant to be hit once a week by a scheduled job (`.github/workflows/weekly-summary-cron.yml`), not by the app. Returns `{usersProcessed, bikesSkipped, notificationsSent, notificationsFailed}` so the calling job's own logs show what happened.
 
 ## Fields you will never see accepted in any request body
 

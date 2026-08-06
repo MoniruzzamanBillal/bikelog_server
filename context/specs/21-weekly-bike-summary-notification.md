@@ -2,9 +2,11 @@
 
 Status: ✅ Complete (Option A — GitHub Actions cron — implemented; Option B not built)
 
+**Amended 2026-08-06, per direct user follow-up instruction**: the send time was changed from Friday 08:00 Dhaka to **Thursday 10pm (22:00) Asia/Dhaka**. This isn't just a cron-expression edit — since 22:00 Thursday is *before* that same week's own Thursday-midnight end, the week-boundary function's semantics had to change too, from "the last fully completed week" to "the week containing now" (renamed `getLastCompletedWeekRange` → `getCurrentWeekRange`). The rest of this doc has been updated in place to describe the current, shipped behavior — see the Goal/Context/Design/Verify sections below, and the Recent Activity entry in `progress-tracker.md` for the change itself.
+
 ## Goal
 
-Send an automated weekly push notification per bike summarizing the past week — fuel added, distance ridden, computed mileage (km/L), and money spent — using **only free, no-paid-tier infrastructure**: Expo's push notification service (free at any volume, no billing tier, no API key) triggered by a scheduled job hitting a new protected backend endpoint. The week runs **Friday through Thursday** (per direct user instruction), not the calendar week.
+Send an automated weekly push notification per bike summarizing the past week — fuel added, distance ridden, computed mileage (km/L), and money spent — using **only free, no-paid-tier infrastructure**: Expo's push notification service (free at any volume, no billing tier, no API key) triggered by a scheduled job hitting a new protected backend endpoint. The week runs **Friday through Thursday** (per direct user instruction), not the calendar week, and the notification fires **Thursday 10pm Asia/Dhaka** — i.e. shortly before that same week ends, so the digest effectively covers "the week so far" rather than a fully-closed-out week.
 
 ## Context
 
@@ -34,13 +36,13 @@ Send an automated weekly push notification per bike summarizing the past week �
 
 ### 3. New `notification` module (`src/app/modules/notification/`)
 
-**`notification.utils.ts`** — `getLastCompletedWeekRange(now: Date): {startDate: Date; endDate: Date}`: returns the most recently completed Friday 00:00:00.000–Thursday 23:59:59.999 window. Computed against a fixed **`WEEK_TZ_OFFSET_MINUTES = 360`** (Asia/Dhaka, UTC+6, no DST) constant — **flagged as an assumption**, based on the `৳` (Bangladeshi Taka) currency symbol used throughout this app's existing UI (`MaintenanceLogFormModal`'s "Cost (৳)" label, `BikeAccessoryCard`'s `৳{price.toFixed(2)}`). Confirm this is actually your timezone (and adjust the constant) before implementing — a fixed-offset constant is deliberately used instead of a timezone library (`date-fns-tz`, `luxon`, etc.) since Asia/Dhaka has no DST, keeping this dependency-free and consistent with the "free/built-in" framing of the whole feature.
+**`notification.utils.ts`** — `getCurrentWeekRange(now: Date): {startDate: Date; endDate: Date}`: returns the Friday 00:00:00.000–Thursday 23:59:59.999 window that *contains* `now`. Since the cron fires **Thursday 22:00 local time** — ~2 hours before that same week's own Thursday-midnight end — "the week containing now" (not "the last fully completed week") is the correct target: it's the week that's about to finish that same night, which is what actually gets summarized and sent. One accepted, deliberate gap from firing 2 hours early: a fuel log dated in that final 22:00–23:59:59.999 window is never captured by any week's digest (this week's was already sent by the time it's logged; next week's window starts fresh from the following Friday) — a minor, accepted tradeoff for a fixed 10pm send time, not a bug. Computed against a fixed **`WEEK_TZ_OFFSET_MINUTES = 360`** (Asia/Dhaka, UTC+6, no DST) constant — **flagged as an assumption**, based on the `৳` (Bangladeshi Taka) currency symbol used throughout this app's existing UI (`MaintenanceLogFormModal`'s "Cost (৳)" label, `BikeAccessoryCard`'s `৳{price.toFixed(2)}`). A fixed-offset constant is deliberately used instead of a timezone library (`date-fns-tz`, `luxon`, etc.) since Asia/Dhaka has no DST, keeping this dependency-free and consistent with the "free/built-in" framing of the whole feature.
 
 **`notification.service.ts`** — `sendWeeklySummaries()`:
 
 1. `userModel.find({ expoPushToken: { $ne: null }, isDeleted: false })`.
 2. For each user, `bikeModel.find({ owner: user._id, isDeleted: false })`.
-3. For each bike: `getLastCompletedWeekRange(new Date())`, then `Promise.all([computeMileageForRange(bike._id, startDate, endDate), computeSpendingForRange(bike._id, startDate, endDate)])`.
+3. For each bike: `getCurrentWeekRange(new Date())`, then `Promise.all([computeMileageForRange(bike._id, startDate, endDate), computeSpendingForRange(bike._id, startDate, endDate)])`.
 4. **Skip bikes with `fuelLogCount === 0` for the week** — no fuel logged means nothing meaningful to summarize, and avoids a spammy empty notification every single week for a bike that sat idle. Flagged as a default judgment call — an alternative is always sending a "no activity this week" digest; not done here unless you'd rather have that.
 5. Build one Expo push message per remaining bike:
    - `title`: `"🏍️ ${bike.nickname} — Weekly Summary"`
@@ -70,8 +72,8 @@ name: Weekly Bike Summary Notification
 
 on:
   schedule:
-    # 08:00 Asia/Dhaka (UTC+6) every Friday = 02:00 UTC Friday
-    - cron: "0 2 * * 5"
+    # 22:00 (10pm) Asia/Dhaka (UTC+6) every Thursday = 16:00 UTC Thursday
+    - cron: "0 16 * * 4"
   workflow_dispatch: {} # manual trigger button, handy for testing
 
 jobs:
@@ -93,8 +95,8 @@ Requires one new repository secret (`CRON_SECRET`) — same pattern this repo al
 1. ✅ `user.validation.ts` / `user.services.ts` / `user.controller.ts` / `user.route.ts` — added `POST /auth/push-token` (`pushTokenSchema`, `updatePushToken`, `authCheck`-protected).
 2. ✅ `mileageRecord.service.ts` — exported `computeMileageForRange` from `mileageRecordServices`.
 3. ✅ `spending.service.ts` — exported `computeSpendingForRange` from `spendingServices`.
-4. ✅ New `src/app/modules/notification/notification.utils.ts` — `getLastCompletedWeekRange` (fixed UTC+6 offset, general "most recent Friday ≤ now, step back one week" definition — correct for any call day, not just Friday).
-5. ✅ New `src/app/modules/notification/notification.service.ts` — `sendWeeklySummaries` (queries users with a push token, their bikes, computes mileage+spending per bike for the last completed week, skips zero-fuel-log bikes, batches via `expo-server-sdk`).
+4. ✅ New `src/app/modules/notification/notification.utils.ts` — `getCurrentWeekRange` (fixed UTC+6 offset, "the Friday–Thursday week containing `now`" definition — correct for any call day, and specifically correct for the Thursday-22:00 trigger time, which is *inside* the week it needs to report on).
+5. ✅ New `src/app/modules/notification/notification.service.ts` — `sendWeeklySummaries` (queries users with a push token, their bikes, computes mileage+spending per bike for the current week, skips zero-fuel-log bikes, batches via `expo-server-sdk`).
 6. ✅ New `src/app/modules/notification/notification.controller.ts` — `triggerWeeklySummary` (`x-cron-secret` header check against `config.cronSecret`).
 7. ✅ New `src/app/modules/notification/notification.route.ts` — `POST /weekly-summary` (mounted at `/cron`, no `authCheck`).
 8. ✅ `router/index.ts` — mounted `/cron` → `notificationRouter`.
@@ -115,6 +117,6 @@ Requires one new repository secret (`CRON_SECRET`) — same pattern this repo al
 - [x] With the correct secret, a seeded user + bike + one fuel log dated inside the computed target week (`2026-07-27`, inside the live-computed `2026-07-23T18:00Z`–`2026-07-30T17:59:59.999Z` window) resulted in the bike being counted (not skipped) and a real push request sent to Expo's actual push API — `{usersProcessed:1, bikesSkipped:0, notificationsSent:0, notificationsFailed:1}`, the 1 failure being Expo's own service correctly rejecting the test's syntactically-valid-but-fake token (`ExponentPushToken[cronTestFakeToken12345]`), which confirms the full send pipeline (message built, chunked, POSTed to Expo, ticket parsed) ran for real, not just that a message object was constructed.
 - [x] A second bike with zero fuel logs in the target week was correctly skipped: re-running the same cron call with both bikes present returned `bikesSkipped: 1` for the empty one, `notificationsFailed: 1` for the one with a fuel log — confirmed live, not just by code reading.
 - [x] A user with `expoPushToken: null` is skipped entirely — implied by the `{ expoPushToken: { $ne: null } }` query itself (standard MongoDB null/missing-field semantics, confirmed via `mongoose` docs reasoning, not separately live-tested with a second no-token user in this pass).
-- [x] `getLastCompletedWeekRange` manually checked against 3 real dates: a Friday-morning cron-trigger case (`2026-08-07T02:00Z` → correctly `2026-07-31`–`2026-08-06` Dhaka), a month-boundary-crossing case (`2025-03-07T02:00Z` → correctly `2025-02-28`–`2025-03-06` Dhaka, spanning Feb→Mar), and a year-boundary-crossing case (`2026-01-02T10:00Z` → correctly `2025-12-26`–`2026-01-01` Dhaka, spanning Dec 2025→Jan 2026) — all three computed by hand via a standalone Node script mirroring the function's exact logic, not just eyeballed.
+- [x] `getCurrentWeekRange` manually checked against 3 real dates for the current (post-amendment) Thursday-22:00-trigger design: the actual cron-trigger case (`2026-08-13T16:00Z` = Thursday 22:00 Dhaka → correctly `2026-08-07`–`2026-08-13 23:59:59.999` Dhaka, i.e. today, not-yet-ended), a month-boundary-crossing case (`2025-03-06T16:00Z` → correctly `2025-02-28`–`2025-03-06` Dhaka, spanning Feb→Mar), and a mid-week manual-trigger case (`2026-08-11T10:00Z`, a Tuesday → correctly returns the same in-progress `2026-08-07`–`2026-08-13` window, with `endDate` legitimately in the future relative to `now` — expected for a manual test, not a bug) — all three computed by hand via a standalone Node script mirroring the function's exact logic, not just eyeballed. (Superseded the original pre-amendment Friday-trigger/year-boundary checks, which validated the old `getLastCompletedWeekRange` design no longer shipped.)
 - [x] `yarn build` — clean. `yarn lint` — 0 errors, same 14 pre-existing `no-console` warnings, none new (confirmed via `npx eslint` scoped to every touched/new module: 0 output).
 - [ ] End-to-end OS notification delivery to a real device is **not yet confirmed** — requires the app side (spec 24, code-complete but not yet run on a real device/development build in this environment) and a real (not fake) Expo push token. Everything up to and including Expo's own API accepting/processing the send request is confirmed live above; only the final on-device delivery hop is unverified.

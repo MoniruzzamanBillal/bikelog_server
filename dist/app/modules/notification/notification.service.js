@@ -17,15 +17,16 @@ const mileageRecord_service_1 = require("../mileageRecord/mileageRecord.service"
 const spending_service_1 = require("../spending/spending.service");
 const notification_utils_1 = require("./notification.utils");
 const expo = new expo_server_sdk_1.Expo();
-// ! sends one Expo push per bike that had at least one fuel log in the last completed
-// ! Friday–Thursday week, to every user with a registered expoPushToken. Bikes with zero
-// ! fuel logs that week are skipped (nothing meaningful to summarize) rather than sent an
-// ! empty digest — see notification.utils.ts / spec 21 for the exact week-boundary logic.
+// ! sends one Expo push per bike that had at least one fuel log in the current Friday–Thursday
+// ! week (the one about to end that same Thursday night, since the cron fires 10pm local time),
+// ! to every user with a registered expoPushToken. Bikes with zero fuel logs that week are
+// ! skipped (nothing meaningful to summarize) rather than sent an empty digest — see
+// ! notification.utils.ts / spec 21 for the exact week-boundary logic.
 const sendWeeklySummaries = () => __awaiter(void 0, void 0, void 0, function* () {
     const users = yield user_model_1.userModel
         .find({ expoPushToken: { $ne: null }, isDeleted: false })
         .lean();
-    const { startDate, endDate } = (0, notification_utils_1.getLastCompletedWeekRange)(new Date());
+    const { startDate, endDate } = (0, notification_utils_1.getCurrentWeekRange)(new Date());
     let bikesSkipped = 0;
     let notificationsFailed = 0;
     const messages = [];
