@@ -99,6 +99,7 @@ const getSpendingTrendFromDB = (bikeId, userId, months) => __awaiter(void 0, voi
     return { months, monthlySummary };
 });
 exports.spendingServices = {
+    computeSpendingForRange,
     getSpendingSummaryFromDB,
     getSpendingTrendFromDB,
 };

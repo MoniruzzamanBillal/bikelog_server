@@ -145,6 +145,7 @@ const getSpendingTrendFromDB = async (
 };
 
 export const spendingServices = {
+  computeSpendingForRange,
   getSpendingSummaryFromDB,
   getSpendingTrendFromDB,
 };

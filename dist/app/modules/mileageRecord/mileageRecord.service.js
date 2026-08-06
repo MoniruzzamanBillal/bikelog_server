@@ -160,6 +160,7 @@ const getMileageTrendFromDB = (bikeId, months) => __awaiter(void 0, void 0, void
     return { months, monthlySummary };
 });
 exports.mileageRecordServices = {
+    computeMileageForRange,
     getMileageRecordsFromDB,
     getMonthlyMileageFromDB,
     getYearlyMileageFromDB,

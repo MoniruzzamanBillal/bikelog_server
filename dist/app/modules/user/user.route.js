@@ -16,5 +16,7 @@ router.post("/register", (0, validateRequest_1.default)(user_validation_1.userVa
 router.post("/login", (0, validateRequest_1.default)(user_validation_1.userValidations.loginValidationSchema), user_controller_1.userController.signIn);
 // ! for getting current user
 router.get("/me", authCheck_1.default, user_controller_1.userController.getMe);
+// ! for registering/updating this device's Expo push token
+router.post("/push-token", authCheck_1.default, (0, validateRequest_1.default)(user_validation_1.userValidations.pushTokenSchema), user_controller_1.userController.updatePushToken);
 //
 exports.userRouter = router;

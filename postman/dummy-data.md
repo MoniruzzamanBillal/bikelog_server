@@ -51,6 +51,16 @@ If you'd rather seed the two catalog collections instead of creating your own vi
 
 No body. Returns the logged-in user (password excluded).
 
+### `POST /api/auth/push-token` — auth required
+
+```json
+{
+  "expoPushToken": "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]"
+}
+```
+
+Registers/updates this device's Expo push token on the logged-in user — called by the mobile app on login/app-launch (`bikelog_app`'s own spec 24), not something you'd normally call from Postman by hand. Feeds the weekly-summary cron job below.
+
 ---
 
 ## Bikes (`/api/bikes`)
@@ -328,11 +338,20 @@ Notes:
 - `GET .../documents` defaults to soonest-expiry-first ordering (documents with no `expiryDate` sort last); pass `?sort=` to override with a plain field sort instead.
 - `bikeDocumentId`/`bikeDocumentFileId` **are** auto-captured by this collection's `Create Bike Document`/`Add Bike Document Files` requests, unlike the pre-existing `bikeAccessoryId`/`bikeIssueId` gap noted above.
 
+## Cron / Notifications (`/api/cron`)
+
+### `POST /api/cron/weekly-summary` — **not** JWT-authed, secret header instead
+
+No body. Requires an `x-cron-secret` header matching the server's `CRON_SECRET` env var (set the collection's `cronSecret` variable to the same value before running this manually) — a `401` with no header or the wrong value, same as a bad JWT would 401 elsewhere.
+
+For every user with a registered `expoPushToken`, computes each of their bikes' most recently completed **Friday–Thursday** week (not the calendar week) and sends one Expo push notification per bike that had at least one fuel log that week — skipped silently (not an error) for a bike with zero fuel logs in that window. Meant to be hit once a week by a scheduled job (`.github/workflows/weekly-summary-cron.yml`), not by the app. Returns `{usersProcessed, bikesSkipped, notificationsSent, notificationsFailed}` so the calling job's own logs show what happened.
+
 ## Fields you will never see accepted in any request body
 
 | Module                   | Field                                    | Why                                                                                 |
 | ------------------------ | ---------------------------------------- | ----------------------------------------------------------------------------------- |
-| user                     | `isDeleted`, `userRole`, `expoPushToken` | defaults, not part of register                                                      |
+| user                     | `isDeleted`, `userRole`                  | defaults, not part of register                                                      |
+| user                     | `expoPushToken` (on register/any other endpoint) | defaults to `null`; only ever set via the dedicated `POST /api/auth/push-token` above |
 | bike                     | `owner`                                  | derived from the JWT                                                                |
 | bike                     | `currentOdometer` (on `PATCH`)           | stripped server-side; only settable as the initial value on create                  |
 | fuelLog                  | `totalCost`                              | always recomputed from `litersAdded * pricePerLiter`                                |

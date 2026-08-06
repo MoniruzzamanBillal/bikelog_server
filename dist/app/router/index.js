@@ -13,6 +13,7 @@ const fuelLog_route_1 = require("../modules/fuelLog/fuelLog.route");
 const maintenanceLog_route_1 = require("../modules/maintenanceLog/maintenanceLog.route");
 const maintenanceType_route_1 = require("../modules/maintenanceType/maintenanceType.route");
 const mileageRecord_route_1 = require("../modules/mileageRecord/mileageRecord.route");
+const notification_route_1 = require("../modules/notification/notification.route");
 const spending_route_1 = require("../modules/spending/spending.route");
 const user_route_1 = require("../modules/user/user.route");
 const router = (0, express_1.Router)();
@@ -72,6 +73,10 @@ const routeArray = [
     {
         path: "/bikes/:bikeId/documents",
         route: bikeDocument_route_1.bikeDocumentRouter,
+    },
+    {
+        path: "/cron",
+        route: notification_route_1.notificationRouter,
     },
 ];
 routeArray.forEach((item) => {

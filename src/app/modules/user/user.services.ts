@@ -76,5 +76,23 @@ const getMeFromDb = async (userId: string) => {
   return result;
 };
 
+// ! registers/updates this device's Expo push token, feeding the weekly-summary cron job
+const updatePushToken = async (userId: string, expoPushToken: string) => {
+  const result = await userModel
+    .findByIdAndUpdate(userId, { expoPushToken }, { new: true })
+    .select("-password");
+
+  if (!result) {
+    throw new AppError(httpStatus.NOT_FOUND, "User not found");
+  }
+
+  return result;
+};
+
 //
-export const userServices = { createUser, loginFromDb, getMeFromDb };
+export const userServices = {
+  createUser,
+  loginFromDb,
+  getMeFromDb,
+  updatePushToken,
+};
