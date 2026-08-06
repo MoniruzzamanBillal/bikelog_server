@@ -47,7 +47,8 @@ const getSpendingInsightFromDB = (bikeId, userId) => __awaiter(void 0, void 0, v
             `Total spending: ${summary.totalSpending}\n` +
             `Category breakdown: ${JSON.stringify(summary.categoryBreakdown)}\n\n` +
             `Write a short (2-4 sentence), friendly insight about this bike's spending. ` +
-            `Only use the numbers given above, never invent figures.`,
+            `Only use the numbers given above, never invent figures. ` +
+            `Format the reply in markdown — short paragraphs, **bold** for key numbers, and a bullet list if you mention more than one figure; skip headings.`,
     };
     const insight = yield (0, openRouterClient_1.askOpenRouter)([systemMessage]);
     yield bike_model_1.bikeModel.findByIdAndUpdate(bikeId, {
@@ -79,7 +80,8 @@ const getMileageInsightFromDB = (bikeId, userId) => __awaiter(void 0, void 0, vo
             `Lifetime totals: ${JSON.stringify(lifetime)}\n` +
             `Last 3 months trend: ${JSON.stringify(trend)}\n\n` +
             `Write a short (2-4 sentence), friendly insight about this bike's fuel mileage. ` +
-            `Only use the numbers given above, never invent figures.`,
+            `Only use the numbers given above, never invent figures. ` +
+            `Format the reply in markdown — short paragraphs, **bold** for key numbers, and a bullet list if you mention more than one figure; skip headings.`,
     };
     const insight = yield (0, openRouterClient_1.askOpenRouter)([systemMessage]);
     yield bike_model_1.bikeModel.findByIdAndUpdate(bikeId, {
@@ -125,7 +127,8 @@ const getBikeChatReply = (bikeId, userId, messages) => __awaiter(void 0, void 0,
             `Lifetime spending: ${JSON.stringify(lifetimeSpending)}\n\n` +
             manualSection +
             `Answer only using the data given above. If asked something this data doesn't cover, ` +
-            `say so honestly instead of guessing.`,
+            `say so honestly instead of guessing. ` +
+            `Format the reply in markdown — short paragraphs, **bold** for key numbers, and bullet points for lists or breakdowns; skip headings, this is a chat.`,
     };
     const chatMessages = [
         systemMessage,
