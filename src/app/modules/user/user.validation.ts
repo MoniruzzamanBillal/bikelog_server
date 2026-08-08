@@ -21,8 +21,18 @@ const loginValidationSchema = z.object({
   }),
 });
 
+// Validation schema for registering/updating this device's Expo push token
+const pushTokenSchema = z.object({
+  body: z.object({
+    expoPushToken: z.string({
+      required_error: "expoPushToken is required",
+    }).min(1, { message: "expoPushToken cannot be empty" }),
+  }),
+});
+
 //
 export const userValidations = {
   createUserSchema,
   loginValidationSchema,
+  pushTokenSchema,
 };

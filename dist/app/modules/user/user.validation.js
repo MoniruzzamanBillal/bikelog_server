@@ -21,8 +21,17 @@ const loginValidationSchema = zod_1.z.object({
         password: zod_1.z.string().min(1, { message: "Password cannot be empty" }),
     }),
 });
+// Validation schema for registering/updating this device's Expo push token
+const pushTokenSchema = zod_1.z.object({
+    body: zod_1.z.object({
+        expoPushToken: zod_1.z.string({
+            required_error: "expoPushToken is required",
+        }).min(1, { message: "expoPushToken cannot be empty" }),
+    }),
+});
 //
 exports.userValidations = {
     createUserSchema,
     loginValidationSchema,
+    pushTokenSchema,
 };

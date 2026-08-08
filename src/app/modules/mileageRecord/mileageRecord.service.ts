@@ -236,6 +236,7 @@ const getMileageTrendFromDB = async (
 };
 
 export const mileageRecordServices = {
+  computeMileageForRange,
   getMileageRecordsFromDB,
   getMonthlyMileageFromDB,
   getYearlyMileageFromDB,

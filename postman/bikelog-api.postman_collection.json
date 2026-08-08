@@ -75,6 +75,11 @@
       "key": "bikeDocumentFileId",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "cronSecret",
+      "value": "",
+      "type": "string"
     }
   ],
   "item": [
@@ -201,6 +206,52 @@
                 "auth",
                 "me"
               ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Push Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/push-token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "push-token"
+              ]
+            },
+            "description": "Registers/updates this device's Expo push token on the logged-in user, so the weekly-summary cron job (Cron > Trigger Weekly Summary) can send it a notification. Requires Bearer {{token}} (inherited from the collection).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expoPushToken\": \"ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           },
           "event": [
@@ -2277,6 +2328,51 @@
               ]
             },
             "description": "Removes a single file by its own subdocument _id (captured automatically by Add Bike Document Files, or paste one from the document's files array manually)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Cron",
+      "item": [
+        {
+          "name": "Trigger Weekly Summary",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-cron-secret",
+                "value": "{{cronSecret}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cron/weekly-summary",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cron",
+                "weekly-summary"
+              ]
+            },
+            "description": "Machine-to-machine endpoint hit by the scheduled GitHub Actions workflow (.github/workflows/weekly-summary-cron.yml, Thursday 10pm Asia/Dhaka), not by a logged-in user — protected by the x-cron-secret header (must match the server's CRON_SECRET env var) instead of a JWT. Computes each user's bikes' current Friday–Thursday week (the one about to end that same night) and pushes an Expo notification per bike that had at least one fuel log that week. Set the cronSecret collection variable to the same value as your local .env's CRON_SECRET before running this manually.",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "event": [
             {

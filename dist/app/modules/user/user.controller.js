@@ -48,9 +48,20 @@ const getMe = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, 
         data: result,
     });
 }));
+// ! for registering/updating this device's Expo push token
+const updatePushToken = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const result = yield user_services_1.userServices.updatePushToken(req.user.userId, req.body.expoPushToken);
+    (0, sendResponse_1.default)(res, {
+        status: http_status_1.default.OK,
+        success: true,
+        message: "Push token updated successfully!!!",
+        data: result,
+    });
+}));
 //
 exports.userController = {
     createUser,
     signIn,
     getMe,
+    updatePushToken,
 };

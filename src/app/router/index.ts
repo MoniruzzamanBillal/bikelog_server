@@ -13,6 +13,7 @@ import {
 } from "../modules/maintenanceLog/maintenanceLog.route";
 import { maintenanceTypeRouter } from "../modules/maintenanceType/maintenanceType.route";
 import { mileageRecordRouter } from "../modules/mileageRecord/mileageRecord.route";
+import { notificationRouter } from "../modules/notification/notification.route";
 import { spendingRouter } from "../modules/spending/spending.route";
 import { userRouter } from "../modules/user/user.route";
 
@@ -74,6 +75,10 @@ const routeArray = [
   {
     path: "/bikes/:bikeId/documents",
     route: bikeDocumentRouter,
+  },
+  {
+    path: "/cron",
+    route: notificationRouter,
   },
 ];
 

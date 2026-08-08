@@ -27,5 +27,13 @@ router.get(
   userController.getMe,
 );
 
+// ! for registering/updating this device's Expo push token
+router.post(
+  "/push-token",
+  authCheck,
+  validateRequest(userValidations.pushTokenSchema),
+  userController.updatePushToken,
+);
+
 //
 export const userRouter = router;
