@@ -1,0 +1,66 @@
+name: Release Pipeline
+
+# Runs on every push to master, ALONGSIDE deploy.yml (a separate, independent workflow file —
+# GitHub runs both in parallel on the same push event, no ordering/blocking relationship between
+# them). This workflow does NOT deploy anything; it only tags the commit and publishes a GitHub
+# Release marking it. A failure here has no effect on the actual Vercel deploy, and vice versa.
+#
+# Adapted from a pasted reference example (originally used `main` and `softprops/action-gh-release@v1`):
+#   - Branch changed to `master` — bikelog_server's real default branch (confirmed via
+#     `git remote show origin`), not `main`.
+#   - `softprops/action-gh-release@v2` used instead of the unmaintained `@v1`.
+#   - Dropped the unused `pull-requests: write` permission (this pipeline never touches PRs).
+#
+# No new secrets needed — GITHUB_TOKEN is provided automatically by GitHub Actions with the
+# contents: write permission declared below.
+on:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history — required for tagging
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "yarn"
+
+      - name: Configure Github Bot Identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Install Dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Build Package
+        run: yarn build
+
+      - name: Set Version
+        id: set_version
+        run: echo "version=0.0.${{ github.run_number }}" >> $GITHUB_OUTPUT
+
+      - name: Create Git Tag
+        run: |
+          git tag v${{ steps.set_version.outputs.version }}
+          git push origin v${{ steps.set_version.outputs.version }}
+
+      - name: Create Github Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.set_version.outputs.version }}
+          name: Release v${{ steps.set_version.outputs.version }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
