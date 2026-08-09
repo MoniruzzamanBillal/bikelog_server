@@ -1012,10 +1012,10 @@ etag@~1.8.1:
   resolved "https://registry.yarnpkg.com/etag/-/etag-1.8.1.tgz#41ae2eeb65efa62268aebfea83ac7d79299b0887"
   integrity sha512-aIL5Fx7mawVa300al2BnEE4iNvo1qETxLrPI/o05L7z6go7fCw1J6EQmbK4FmJ2AS7kgVF/KEZWufBfdClMcPg==
 
-expo-server-sdk@^7.0.0:
-  version "7.0.0"
-  resolved "https://registry.yarnpkg.com/expo-server-sdk/-/expo-server-sdk-7.0.0.tgz#3e3a668e942187f68bde2fc1851a91199d7ff578"
-  integrity sha512-rh7Pa+IhjEpp0J2ga25wMSwH/hE60K2f5bP3ZXk9okRJaX/frqWgijmpjEbrFEJiAWzDHyGrRHeP1+RUNYyRqA==
+expo-server-sdk@^5.0.0:
+  version "5.0.0"
+  resolved "https://registry.yarnpkg.com/expo-server-sdk/-/expo-server-sdk-5.0.0.tgz#321640dc9a54f8105da86113384549d6c50f5121"
+  integrity sha512-GEp1XYLU80iS/hdRo3c2n092E8TgTXcHSuw6Lw68dSoWaAgiLPI2R+e5hp5+hGF1TtJZOi2nxtJX63+XA3iz9g==
   dependencies:
     promise-limit "^2.7.0"
     promise-retry "^2.0.1"
