@@ -12,8 +12,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const mongoose_1 = __importDefault(require("mongoose"));
 const dotenv_1 = __importDefault(require("dotenv"));
+const mongoose_1 = __importDefault(require("mongoose"));
 const path_1 = __importDefault(require("path"));
 dotenv_1.default.config({ path: path_1.default.join(process.cwd(), ".env") });
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -29,12 +29,20 @@ const maintenanceTypeSchema = new mongoose_1.default.Schema({
 const MaintenanceType = mongoose_1.default.model("MaintenanceType", maintenanceTypeSchema);
 const seedData = [
     { name: "Engine Oil", defaultIntervalKm: null, defaultIntervalDays: null },
-    { name: "Chain Lube", defaultIntervalKm: 500, defaultIntervalDays: null },
+    { name: "Chain Lube", defaultIntervalKm: 150, defaultIntervalDays: null },
     { name: "Tire Change", defaultIntervalKm: null, defaultIntervalDays: null },
     { name: "Brake Pads", defaultIntervalKm: null, defaultIntervalDays: null },
-    { name: "General Service", defaultIntervalKm: 3000, defaultIntervalDays: null },
+    {
+        name: "General Service",
+        defaultIntervalKm: 4000,
+        defaultIntervalDays: null,
+    },
     { name: "Insurance", defaultIntervalKm: null, defaultIntervalDays: 365 },
-    { name: "Registration/Tax", defaultIntervalKm: null, defaultIntervalDays: 365 },
+    {
+        name: "Registration/Tax",
+        defaultIntervalKm: null,
+        defaultIntervalDays: 730,
+    },
     { name: "Other", defaultIntervalKm: null, defaultIntervalDays: null },
 ];
 function seed() {

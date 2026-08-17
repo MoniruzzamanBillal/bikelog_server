@@ -28,8 +28,6 @@ app.use((0, cors_1.default)({
         "http://localhost:5174",
         "http://localhost:3000",
         "http://localhost:3001",
-        "https://devmats.vercel.app",
-        "https://dev-mats.vercel.app",
         "http://localhost:8081",
         "https://bikelog-web.vercel.app",
     ],

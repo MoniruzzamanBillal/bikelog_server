@@ -1,5 +1,5 @@
-import mongoose from "mongoose";
 import dotenv from "dotenv";
+import mongoose from "mongoose";
 import path from "path";
 
 dotenv.config({ path: path.join(process.cwd(), ".env") });
@@ -22,9 +22,9 @@ const engineOilTypeSchema = new mongoose.Schema(
 const EngineOilType = mongoose.model("EngineOilType", engineOilTypeSchema);
 
 const seedData = [
-  { name: "Mineral", suggestedIntervalKm: 800 },
-  { name: "Semi-Synthetic", suggestedIntervalKm: 1000 },
-  { name: "Synthetic", suggestedIntervalKm: 1250 },
+  { name: "Mineral", suggestedIntervalKm: 1000 },
+  { name: "Semi-Synthetic", suggestedIntervalKm: 1500 },
+  { name: "Synthetic", suggestedIntervalKm: 2500 },
 ];
 
 async function seed() {

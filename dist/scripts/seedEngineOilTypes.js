@@ -12,8 +12,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const mongoose_1 = __importDefault(require("mongoose"));
 const dotenv_1 = __importDefault(require("dotenv"));
+const mongoose_1 = __importDefault(require("mongoose"));
 const path_1 = __importDefault(require("path"));
 dotenv_1.default.config({ path: path_1.default.join(process.cwd(), ".env") });
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -27,9 +27,9 @@ const engineOilTypeSchema = new mongoose_1.default.Schema({
 }, { timestamps: true });
 const EngineOilType = mongoose_1.default.model("EngineOilType", engineOilTypeSchema);
 const seedData = [
-    { name: "Mineral", suggestedIntervalKm: 800 },
-    { name: "Semi-Synthetic", suggestedIntervalKm: 1000 },
-    { name: "Synthetic", suggestedIntervalKm: 1250 },
+    { name: "Mineral", suggestedIntervalKm: 1000 },
+    { name: "Semi-Synthetic", suggestedIntervalKm: 1500 },
+    { name: "Synthetic", suggestedIntervalKm: 2500 },
 ];
 function seed() {
     return __awaiter(this, void 0, void 0, function* () {
