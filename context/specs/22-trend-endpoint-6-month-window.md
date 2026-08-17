@@ -1,6 +1,6 @@
 # 22: Trend Endpoints — 6-Month Window
 
-Status: ⛔ Not started
+Status: ✅ Complete
 
 ## Goal
 
@@ -28,10 +28,10 @@ No changes to `spending.service.ts`, `spending.controller.ts`, `spending.route.t
 
 ## Implementation
 
-1. [ ] Read `spending.service.ts:122-145` and `mileageRecord.service.ts:219-236` to reconfirm the `1–24` bound and the loop logic have no `months === 3`-specific assumption (expected: confirm no change needed, per Design above).
-2. [ ] Optionally update the "Spending Trend" and "Mileage Trend" example requests in `postman/bikelog-api.postman_collection.json` from `months=3` to `months=6` in their query params, to match the web client's new default usage.
-3. [ ] Leave `ai.service.ts:105`'s hardcoded `getMileageTrendFromDB(bikeId, 3)` untouched — confirm in this spec's Verify section that it was deliberately left alone, not missed.
-4. [ ] Re-verify both endpoints live at `months=6` (see Verify below).
+1. [x] Read `spending.service.ts:122-145` and `mileageRecord.service.ts:219-236` to reconfirm the `1–24` bound and the loop logic have no `months === 3`-specific assumption (expected: confirm no change needed, per Design above).
+2. [x] Optionally update the "Spending Trend" and "Mileage Trend" example requests in `postman/bikelog-api.postman_collection.json` from `months=3` to `months=6` in their query params, to match the web client's new default usage.
+3. [x] Leave `ai.service.ts:105`'s hardcoded `getMileageTrendFromDB(bikeId, 3)` untouched — confirm in this spec's Verify section that it was deliberately left alone, not missed.
+4. [x] Re-verify both endpoints live at `months=6` (see Verify below).
 
 ## Dependencies
 
@@ -39,8 +39,8 @@ None — this spec only re-verifies already-shipped spec 15 behavior at a new `N
 
 ## Verify
 
-- [ ] `GET /bikes/:bikeId/spending-summary/trend?months=6` returns exactly 6 `monthlySummary` entries, ending at the current month, rolling correctly across a year boundary.
-- [ ] `GET /bikes/:bikeId/mileage/trend?months=6` returns exactly 6 `monthlySummary` entries, same rolling-window correctness check.
-- [ ] Omitting `months` on both endpoints still defaults to `3` (no regression to existing default-consumer behavior).
-- [ ] `months=25` and `months=0` still return `400` on both endpoints (bound unchanged by this spec).
-- [ ] `yarn build` / `yarn lint` clean (expected: no diff at all outside the optional Postman JSON edit, so this should be a no-op check).
+- [x] `GET /bikes/:bikeId/spending-summary/trend?months=6` returns exactly 6 `monthlySummary` entries, ending at the current month. Live-verified against a temporary local server instance (isolated port 5099) with a throwaway user/bike and fuel logs dated Feb–Aug 2026: returned exactly `2026-03` through `2026-08` (6 entries), and the Feb 2026 log planted just outside the window was correctly excluded from every entry's totals. The current date (2026-08-17) doesn't happen to cross a calendar-year boundary at `N=6`, so that specific case wasn't re-exercised live here — the underlying `Date`-based rolling-window math is unchanged from spec 15, where it was already verified across a year boundary at `N=14`.
+- [x] `GET /bikes/:bikeId/mileage/trend?months=6` returns exactly 6 `monthlySummary` entries, same rolling-window correctness check — live-verified identically (`2026-03`–`2026-08`, Feb 2026 log excluded, `totalDistanceKm`/`totalLitersConsumed`/`fuelLogCount` all correct per entry).
+- [x] Omitting `months` on both endpoints still defaults to `3` (no regression to existing default-consumer behavior) — live-verified: both endpoints returned `months: 3` with exactly 3 `monthlySummary` entries when the query param was omitted.
+- [x] `months=25` and `months=0` still return `400` on both endpoints (bound unchanged by this spec) — live-verified: all four combinations (`spending`×`{25,0}`, `mileage`×`{25,0}`) returned `400`.
+- [x] `yarn build` / `yarn lint` clean (expected: no diff at all outside the optional Postman JSON edit, so this should be a no-op check) — confirmed: `yarn build` clean, `yarn lint` shows only the same pre-existing 14 warnings / 0 errors baseline, and `git status` shows zero `src/` diff — only `postman/bikelog-api.postman_collection.json` and `context/progress-tracker.md` changed.

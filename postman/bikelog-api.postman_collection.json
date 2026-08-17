@@ -888,7 +888,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/bikes/{{bikeId}}/mileage/trend?months=3",
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/mileage/trend?months=6",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -901,7 +901,7 @@
               "query": [
                 {
                   "key": "months",
-                  "value": "3",
+                  "value": "6",
                   "disabled": false
                 }
               ]
@@ -1594,7 +1594,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/bikes/{{bikeId}}/spending-summary/trend?months=3",
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/spending-summary/trend?months=6",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -1607,7 +1607,7 @@
               "query": [
                 {
                   "key": "months",
-                  "value": "3",
+                  "value": "6",
                   "disabled": false
                 }
               ]

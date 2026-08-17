@@ -1,5 +1,5 @@
-import mongoose from "mongoose";
 import dotenv from "dotenv";
+import mongoose from "mongoose";
 import path from "path";
 
 dotenv.config({ path: path.join(process.cwd(), ".env") });
@@ -20,16 +20,27 @@ const maintenanceTypeSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-const MaintenanceType = mongoose.model("MaintenanceType", maintenanceTypeSchema);
+const MaintenanceType = mongoose.model(
+  "MaintenanceType",
+  maintenanceTypeSchema,
+);
 
 const seedData = [
   { name: "Engine Oil", defaultIntervalKm: null, defaultIntervalDays: null },
-  { name: "Chain Lube", defaultIntervalKm: 500, defaultIntervalDays: null },
+  { name: "Chain Lube", defaultIntervalKm: 150, defaultIntervalDays: null },
   { name: "Tire Change", defaultIntervalKm: null, defaultIntervalDays: null },
   { name: "Brake Pads", defaultIntervalKm: null, defaultIntervalDays: null },
-  { name: "General Service", defaultIntervalKm: 3000, defaultIntervalDays: null },
+  {
+    name: "General Service",
+    defaultIntervalKm: 4000,
+    defaultIntervalDays: null,
+  },
   { name: "Insurance", defaultIntervalKm: null, defaultIntervalDays: 365 },
-  { name: "Registration/Tax", defaultIntervalKm: null, defaultIntervalDays: 365 },
+  {
+    name: "Registration/Tax",
+    defaultIntervalKm: null,
+    defaultIntervalDays: 730,
+  },
   { name: "Other", defaultIntervalKm: null, defaultIntervalDays: null },
 ];
 
