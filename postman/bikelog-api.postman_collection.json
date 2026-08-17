@@ -1627,6 +1627,51 @@
               }
             }
           ]
+        },
+        {
+          "name": "Spending Details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/spending-summary/details?period=month&targetMonth=2026-07",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "spending-summary",
+                "details"
+              ],
+              "query": [
+                {
+                  "key": "period",
+                  "value": "month",
+                  "disabled": false
+                },
+                {
+                  "key": "targetMonth",
+                  "value": "2026-07",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Same period/targetMonth/targetYear rules as Spending Summary. Returns the individual fuel-log/maintenance-log line items (date, category, description, amount, vendor, remarks) behind the totals, sorted ascending by date. totalSpending/categoryBreakdown here always match Spending Summary's for the same period. Feeds the web client's PDF export feature (bikelog_client-web- spec 21)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     },

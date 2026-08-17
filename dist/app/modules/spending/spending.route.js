@@ -12,5 +12,7 @@ const router = (0, express_1.Router)({ mergeParams: true });
 router.get("/", authCheck_1.default, spending_controller_1.spendingController.getSpendingSummary);
 // ! rolling last-N-months spending trend for charting
 router.get("/trend", authCheck_1.default, spending_controller_1.spendingController.getSpendingTrend);
+// ! per-record spending detail (fuel + maintenance line items) for a given period, feeds PDF export
+router.get("/details", authCheck_1.default, spending_controller_1.spendingController.getSpendingDetails);
 //
 exports.spendingRouter = router;

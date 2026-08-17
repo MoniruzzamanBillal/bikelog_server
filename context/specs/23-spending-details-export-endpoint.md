@@ -1,6 +1,6 @@
 # 23: Spending Details Export Endpoint
 
-Status: ⛔ Not started
+Status: ✅ Complete
 
 ## Goal
 
@@ -140,13 +140,13 @@ No new npm dependency — this is pure Mongoose querying, same as every other en
 
 ## Implementation
 
-1. Add `TSpendingRecordSource`, `TSpendingRecord`, `TSpendingDetails` to `spending.interface.ts`.
-2. In `spending.service.ts`: add the fuel/maintenance-to-`TSpendingRecord` mapping and the new `computeSpendingDetailsForRange`/`getSpendingDetailsFromDB` functions, reusing (not duplicating) the existing date-range-resolution and category-breakdown-reduce logic from the current `getSpendingSummaryFromDB`/`computeSpendingForRange`.
-3. Add `getSpendingDetails` to `spending.controller.ts`, mirroring `getSpendingSummary`'s inline query validation.
-4. Add the `GET /details` route in `spending.route.ts`, behind `authCheck` like every other route in this file.
-5. Add a Postman request for the new endpoint.
-6. Manually verify against dummy data per the Verify checklist below.
-7. Update `context/progress-tracker.md`: new Recent Activity entry + a spec 23 row in the Spec Implementation Status table.
+1. [x] Add `TSpendingRecordSource`, `TSpendingRecord`, `TSpendingDetails` to `spending.interface.ts`.
+2. [x] In `spending.service.ts`: add the fuel/maintenance-to-`TSpendingRecord` mapping and the new `getSpendingDetailsFromDB` function, reusing (not duplicating) the existing date-range-resolution and category-breakdown-reduce logic from the current `getSpendingSummaryFromDB`/`computeSpendingForRange`. Implemented as: extracted the inline month/year boundary math out of `getSpendingSummaryFromDB` into a new shared `resolveSpendingDateRange(period, targetMonth?, targetYear?)`, and extended `computeSpendingForRange` itself to also build and return `records: TSpendingRecord[]` alongside its existing `totalSpending`/`categoryBreakdown` — rather than adding a separate `computeSpendingDetailsForRange` sibling function, per the spec's own "implementer's call, whichever avoids duplicating the fetch/reduce logic" note. `getSpendingTrendFromDB` and `notification.service.ts`'s existing callers of `computeSpendingForRange` are unaffected (both destructure only `totalSpending`/`categoryBreakdown`, ignoring the new field) — confirmed via grep and a clean `yarn build`.
+3. [x] Add `getSpendingDetails` to `spending.controller.ts`, mirroring `getSpendingSummary`'s inline query validation.
+4. [x] Add the `GET /details` route in `spending.route.ts`, behind `authCheck` like every other route in this file.
+5. [x] Add a Postman request for the new endpoint.
+6. [x] Manually verify against dummy data per the Verify checklist below.
+7. [x] Update `context/progress-tracker.md`: new Recent Activity entry + a spec 23 row in the Spec Implementation Status table.
 
 ## Dependencies
 
@@ -154,13 +154,13 @@ Spec 09 (Spending Summary) and spec 15 (trend endpoint) must exist first — thi
 
 ## Verify
 
-- [ ] `GET /bikes/:bikeId/spending-summary/details?period=month&targetMonth=YYYY-MM` returns `records` containing every fuel log (`date` within the month) and every maintenance log (`serviceDate` within the month) for that bike, each mapped to the `TSpendingRecord` shape above.
-- [ ] `records` is sorted ascending by `date` (oldest first).
-- [ ] `totalSpending` and `categoryBreakdown` in this endpoint's response exactly match what `/spending-summary` (the existing endpoint) returns for the same `period`/`targetMonth`/`targetYear` — no drift between the two endpoints' totals.
-- [ ] `period=year` and `period=lifetime` both work with the same param rules as the existing `/spending-summary` endpoint (400 if a required param is missing for that period).
-- [ ] A fuel log with no `fuelStation` set returns `vendor: null` (not `undefined`, not an empty string) in its record; same for a maintenance log with no `serviceCenter`, and for `notes` → `remarks` on both.
-- [ ] Soft-deleted (`isDeleted: true`) fuel/maintenance logs never appear in `records`.
-- [ ] Requesting another user's bike 403/404s the same way `/spending-summary` already does (ownership check enforced).
-- [ ] Postman collection has a new request for `/spending-summary/details` alongside the existing 4 Spending Summary requests.
-- [ ] `context/progress-tracker.md` updated with a new spec 23 row.
-- [ ] TypeScript compiles clean (`yarn build` or equivalent type-check) and lint is clean.
+- [x] `GET /bikes/:bikeId/spending-summary/details?period=month&targetMonth=YYYY-MM` returns `records` containing every fuel log (`date` within the month) and every maintenance log (`serviceDate` within the month) for that bike, each mapped to the `TSpendingRecord` shape above. Live-verified against a temporary local server instance (real dev DB) with a throwaway user/bike: 2 fuel logs + 1 maintenance log dated inside `2026-08`, one fuel log dated `2026-07` (outside the window), all correctly included/excluded.
+- [x] `records` is sorted ascending by `date` (oldest first) — confirmed: `2026-08-05` (fuel) → `2026-08-07` (maintenance) → `2026-08-10` (fuel).
+- [x] `totalSpending` and `categoryBreakdown` in this endpoint's response exactly match what `/spending-summary` (the existing endpoint) returns for the same `period`/`targetMonth`/`targetYear` — no drift between the two endpoints' totals. Confirmed identical (`totalSpending: 1720`, same 2-entry `categoryBreakdown`) for `period=month`, and identical (`totalSpending: 2220`) for both `period=year` and `period=lifetime`.
+- [x] `period=year` and `period=lifetime` both work with the same param rules as the existing `/spending-summary` endpoint (400 if a required param is missing for that period) — confirmed: `period=month` without `targetMonth`, `period=year` without `targetYear`, missing `period` entirely, and an invalid `period=foo` all returned `400`.
+- [x] A fuel log with no `fuelStation` set returns `vendor: null` (not `undefined`, not an empty string) in its record; same for a maintenance log with no `serviceCenter`, and for `notes` → `remarks` on both. Confirmed via live JSON response: the fuel log created without `fuelStation`/`notes` came back with literal `"vendor": null, "remarks": null`.
+- [x] Soft-deleted (`isDeleted: true`) fuel/maintenance logs never appear in `records`. Confirmed: a maintenance log dated `2026-08-15` was soft-deleted via its own `DELETE` endpoint before the details call, and did not appear in `records` (nor did it affect `totalSpending`).
+- [x] Requesting another user's bike 403/404s the same way `/spending-summary` already does (ownership check enforced) — confirmed: a second throwaway user got `404` calling `/spending-summary/details` on the first user's bike.
+- [x] Postman collection has a new request for `/spending-summary/details` alongside the existing 4 Spending Summary requests — added "Spending Details" to the "Spending Summary" folder, matching the existing requests' style exactly.
+- [x] `context/progress-tracker.md` updated with a new spec 23 row.
+- [x] TypeScript compiles clean (`yarn build` or equivalent type-check) and lint is clean — `yarn build` clean; `yarn lint` shows only the same pre-existing 14 warnings / 0 errors baseline, none new.

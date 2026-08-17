@@ -47,7 +47,23 @@ const getSpendingTrend = (0, catchAsync_1.default)((req, res) => __awaiter(void 
         data: result,
     });
 }));
+const getSpendingDetails = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const period = req.query.period;
+    if (!period || !["month", "year", "lifetime"].includes(period)) {
+        throw new AppError_1.default(http_status_1.default.BAD_REQUEST, "period must be one of: month, year, lifetime");
+    }
+    const targetMonth = req.query.targetMonth;
+    const targetYear = req.query.targetYear;
+    const result = yield spending_service_1.spendingServices.getSpendingDetailsFromDB(req.params.bikeId, req.user.userId, period, targetMonth, targetYear);
+    (0, sendResponse_1.default)(res, {
+        status: http_status_1.default.OK,
+        success: true,
+        message: "Spending details retrieved successfully",
+        data: result,
+    });
+}));
 exports.spendingController = {
     getSpendingSummary,
     getSpendingTrend,
+    getSpendingDetails,
 };
