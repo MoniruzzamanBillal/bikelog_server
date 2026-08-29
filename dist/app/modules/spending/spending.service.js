@@ -16,6 +16,8 @@ exports.spendingServices = void 0;
 const http_status_1 = __importDefault(require("http-status"));
 const AppError_1 = __importDefault(require("../../Error/AppError"));
 const bike_utils_1 = require("../bike/bike.utils");
+const bikeAccessory_constant_1 = require("../bikeAccessory/bikeAccessory.constant");
+const bikeAccessory_model_1 = require("../bikeAccessory/bikeAccessory.model");
 const fuelLog_model_1 = require("../fuelLog/fuelLog.model");
 const maintenanceLog_model_1 = require("../maintenanceLog/maintenanceLog.model");
 // ! shared by getSpendingSummaryFromDB and getSpendingDetailsFromDB so the two endpoints'
@@ -59,9 +61,15 @@ const computeSpendingForRange = (bikeId, startDate, endDate) => __awaiter(void 0
         .find(Object.assign({ bike: bikeId, isDeleted: false }, (startDate && endDate ? { serviceDate: { $gte: startDate, $lte: endDate } } : {})))
         .populate("maintenanceType", "name")
         .lean();
-    const [fuelLogs, maintenanceLogs] = yield Promise.all([
+    // ! only purchased accessories count as real spending — pending/cancelled wishlist
+    // ! entries are never included
+    const accessoriesPromise = bikeAccessory_model_1.bikeAccessoryModel
+        .find(Object.assign({ bike: bikeId, isDeleted: false, status: bikeAccessory_constant_1.AccessoryStatus.purchased }, (startDate && endDate ? { purchaseDate: { $gte: startDate, $lte: endDate } } : {})))
+        .lean();
+    const [fuelLogs, maintenanceLogs, accessories] = yield Promise.all([
         fuelLogsPromise,
         maintenanceLogsPromise,
+        accessoriesPromise,
     ]);
     const fuelTotal = fuelLogs.reduce((sum, log) => sum + log.totalCost, 0);
     const maintenanceByCategory = maintenanceLogs.reduce((acc, log) => {
@@ -71,16 +79,18 @@ const computeSpendingForRange = (bikeId, startDate, endDate) => __awaiter(void 0
         acc[category] = ((_b = acc[category]) !== null && _b !== void 0 ? _b : 0) + log.cost;
         return acc;
     }, {});
+    const accessoryTotal = accessories.reduce((sum, a) => { var _a; return sum + ((_a = a.price) !== null && _a !== void 0 ? _a : 0); }, 0);
     const categoryBreakdown = [
         { category: "Fuel", total: fuelTotal },
         ...Object.entries(maintenanceByCategory).map(([category, total]) => ({
             category,
             total,
         })),
+        ...(accessoryTotal > 0 ? [{ category: "Accessories", total: accessoryTotal }] : []),
     ];
     categoryBreakdown.sort((a, b) => b.total - a.total);
     const maintenanceTotal = maintenanceLogs.reduce((sum, log) => sum + log.cost, 0);
-    const totalSpending = fuelTotal + maintenanceTotal;
+    const totalSpending = fuelTotal + maintenanceTotal + accessoryTotal;
     const fuelRecords = fuelLogs.map((log) => {
         var _a, _b;
         return ({
@@ -107,7 +117,16 @@ const computeSpendingForRange = (bikeId, startDate, endDate) => __awaiter(void 0
             source: "maintenance",
         };
     });
-    const records = [...fuelRecords, ...maintenanceRecords].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const accessoryRecords = accessories.map((a) => ({
+        date: a.purchaseDate,
+        category: "Accessories",
+        description: a.name,
+        amount: a.price,
+        vendor: null,
+        remarks: null,
+        source: "accessory",
+    }));
+    const records = [...fuelRecords, ...maintenanceRecords, ...accessoryRecords].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     return { totalSpending, categoryBreakdown, records };
 });
 const getSpendingSummaryFromDB = (bikeId, userId, period, targetMonth, targetYear) => __awaiter(void 0, void 0, void 0, function* () {

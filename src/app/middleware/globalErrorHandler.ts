@@ -6,6 +6,7 @@ import { handleDuplicateError } from "../Error/handleDuplicateError";
 import { handleValidationError } from "../Error/handleValidationError";
 import { handleZodError } from "../Error/handleZodError";
 import { TerrorSource } from "../interface/error";
+import { errorLogServices } from "../modules/errorLog/errorLog.service";
 
 const globalErrorHandler: ErrorRequestHandler = async (
   error,
@@ -62,6 +63,27 @@ const globalErrorHandler: ErrorRequestHandler = async (
     status = error?.status;
     message = error?.message;
     errorSources = [{ path: "", message: error?.message }];
+  }
+
+  // ! await'd, not fire-and-forget — on Vercel serverless a function invocation can be
+  // ! torn down right after the response is flushed, so an un-awaited write issued after
+  // ! res.json() below isn't guaranteed to actually complete. Self-contained try/catch:
+  // ! a failure to log must never block or replace the real error response to the client.
+  try {
+    await errorLogServices.createErrorLog({
+      status,
+      message,
+      errorName: error?.name,
+      errorSources,
+      stack: error?.stack,
+      method: req.method,
+      path: req.originalUrl,
+      userId: req.user?.userId ?? null,
+      userEmail: req.user?.userEmail ?? null,
+    });
+  } catch (logError) {
+    // eslint-disable-next-line no-console
+    console.error("Failed to persist error log:", logError);
   }
 
   return res.status(status).json({

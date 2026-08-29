@@ -136,7 +136,9 @@ Soft delete (`isDeleted: true`). No body.
 | `isFullTank`           | yes      | boolean — drives mileage-record closing logic |
 | `pricePerLiter`        | yes      | positive number                               |
 | `fuelStation`, `notes` | no       | strings                                       |
-| `date`                 | no       | defaults to now; use for back-logging         |
+| `date`                 | no       | defaults to now; use for back-logging — but never before the bike's own `purchaseDate` (see below) |
+
+**`date` can't predate the bike's `purchaseDate`** — a fuel log dated earlier than the bike's own `purchaseDate` gets a `400` ("Fuel log date cannot be before the bike's purchase date (YYYY-MM-DD)"), on both create and update. A date exactly equal to `purchaseDate` is allowed (you can log fuel the day you bought the bike); omitting `date` (defaults to now) is always fine, since "now" is necessarily after purchase.
 
 **Never send `totalCost`** — the Zod schema technically accepts it, but the service always overwrites it with `litersAdded * pricePerLiter` server-side and discards whatever you send (this was a real bug fixed in a later audit — see `context/progress-tracker.md`'s "Recent Activity").
 
@@ -290,7 +292,9 @@ Examples:
 - `GET .../spending-summary?period=year&targetYear=2026`
 - `GET .../spending-summary?period=lifetime`
 
-Response is totals only (`totalSpending`, `categoryBreakdown` per maintenance type + a `Fuel` bucket) — averages are intentionally left for the frontend to compute.
+Response is totals only (`totalSpending`, `categoryBreakdown` per maintenance type + a `Fuel` bucket + an `Accessories` bucket) — averages are intentionally left for the frontend to compute.
+
+**Accessories count too (spec 25)**: a `bikeAccessory` only contributes to spending once its `status` is `"purchased"` — `pending`/`cancelled` wishlist entries never appear here. It's bucketed by `purchaseDate` (server-stamped the moment `status` became `"purchased"`, not `createdAt`), so it lands in whichever month/year it was actually marked purchased. `GET .../spending-summary/details` (spec 23's line-item export endpoint, undocumented elsewhere in this file — a pre-existing gap) includes it as its own `source: "accessory"` record, alongside `"fuel"` and `"maintenance"`.
 
 ---
 
@@ -312,7 +316,36 @@ Notes:
 - Every stored image is `{ url, publicId }`, never a bare string — `publicId` is what lets the server actually delete the old Cloudinary asset when you replace or remove an image, instead of leaving it orphaned.
 - Replacing a single-image field (`PUT .../image`) deletes the old Cloudinary asset first, then uploads the new one.
 - Bike issue images are additive (`POST` appends, never replaces) — each image gets its own subdocument `_id`, used to delete just that one image via `DELETE .../images/:imageId`.
-- `bikeAccessoryId`/`bikeIssueId` aren't auto-captured by this collection (neither module has a `Create`/`List` request here yet — a pre-existing gap, not introduced by the image feature) — paste in a real id from that bike's `/accessories` or `/issues` endpoint manually.
+- `bikeAccessoryId` **is** auto-captured now (spec 25 added a `Create Bike Accessory` request to the collection, closing this gap). `bikeIssueId` still isn't (no `Create`/`List` request exists for that module in this collection yet) — paste in a real id from that bike's `/issues` endpoint manually.
+
+## Bike Accessories (`/api/bikes/:bikeId/accessories`) — per-bike purchase wishlist
+
+`name`/`urgency` required on create; `status` defaults to `"pending"`. Three status values: `pending`, `purchased`, `cancelled`.
+
+**The purchase lock (spec 25)**: once `status` is `"purchased"`, it can never change to anything else — a `PATCH` attempting to change it away from `"purchased"` gets a `400`. Every other field (`name`, `urgency`, `price`, `productImage`) stays freely editable on the same accessory after that point.
+
+**`price` is required the moment `status` becomes `"purchased"`** — whether that's on `POST` (creating directly as purchased) or `PATCH` (transitioning an existing `pending`/`cancelled` entry) — a `400` otherwise. `price` stays optional for `pending`/`cancelled` entries.
+
+**`purchaseDate` is entirely server-computed** — never send it, it isn't part of the request schema at all. The server stamps it to the current date the instant `status` actually transitions into `"purchased"`, and (since the lock above guarantees that only happens once) it's never touched again by a later edit.
+
+```json
+// POST — create directly as purchased
+{
+  "name": "Crash Guard (Bumper)",
+  "urgency": "medium",
+  "status": "purchased",
+  "price": 1290
+}
+```
+
+```json
+// PATCH — lock violation, 400
+{
+  "status": "pending"
+}
+```
+
+`GET /` list ordering is a real quirk (spec 13): it runs one query per status (`pending → purchased → cancelled` order, or just the single requested status if `?status=` is given) and concatenates the results — a grouped feed, not one flat chronologically-sorted list.
 
 ## Bike Manual (`/api/bikes/:bikeId/manual`) — one PDF per bike, grounds AI chat
 
@@ -336,7 +369,7 @@ Notes:
 - Every stored file is `{ url, publicId, resourceType, originalName, mimeType }` — `resourceType` (`"image"` or `"raw"`) is new compared to the other upload features' plain `{url, publicId}` and is what lets the server delete a PDF asset correctly (Cloudinary requires the right resource type on destroy).
 - Files are additive (`POST` appends, never replaces) — each file gets its own subdocument `_id`, used to delete just that one file via `DELETE .../files/:fileId`.
 - `GET .../documents` defaults to soonest-expiry-first ordering (documents with no `expiryDate` sort last); pass `?sort=` to override with a plain field sort instead.
-- `bikeDocumentId`/`bikeDocumentFileId` **are** auto-captured by this collection's `Create Bike Document`/`Add Bike Document Files` requests, unlike the pre-existing `bikeAccessoryId`/`bikeIssueId` gap noted above.
+- `bikeDocumentId`/`bikeDocumentFileId` **are** auto-captured by this collection's `Create Bike Document`/`Add Bike Document Files` requests, same as `bikeAccessoryId` now (spec 25) — `bikeIssueId` is still the one remaining gap, noted above.
 
 ## Cron / Notifications (`/api/cron`)
 
@@ -345,6 +378,20 @@ Notes:
 No body. Requires an `x-cron-secret` header matching the server's `CRON_SECRET` env var (set the collection's `cronSecret` variable to the same value before running this manually) — a `401` with no header or the wrong value, same as a bad JWT would 401 elsewhere.
 
 For every user with a registered `expoPushToken`, computes each of their bikes' current **Friday–Thursday** week (not the calendar week) — the week about to finish that same night, since the scheduled job fires **Thursday 10pm Asia/Dhaka** — and sends one Expo push notification per bike that had at least one fuel log that week, skipped silently (not an error) for a bike with zero fuel logs in that window. Meant to be hit once a week by a scheduled job (`.github/workflows/weekly-summary-cron.yml`), not by the app. Returns `{usersProcessed, bikesSkipped, notificationsSent, notificationsFailed}` so the calling job's own logs show what happened.
+
+## Error Logs (`/api/admin/error-logs`) — admin-only, read-only
+
+Every error that reaches `globalErrorHandler` (an `AppError`, a Zod validation failure, a Mongoose `CastError`/`ValidationError`, a Mongo duplicate-key conflict, or any unclassified thrown error) is automatically persisted here first, before the error response is sent — nothing needs to call this module directly. There is no create/update/delete endpoint; entries expire automatically 30 days after they were created via a MongoDB TTL index, so there's nothing to clean up manually either.
+
+Both routes require a JWT belonging to a user whose `userRole` is `"admin"` — every account registers as `"user"` by default, and there is currently no promotion endpoint, so the first admin account has to be created with a direct database write (e.g. `db.users.updateOne({email: "..."}, {$set: {userRole: "admin"}})`). **Important**: `userRole` is baked into the JWT at login time, so promoting an account only takes effect the *next* time that account logs in — an already-issued token keeps acting as `"user"` until it's refreshed. A non-admin (or unauthenticated) request gets `401`/`403`, not the log data.
+
+### `GET /api/admin/error-logs` — paginated list, newest-first by default
+
+Same `{result, meta}` shape as every other paginated list endpoint (`fuelLog`, `maintenanceLog`, `bikeIssue`, `bikeAccessory`). Optional query params: `page`, `limit`, `sort`, and exact-match filters `status` (e.g. `?status=500`) and `method` (e.g. `?method=POST`). Each entry includes `status`, `message`, `errorName`, `errorSources`, `stack`, `method`, `path`, `userId`/`userEmail` (both `null` when the failing request wasn't authenticated), and `createdAt`.
+
+### `GET /api/admin/error-logs/:id` — single entry, full detail
+
+Returns one log document in full, including the complete `stack` trace. A nonexistent id — or one that's already aged out past the 30-day TTL window — returns `404`, the same as a never-existed id.
 
 ## Fields you will never see accepted in any request body
 

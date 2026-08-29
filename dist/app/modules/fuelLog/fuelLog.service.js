@@ -21,10 +21,15 @@ const Queryuilder_1 = __importDefault(require("../../builder/Queryuilder"));
 const bike_utils_1 = require("../bike/bike.utils");
 const cloudinary_1 = require("../../util/cloudinary");
 const createFuelLogIntoDB = (bikeId, userId, payload) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b, _c;
+    var _a, _b, _c, _d, _e;
     const bike = yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
-    const totalCost = ((_a = payload.litersAdded) !== null && _a !== void 0 ? _a : 0) * ((_b = payload.pricePerLiter) !== null && _b !== void 0 ? _b : 0);
-    const fuelLogData = Object.assign(Object.assign({}, payload), { bike: bikeId, totalCost, date: (_c = payload.date) !== null && _c !== void 0 ? _c : new Date() });
+    const date = (_a = payload.date) !== null && _a !== void 0 ? _a : new Date();
+    if (date < bike.purchaseDate) {
+        throw new AppError_1.default(http_status_1.default.BAD_REQUEST, `Fuel log date cannot be before the bike's purchase date (${bike.purchaseDate.toISOString().split("T")[0]})`);
+    }
+    const totalCost = ((_b = payload.litersAdded) !== null && _b !== void 0 ? _b : 0) * ((_c = payload.pricePerLiter) !== null && _c !== void 0 ? _c : 0);
+    const fuelLogData = Object.assign(Object.assign({}, payload), { bike: bikeId, totalCost,
+        date });
     const fuelLog = yield fuelLog_model_1.fuelLogModel.create(fuelLogData);
     yield (0, bike_utils_1.bumpOdometerIfHigher)(bike, fuelLog.odometerReading);
     let mileageRecordClosed = null;
@@ -49,14 +54,22 @@ const createFuelLogIntoDB = (bikeId, userId, payload) => __awaiter(void 0, void 
             // ! odometer reading, NOT currentOdometer (which was just bumped above and would
             // ! always equal this fuel log's own reading, collapsing distanceKm to 0)
             periodStartOdometer = bike.initialOdometer;
-            periodStartDate = bike.createdAt;
+            // ! no lower date bound — this is the bike's first-ever closed period, so every
+            // ! fuel log dated on/before this fill belongs to it. bike.createdAt (when the DB
+            // ! record was inserted) is NOT a valid anchor: backdating fuel history right after
+            // ! creating a bike is a normal, supported flow, and a backdated log's date is
+            // ! almost always before bike.createdAt, which used to invert this query's range
+            // ! and silently zero out the whole period (see spec 26).
+            periodStartDate = null;
         }
         const periodFuelLogs = yield fuelLog_model_1.fuelLogModel
             .find({
             bike: bikeId,
             // ! $gt, not $gte — periodStartDate is the PREVIOUS closing full-tank fill's date;
             // ! its liters already belong to the prior period and must not be double-counted here
-            date: { $gt: periodStartDate, $lte: fuelLog.date },
+            date: periodStartDate
+                ? { $gt: periodStartDate, $lte: fuelLog.date }
+                : { $lte: fuelLog.date },
             isDeleted: false,
         })
             .sort({ date: 1 })
@@ -65,6 +78,11 @@ const createFuelLogIntoDB = (bikeId, userId, payload) => __awaiter(void 0, void 
         const distanceKm = fuelLog.odometerReading - periodStartOdometer;
         const mileageKmPerLiter = litersConsumed > 0 ? distanceKm / litersConsumed : 0;
         const fuelLogIds = periodFuelLogs.map((log) => log._id);
+        // ! for the first-ever period, derive the displayed start from the earliest fuel log
+        // ! actually in it — reflects real fuel-log history instead of the bike's own creation
+        // ! moment. periodFuelLogs[0] can't actually be undefined here (the just-created
+        // ! fuelLog always satisfies its own $lte bound), the createdAt fallback is defensive only.
+        const resolvedPeriodStartDate = (_e = periodStartDate !== null && periodStartDate !== void 0 ? periodStartDate : (_d = periodFuelLogs[0]) === null || _d === void 0 ? void 0 : _d.date) !== null && _e !== void 0 ? _e : bike.createdAt;
         mileageRecordClosed = yield mileageRecord_model_1.mileageRecordModel.create({
             bike: bikeId,
             startOdometer: periodStartOdometer,
@@ -72,7 +90,7 @@ const createFuelLogIntoDB = (bikeId, userId, payload) => __awaiter(void 0, void 
             distanceKm,
             litersConsumed,
             mileageKmPerLiter,
-            periodStartDate,
+            periodStartDate: resolvedPeriodStartDate,
             periodEndDate: fuelLog.date,
             fuelLogIds,
         });
@@ -110,7 +128,10 @@ const getFuelLogByIdFromDB = (bikeId, userId, id) => __awaiter(void 0, void 0, v
 });
 const updateFuelLogInDB = (bikeId, userId, id, payload) => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b;
-    yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
+    const bike = yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
+    if (payload.date && payload.date < bike.purchaseDate) {
+        throw new AppError_1.default(http_status_1.default.BAD_REQUEST, `Fuel log date cannot be before the bike's purchase date (${bike.purchaseDate.toISOString().split("T")[0]})`);
+    }
     const existsInMileageRecord = yield mileageRecord_model_1.mileageRecordModel.exists({
         fuelLogIds: id,
     });

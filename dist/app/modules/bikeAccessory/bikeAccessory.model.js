@@ -35,6 +35,10 @@ const bikeAccessorySchema = new mongoose_1.Schema({
     price: {
         type: Number,
     },
+    // ! set server-side only, the moment status transitions into "purchased" — never client-supplied
+    purchaseDate: {
+        type: Date,
+    },
     productImage: {
         type: {
             url: { type: String },

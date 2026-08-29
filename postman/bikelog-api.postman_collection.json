@@ -80,6 +80,11 @@
       "key": "cronSecret",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "errorLogId",
+      "value": "",
+      "type": "string"
     }
   ],
   "item": [
@@ -1679,6 +1684,141 @@
       "name": "Bike Accessories",
       "item": [
         {
+          "name": "Create Bike Accessory",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/accessories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "accessories"
+              ]
+            },
+            "description": "`status` defaults to \"pending\" if omitted. To create directly as \"purchased\", `price` is required (400 otherwise) and `purchaseDate` is stamped server-side to today automatically — never send `purchaseDate` yourself, it's rejected by the schema like any other server-computed field.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Crash Guard (Bumper)\",\n  \"urgency\": \"medium\",\n  \"status\": \"purchased\",\n  \"price\": 1290\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.expect([201]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code < 300) {",
+                  "    const body = pm.response.json();",
+                  "    const value = body.data._id;",
+                  "    if (value) {",
+                  "        pm.collectionVariables.set(\"bikeAccessoryId\", value);",
+                  "        console.log(\"Captured bikeAccessoryId =\", value);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Bike Accessories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/accessories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "accessories"
+              ]
+            },
+            "description": "Grouped by status (pending → purchased → cancelled blocks, each internally sorted — not one flat chronological feed) unless `?status=` narrows to a single status. `{result, meta}` shape, same as every other paginated list endpoint."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Attempt Status Change After Purchased (expect 400)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/accessories/{{bikeAccessoryId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "accessories",
+                "{{bikeAccessoryId}}"
+              ]
+            },
+            "description": "Demonstrates the permanent purchase lock: once `status` is \"purchased\" it can never change to anything else (not even back to \"pending\"). Other fields (name/urgency/price/productImage) stay freely editable on the same PATCH — this request only fails because it touches `status`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"pending\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 400\", function () {",
+                  "    pm.expect([400]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Upload/Replace Product Image",
           "request": {
             "method": "PUT",
@@ -1696,7 +1836,7 @@
                 "image"
               ]
             },
-            "description": "multipart/form-data, field name `image`, image files only (5MB max). {{bikeAccessoryId}} isn't auto-captured yet (no Create Bike Accessory request in this collection) \u2014 paste in a real accessory _id from POST/GET .../bikes/{{bikeId}}/accessories. Replacing an existing productImage deletes the old Cloudinary asset first.",
+            "description": "multipart/form-data, field name `image`, image files only (5MB max). {{bikeAccessoryId}} is auto-captured by \"Create Bike Accessory\" above. Replacing an existing productImage deletes the old Cloudinary asset first.",
             "body": {
               "mode": "formdata",
               "formdata": [
@@ -2418,6 +2558,89 @@
             "auth": {
               "type": "noauth"
             }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Error Logs",
+      "item": [
+        {
+          "name": "List Error Logs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/error-logs?page=1&limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "error-logs"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "status",
+                  "value": "500",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Admin-only — the {{token}} bearer account must have userRole \"admin\" in the database (a manual DB write for now, no promotion endpoint exists yet) and must have logged in again after being promoted, since userRole is baked into the JWT at login time. Returns { result, meta } paginated, newest-first by default. Optional exact-match query params: status, method. A non-admin token gets 403; no token gets 401."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Error Log By Id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/error-logs/{{errorLogId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "error-logs",
+                "{{errorLogId}}"
+              ]
+            },
+            "description": "Admin-only. Returns the full error log document, including the full stack trace. {{errorLogId}} isn't auto-captured yet (no create/list-capture script wired up here) — paste in a real _id from the List Error Logs response. A nonexistent or already-expired (30-day TTL) id returns 404."
           },
           "event": [
             {

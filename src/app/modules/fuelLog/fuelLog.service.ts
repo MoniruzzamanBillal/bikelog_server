@@ -15,13 +15,22 @@ const createFuelLogIntoDB = async (
 ) => {
   const bike = await findOwnedBikeOrThrow(bikeId, userId);
 
+  const date = payload.date ?? new Date();
+
+  if (date < bike.purchaseDate) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      `Fuel log date cannot be before the bike's purchase date (${bike.purchaseDate.toISOString().split("T")[0]})`,
+    );
+  }
+
   const totalCost = (payload.litersAdded ?? 0) * (payload.pricePerLiter ?? 0);
 
   const fuelLogData = {
     ...payload,
     bike: bikeId,
     totalCost,
-    date: payload.date ?? new Date(),
+    date,
   };
 
   const fuelLog = await fuelLogModel.create(fuelLogData);
@@ -42,7 +51,7 @@ const createFuelLogIntoDB = async (
       .lean();
 
     let periodStartOdometer: number;
-    let periodStartDate: Date;
+    let periodStartDate: Date | null;
 
     if (previousFullTank) {
       periodStartOdometer = previousFullTank.odometerReading;
@@ -52,7 +61,13 @@ const createFuelLogIntoDB = async (
       // ! odometer reading, NOT currentOdometer (which was just bumped above and would
       // ! always equal this fuel log's own reading, collapsing distanceKm to 0)
       periodStartOdometer = bike.initialOdometer;
-      periodStartDate = (bike as TBikeDocument).createdAt;
+      // ! no lower date bound — this is the bike's first-ever closed period, so every
+      // ! fuel log dated on/before this fill belongs to it. bike.createdAt (when the DB
+      // ! record was inserted) is NOT a valid anchor: backdating fuel history right after
+      // ! creating a bike is a normal, supported flow, and a backdated log's date is
+      // ! almost always before bike.createdAt, which used to invert this query's range
+      // ! and silently zero out the whole period (see spec 26).
+      periodStartDate = null;
     }
 
     const periodFuelLogs = await fuelLogModel
@@ -60,7 +75,9 @@ const createFuelLogIntoDB = async (
         bike: bikeId,
         // ! $gt, not $gte — periodStartDate is the PREVIOUS closing full-tank fill's date;
         // ! its liters already belong to the prior period and must not be double-counted here
-        date: { $gt: periodStartDate, $lte: fuelLog.date },
+        date: periodStartDate
+          ? { $gt: periodStartDate, $lte: fuelLog.date }
+          : { $lte: fuelLog.date },
         isDeleted: false,
       })
       .sort({ date: 1 })
@@ -77,6 +94,13 @@ const createFuelLogIntoDB = async (
 
     const fuelLogIds = periodFuelLogs.map((log) => log._id);
 
+    // ! for the first-ever period, derive the displayed start from the earliest fuel log
+    // ! actually in it — reflects real fuel-log history instead of the bike's own creation
+    // ! moment. periodFuelLogs[0] can't actually be undefined here (the just-created
+    // ! fuelLog always satisfies its own $lte bound), the createdAt fallback is defensive only.
+    const resolvedPeriodStartDate =
+      periodStartDate ?? periodFuelLogs[0]?.date ?? (bike as TBikeDocument).createdAt;
+
     mileageRecordClosed = await mileageRecordModel.create({
       bike: bikeId,
       startOdometer: periodStartOdometer,
@@ -84,7 +108,7 @@ const createFuelLogIntoDB = async (
       distanceKm,
       litersConsumed,
       mileageKmPerLiter,
-      periodStartDate,
+      periodStartDate: resolvedPeriodStartDate,
       periodEndDate: fuelLog.date,
       fuelLogIds,
     });
@@ -144,7 +168,14 @@ const updateFuelLogInDB = async (
   id: string,
   payload: Partial<TFuelLog>,
 ) => {
-  await findOwnedBikeOrThrow(bikeId, userId);
+  const bike = await findOwnedBikeOrThrow(bikeId, userId);
+
+  if (payload.date && payload.date < bike.purchaseDate) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      `Fuel log date cannot be before the bike's purchase date (${bike.purchaseDate.toISOString().split("T")[0]})`,
+    );
+  }
 
   const existsInMileageRecord = await mileageRecordModel.exists({
     fuelLogIds: id,

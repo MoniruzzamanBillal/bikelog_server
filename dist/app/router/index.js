@@ -9,6 +9,7 @@ const bikeDocument_route_1 = require("../modules/bikeDocument/bikeDocument.route
 const bikeIssue_route_1 = require("../modules/bikeIssue/bikeIssue.route");
 const bikeManual_route_1 = require("../modules/bikeManual/bikeManual.route");
 const engineOilType_route_1 = require("../modules/engineOilType/engineOilType.route");
+const errorLog_route_1 = require("../modules/errorLog/errorLog.route");
 const fuelLog_route_1 = require("../modules/fuelLog/fuelLog.route");
 const maintenanceLog_route_1 = require("../modules/maintenanceLog/maintenanceLog.route");
 const maintenanceType_route_1 = require("../modules/maintenanceType/maintenanceType.route");
@@ -77,6 +78,10 @@ const routeArray = [
     {
         path: "/cron",
         route: notification_route_1.notificationRouter,
+    },
+    {
+        path: "/admin/error-logs",
+        route: errorLog_route_1.errorLogRouter,
     },
 ];
 routeArray.forEach((item) => {

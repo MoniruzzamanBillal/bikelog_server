@@ -11,7 +11,7 @@ export type TSpendingSummary = {
   categoryBreakdown: TSpendingCategoryBreakdown[];
 };
 
-export type TSpendingRecordSource = "fuel" | "maintenance";
+export type TSpendingRecordSource = "fuel" | "maintenance" | "accessory";
 
 export type TSpendingRecord = {
   date: Date;
