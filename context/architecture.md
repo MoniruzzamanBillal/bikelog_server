@@ -35,15 +35,16 @@ No file upload, payment, or email dependencies are needed for Bike Log — `clou
 
 ## Middleware
 
-- `authCheck` (`src/app/middleware/authCheck.ts`) — verifies the `Authorization: Bearer <token>` JWT via `config.jwt_secret`, attaches the decoded payload to `req.user`. Takes no role arguments — Bike Log has a single `User` role, so this only ever checks "is there a valid token," never a permission level.
+- `authCheck` (`src/app/middleware/authCheck.ts`) — verifies the `Authorization: Bearer <token>` JWT via `config.jwt_secret`, attaches the decoded payload to `req.user`. Takes no role arguments — this only ever checks "is there a valid token," never a permission level.
+- `adminCheck` (`src/app/middleware/adminCheck.ts`, added spec 24) — must run **after** `authCheck` (reads `req.user`); 403s unless `req.user.userRole === "admin"`. The first real consumer of `TUserRole`/`userRole`, which existed on `TUser`/`TJwtPayload` since spec 02 as forward-compatible scaffolding but was never read anywhere until spec 24's admin-only error-log endpoints. No promotion endpoint exists — the first admin account is created via a direct DB write, and since `userRole` is embedded into the JWT at login time, a promoted account must log in again before its token reflects the change.
 - `validateRequest(schema)` (`src/app/middleware/validateRequest.ts`) — runs `schema.parseAsync({ body: req.body })`, throwing a `ZodError` on failure (normalized by `globalErrorHandler`). Only validates `req.body` — not query params or route params.
 - `globalErrorHandler` (`src/app/middleware/globalErrorHandler.ts`) — normalizes `ZodError`, Mongoose `ValidationError`/`CastError`, MongoDB duplicate-key (`code: 11000`), and `AppError` into one JSON error shape (`{ success: false, message, errorSources, stack }`). Falls back to `error.status`/`error.message`/500 for anything unrecognized.
 
 ## Auth Model
 
 - Users authenticate via `POST /api/auth/login`, receiving a JWT signed with `config.jwt_secret`.
-- Every protected route calls `authCheck` (no role parameter needed — see above).
-- Ownership, not roles, gates access: a route handler must confirm the requested `Bike`/`FuelLog`/`MaintenanceLog` actually belongs to `req.user`'s id before returning or mutating it — there's no separate authorization middleware for this yet, so each service function is responsible for that check itself.
+- Every protected route calls `authCheck`. Almost all routes are ownership-gated, not role-gated (see next bullet) — the one exception is spec 24's admin-only `/admin/error-logs` routes, which additionally require `adminCheck`.
+- Ownership, not roles, gates access to every user-owned resource (`Bike`/`FuelLog`/`MaintenanceLog`/etc.): a route handler must confirm the requested resource actually belongs to `req.user`'s id before returning or mutating it — there's no separate authorization middleware for this, so each service function is responsible for that check itself. This is unrelated to `adminCheck`, which gates a handful of non-user-owned, admin-facing resources instead (currently just error logs).
 
 ## Invariants
 

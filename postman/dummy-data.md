@@ -346,6 +346,20 @@ No body. Requires an `x-cron-secret` header matching the server's `CRON_SECRET` 
 
 For every user with a registered `expoPushToken`, computes each of their bikes' current **Friday–Thursday** week (not the calendar week) — the week about to finish that same night, since the scheduled job fires **Thursday 10pm Asia/Dhaka** — and sends one Expo push notification per bike that had at least one fuel log that week, skipped silently (not an error) for a bike with zero fuel logs in that window. Meant to be hit once a week by a scheduled job (`.github/workflows/weekly-summary-cron.yml`), not by the app. Returns `{usersProcessed, bikesSkipped, notificationsSent, notificationsFailed}` so the calling job's own logs show what happened.
 
+## Error Logs (`/api/admin/error-logs`) — admin-only, read-only
+
+Every error that reaches `globalErrorHandler` (an `AppError`, a Zod validation failure, a Mongoose `CastError`/`ValidationError`, a Mongo duplicate-key conflict, or any unclassified thrown error) is automatically persisted here first, before the error response is sent — nothing needs to call this module directly. There is no create/update/delete endpoint; entries expire automatically 30 days after they were created via a MongoDB TTL index, so there's nothing to clean up manually either.
+
+Both routes require a JWT belonging to a user whose `userRole` is `"admin"` — every account registers as `"user"` by default, and there is currently no promotion endpoint, so the first admin account has to be created with a direct database write (e.g. `db.users.updateOne({email: "..."}, {$set: {userRole: "admin"}})`). **Important**: `userRole` is baked into the JWT at login time, so promoting an account only takes effect the *next* time that account logs in — an already-issued token keeps acting as `"user"` until it's refreshed. A non-admin (or unauthenticated) request gets `401`/`403`, not the log data.
+
+### `GET /api/admin/error-logs` — paginated list, newest-first by default
+
+Same `{result, meta}` shape as every other paginated list endpoint (`fuelLog`, `maintenanceLog`, `bikeIssue`, `bikeAccessory`). Optional query params: `page`, `limit`, `sort`, and exact-match filters `status` (e.g. `?status=500`) and `method` (e.g. `?method=POST`). Each entry includes `status`, `message`, `errorName`, `errorSources`, `stack`, `method`, `path`, `userId`/`userEmail` (both `null` when the failing request wasn't authenticated), and `createdAt`.
+
+### `GET /api/admin/error-logs/:id` — single entry, full detail
+
+Returns one log document in full, including the complete `stack` trace. A nonexistent id — or one that's already aged out past the 30-day TTL window — returns `404`, the same as a never-existed id.
+
 ## Fields you will never see accepted in any request body
 
 | Module                   | Field                                    | Why                                                                                 |

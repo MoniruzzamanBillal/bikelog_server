@@ -18,10 +18,12 @@ const handleCatError_1 = require("../Error/handleCatError");
 const handleDuplicateError_1 = require("../Error/handleDuplicateError");
 const handleValidationError_1 = require("../Error/handleValidationError");
 const handleZodError_1 = require("../Error/handleZodError");
+const errorLog_service_1 = require("../modules/errorLog/errorLog.service");
 const globalErrorHandler = (error, req, res, 
 // ! unused but required — Express only recognizes error-handling middleware by 4-argument arity
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 next) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a, _b, _c, _d;
     let status = error.status || 500;
     let message = error.message || "Something went wrong!!";
     let errorSources = [
@@ -63,6 +65,27 @@ next) => __awaiter(void 0, void 0, void 0, function* () {
         status = error === null || error === void 0 ? void 0 : error.status;
         message = error === null || error === void 0 ? void 0 : error.message;
         errorSources = [{ path: "", message: error === null || error === void 0 ? void 0 : error.message }];
+    }
+    // ! await'd, not fire-and-forget — on Vercel serverless a function invocation can be
+    // ! torn down right after the response is flushed, so an un-awaited write issued after
+    // ! res.json() below isn't guaranteed to actually complete. Self-contained try/catch:
+    // ! a failure to log must never block or replace the real error response to the client.
+    try {
+        yield errorLog_service_1.errorLogServices.createErrorLog({
+            status,
+            message,
+            errorName: error === null || error === void 0 ? void 0 : error.name,
+            errorSources,
+            stack: error === null || error === void 0 ? void 0 : error.stack,
+            method: req.method,
+            path: req.originalUrl,
+            userId: (_b = (_a = req.user) === null || _a === void 0 ? void 0 : _a.userId) !== null && _b !== void 0 ? _b : null,
+            userEmail: (_d = (_c = req.user) === null || _c === void 0 ? void 0 : _c.userEmail) !== null && _d !== void 0 ? _d : null,
+        });
+    }
+    catch (logError) {
+        // eslint-disable-next-line no-console
+        console.error("Failed to persist error log:", logError);
     }
     return res.status(status).json({
         success: false,

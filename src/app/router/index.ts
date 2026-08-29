@@ -6,6 +6,7 @@ import { bikeDocumentRouter } from "../modules/bikeDocument/bikeDocument.route";
 import { bikeIssueRouter } from "../modules/bikeIssue/bikeIssue.route";
 import { bikeManualRouter } from "../modules/bikeManual/bikeManual.route";
 import { engineOilTypeRouter } from "../modules/engineOilType/engineOilType.route";
+import { errorLogRouter } from "../modules/errorLog/errorLog.route";
 import { fuelLogRouter } from "../modules/fuelLog/fuelLog.route";
 import {
   maintenanceLogRouter,
@@ -79,6 +80,10 @@ const routeArray = [
   {
     path: "/cron",
     route: notificationRouter,
+  },
+  {
+    path: "/admin/error-logs",
+    route: errorLogRouter,
   },
 ];
 

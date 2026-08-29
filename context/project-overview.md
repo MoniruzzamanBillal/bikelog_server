@@ -13,7 +13,9 @@ Bike Log's backend is a REST API built with Express, TypeScript, and MongoDB (Mo
 
 ## Roles
 
-Single role: `User`. No admin/instructor-style split — every user only ever sees and manages their own bikes and logs. Auth is JWT-based (register/login); there is no public, unauthenticated data.
+Every user sees and manages only their own bikes and logs — ownership, not role, gates every rider-facing resource. Auth is JWT-based (register/login); there is no public, unauthenticated data.
+
+A second `admin` role was added in spec 24, gating exactly one admin-only, non-user-owned resource so far: the automatic error-log system (`GET /admin/error-logs`, `GET /admin/error-logs/:id`). There's no admin-promotion endpoint — the first admin account is a direct database write — and no admin-facing UI/dashboard exists; this is backend-only infrastructure for now, not a general admin role rollout.
 
 ## Core Flows
 

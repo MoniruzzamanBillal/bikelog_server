@@ -80,6 +80,11 @@
       "key": "cronSecret",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "errorLogId",
+      "value": "",
+      "type": "string"
     }
   ],
   "item": [
@@ -2418,6 +2423,89 @@
             "auth": {
               "type": "noauth"
             }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Error Logs",
+      "item": [
+        {
+          "name": "List Error Logs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/error-logs?page=1&limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "error-logs"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "status",
+                  "value": "500",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Admin-only — the {{token}} bearer account must have userRole \"admin\" in the database (a manual DB write for now, no promotion endpoint exists yet) and must have logged in again after being promoted, since userRole is baked into the JWT at login time. Returns { result, meta } paginated, newest-first by default. Optional exact-match query params: status, method. A non-admin token gets 403; no token gets 401."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Error Log By Id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/error-logs/{{errorLogId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "error-logs",
+                "{{errorLogId}}"
+              ]
+            },
+            "description": "Admin-only. Returns the full error log document, including the full stack trace. {{errorLogId}} isn't auto-captured yet (no create/list-capture script wired up here) — paste in a real _id from the List Error Logs response. A nonexistent or already-expired (30-day TTL) id returns 404."
           },
           "event": [
             {
