@@ -8,6 +8,7 @@ export type TBikeAccessory = {
   urgency: TAccessoryUrgency;
   status: TAccessoryStatus;
   price?: number;
+  purchaseDate?: Date;
   productImage?: TCloudinaryImage;
   isDeleted: boolean;
 };

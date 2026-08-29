@@ -21,7 +21,12 @@ const bikeAccessory_model_1 = require("./bikeAccessory.model");
 const cloudinary_1 = require("../../util/cloudinary");
 const createBikeAccessoryIntoDB = (bikeId, userId, payload) => __awaiter(void 0, void 0, void 0, function* () {
     yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
-    const accessoryData = Object.assign(Object.assign({}, payload), { bike: bikeId });
+    if (payload.status === bikeAccessory_constant_1.AccessoryStatus.purchased && !payload.price) {
+        throw new AppError_1.default(http_status_1.default.BAD_REQUEST, "Price is required when marking an accessory as purchased");
+    }
+    const accessoryData = Object.assign(Object.assign(Object.assign({}, payload), { bike: bikeId }), (payload.status === bikeAccessory_constant_1.AccessoryStatus.purchased
+        ? { purchaseDate: new Date() }
+        : {}));
     const accessory = yield bikeAccessory_model_1.bikeAccessoryModel.create(accessoryData);
     return accessory;
 });
@@ -78,6 +83,7 @@ const getBikeAccessoryByIdFromDB = (bikeId, userId, id) => __awaiter(void 0, voi
     return accessory;
 });
 const updateBikeAccessoryInDB = (bikeId, userId, id, payload) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a, _b;
     yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
     const accessory = yield bikeAccessory_model_1.bikeAccessoryModel.findOne({
         _id: id,
@@ -87,7 +93,26 @@ const updateBikeAccessoryInDB = (bikeId, userId, id, payload) => __awaiter(void 
     if (!accessory) {
         throw new AppError_1.default(http_status_1.default.NOT_FOUND, "Bike accessory not found");
     }
-    Object.assign(accessory, payload);
+    // ! once purchased, status is a one-way permanent lock — every other field stays editable
+    if (accessory.status === bikeAccessory_constant_1.AccessoryStatus.purchased &&
+        payload.status !== undefined &&
+        payload.status !== bikeAccessory_constant_1.AccessoryStatus.purchased) {
+        throw new AppError_1.default(http_status_1.default.BAD_REQUEST, "This accessory is already marked as purchased and its status cannot be changed");
+    }
+    const resultingStatus = (_a = payload.status) !== null && _a !== void 0 ? _a : accessory.status;
+    const resultingPrice = (_b = payload.price) !== null && _b !== void 0 ? _b : accessory.price;
+    if (resultingStatus === bikeAccessory_constant_1.AccessoryStatus.purchased && !resultingPrice) {
+        throw new AppError_1.default(http_status_1.default.BAD_REQUEST, "Price is required when marking an accessory as purchased");
+    }
+    const updateData = Object.assign({}, payload);
+    // ! stamp purchaseDate exactly once, at the moment status actually transitions into
+    // ! purchased — never re-stamped afterward, since the lock above guarantees this only
+    // ! ever fires once per accessory
+    if (accessory.status !== bikeAccessory_constant_1.AccessoryStatus.purchased &&
+        resultingStatus === bikeAccessory_constant_1.AccessoryStatus.purchased) {
+        updateData.purchaseDate = new Date();
+    }
+    Object.assign(accessory, updateData);
     yield accessory.save();
     return accessory;
 });

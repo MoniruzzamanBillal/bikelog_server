@@ -290,7 +290,9 @@ Examples:
 - `GET .../spending-summary?period=year&targetYear=2026`
 - `GET .../spending-summary?period=lifetime`
 
-Response is totals only (`totalSpending`, `categoryBreakdown` per maintenance type + a `Fuel` bucket) — averages are intentionally left for the frontend to compute.
+Response is totals only (`totalSpending`, `categoryBreakdown` per maintenance type + a `Fuel` bucket + an `Accessories` bucket) — averages are intentionally left for the frontend to compute.
+
+**Accessories count too (spec 25)**: a `bikeAccessory` only contributes to spending once its `status` is `"purchased"` — `pending`/`cancelled` wishlist entries never appear here. It's bucketed by `purchaseDate` (server-stamped the moment `status` became `"purchased"`, not `createdAt`), so it lands in whichever month/year it was actually marked purchased. `GET .../spending-summary/details` (spec 23's line-item export endpoint, undocumented elsewhere in this file — a pre-existing gap) includes it as its own `source: "accessory"` record, alongside `"fuel"` and `"maintenance"`.
 
 ---
 
@@ -312,7 +314,36 @@ Notes:
 - Every stored image is `{ url, publicId }`, never a bare string — `publicId` is what lets the server actually delete the old Cloudinary asset when you replace or remove an image, instead of leaving it orphaned.
 - Replacing a single-image field (`PUT .../image`) deletes the old Cloudinary asset first, then uploads the new one.
 - Bike issue images are additive (`POST` appends, never replaces) — each image gets its own subdocument `_id`, used to delete just that one image via `DELETE .../images/:imageId`.
-- `bikeAccessoryId`/`bikeIssueId` aren't auto-captured by this collection (neither module has a `Create`/`List` request here yet — a pre-existing gap, not introduced by the image feature) — paste in a real id from that bike's `/accessories` or `/issues` endpoint manually.
+- `bikeAccessoryId` **is** auto-captured now (spec 25 added a `Create Bike Accessory` request to the collection, closing this gap). `bikeIssueId` still isn't (no `Create`/`List` request exists for that module in this collection yet) — paste in a real id from that bike's `/issues` endpoint manually.
+
+## Bike Accessories (`/api/bikes/:bikeId/accessories`) — per-bike purchase wishlist
+
+`name`/`urgency` required on create; `status` defaults to `"pending"`. Three status values: `pending`, `purchased`, `cancelled`.
+
+**The purchase lock (spec 25)**: once `status` is `"purchased"`, it can never change to anything else — a `PATCH` attempting to change it away from `"purchased"` gets a `400`. Every other field (`name`, `urgency`, `price`, `productImage`) stays freely editable on the same accessory after that point.
+
+**`price` is required the moment `status` becomes `"purchased"`** — whether that's on `POST` (creating directly as purchased) or `PATCH` (transitioning an existing `pending`/`cancelled` entry) — a `400` otherwise. `price` stays optional for `pending`/`cancelled` entries.
+
+**`purchaseDate` is entirely server-computed** — never send it, it isn't part of the request schema at all. The server stamps it to the current date the instant `status` actually transitions into `"purchased"`, and (since the lock above guarantees that only happens once) it's never touched again by a later edit.
+
+```json
+// POST — create directly as purchased
+{
+  "name": "Crash Guard (Bumper)",
+  "urgency": "medium",
+  "status": "purchased",
+  "price": 1290
+}
+```
+
+```json
+// PATCH — lock violation, 400
+{
+  "status": "pending"
+}
+```
+
+`GET /` list ordering is a real quirk (spec 13): it runs one query per status (`pending → purchased → cancelled` order, or just the single requested status if `?status=` is given) and concatenates the results — a grouped feed, not one flat chronologically-sorted list.
 
 ## Bike Manual (`/api/bikes/:bikeId/manual`) — one PDF per bike, grounds AI chat
 
@@ -336,7 +367,7 @@ Notes:
 - Every stored file is `{ url, publicId, resourceType, originalName, mimeType }` — `resourceType` (`"image"` or `"raw"`) is new compared to the other upload features' plain `{url, publicId}` and is what lets the server delete a PDF asset correctly (Cloudinary requires the right resource type on destroy).
 - Files are additive (`POST` appends, never replaces) — each file gets its own subdocument `_id`, used to delete just that one file via `DELETE .../files/:fileId`.
 - `GET .../documents` defaults to soonest-expiry-first ordering (documents with no `expiryDate` sort last); pass `?sort=` to override with a plain field sort instead.
-- `bikeDocumentId`/`bikeDocumentFileId` **are** auto-captured by this collection's `Create Bike Document`/`Add Bike Document Files` requests, unlike the pre-existing `bikeAccessoryId`/`bikeIssueId` gap noted above.
+- `bikeDocumentId`/`bikeDocumentFileId` **are** auto-captured by this collection's `Create Bike Document`/`Add Bike Document Files` requests, same as `bikeAccessoryId` now (spec 25) — `bikeIssueId` is still the one remaining gap, noted above.
 
 ## Cron / Notifications (`/api/cron`)
 

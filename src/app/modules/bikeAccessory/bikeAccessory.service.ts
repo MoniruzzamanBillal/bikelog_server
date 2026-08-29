@@ -13,9 +13,19 @@ const createBikeAccessoryIntoDB = async (
 ) => {
   await findOwnedBikeOrThrow(bikeId, userId);
 
+  if (payload.status === AccessoryStatus.purchased && !payload.price) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      "Price is required when marking an accessory as purchased",
+    );
+  }
+
   const accessoryData = {
     ...payload,
     bike: bikeId,
+    ...(payload.status === AccessoryStatus.purchased
+      ? { purchaseDate: new Date() }
+      : {}),
   };
 
   const accessory = await bikeAccessoryModel.create(accessoryData);
@@ -127,7 +137,41 @@ const updateBikeAccessoryInDB = async (
     throw new AppError(httpStatus.NOT_FOUND, "Bike accessory not found");
   }
 
-  Object.assign(accessory, payload);
+  // ! once purchased, status is a one-way permanent lock — every other field stays editable
+  if (
+    accessory.status === AccessoryStatus.purchased &&
+    payload.status !== undefined &&
+    payload.status !== AccessoryStatus.purchased
+  ) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      "This accessory is already marked as purchased and its status cannot be changed",
+    );
+  }
+
+  const resultingStatus = payload.status ?? accessory.status;
+  const resultingPrice = payload.price ?? accessory.price;
+
+  if (resultingStatus === AccessoryStatus.purchased && !resultingPrice) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      "Price is required when marking an accessory as purchased",
+    );
+  }
+
+  const updateData = { ...payload };
+
+  // ! stamp purchaseDate exactly once, at the moment status actually transitions into
+  // ! purchased — never re-stamped afterward, since the lock above guarantees this only
+  // ! ever fires once per accessory
+  if (
+    accessory.status !== AccessoryStatus.purchased &&
+    resultingStatus === AccessoryStatus.purchased
+  ) {
+    updateData.purchaseDate = new Date();
+  }
+
+  Object.assign(accessory, updateData);
   await accessory.save();
 
   return accessory;

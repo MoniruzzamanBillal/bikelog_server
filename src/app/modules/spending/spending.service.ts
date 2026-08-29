@@ -1,6 +1,8 @@
 import httpStatus from "http-status";
 import AppError from "../../Error/AppError";
 import { findOwnedBikeOrThrow } from "../bike/bike.utils";
+import { AccessoryStatus } from "../bikeAccessory/bikeAccessory.constant";
+import { bikeAccessoryModel } from "../bikeAccessory/bikeAccessory.model";
 import { fuelLogModel } from "../fuelLog/fuelLog.model";
 import { maintenanceLogModel } from "../maintenanceLog/maintenanceLog.model";
 import { TSpendingRecord } from "./spending.interface";
@@ -77,9 +79,21 @@ const computeSpendingForRange = async (
     .populate("maintenanceType", "name")
     .lean();
 
-  const [fuelLogs, maintenanceLogs] = await Promise.all([
+  // ! only purchased accessories count as real spending — pending/cancelled wishlist
+  // ! entries are never included
+  const accessoriesPromise = bikeAccessoryModel
+    .find({
+      bike: bikeId,
+      isDeleted: false,
+      status: AccessoryStatus.purchased,
+      ...(startDate && endDate ? { purchaseDate: { $gte: startDate, $lte: endDate } } : {}),
+    })
+    .lean();
+
+  const [fuelLogs, maintenanceLogs, accessories] = await Promise.all([
     fuelLogsPromise,
     maintenanceLogsPromise,
+    accessoriesPromise,
   ]);
 
   const fuelTotal = fuelLogs.reduce((sum, log) => sum + log.totalCost, 0);
@@ -94,18 +108,21 @@ const computeSpendingForRange = async (
     {},
   );
 
+  const accessoryTotal = accessories.reduce((sum, a) => sum + (a.price ?? 0), 0);
+
   const categoryBreakdown: { category: string; total: number }[] = [
     { category: "Fuel", total: fuelTotal },
     ...Object.entries(maintenanceByCategory).map(([category, total]) => ({
       category,
       total,
     })),
+    ...(accessoryTotal > 0 ? [{ category: "Accessories", total: accessoryTotal }] : []),
   ];
 
   categoryBreakdown.sort((a, b) => b.total - a.total);
 
   const maintenanceTotal = maintenanceLogs.reduce((sum, log) => sum + log.cost, 0);
-  const totalSpending = fuelTotal + maintenanceTotal;
+  const totalSpending = fuelTotal + maintenanceTotal + accessoryTotal;
 
   const fuelRecords: TSpendingRecord[] = fuelLogs.map((log) => ({
     date: log.date,
@@ -131,7 +148,17 @@ const computeSpendingForRange = async (
     };
   });
 
-  const records = [...fuelRecords, ...maintenanceRecords].sort(
+  const accessoryRecords: TSpendingRecord[] = accessories.map((a) => ({
+    date: a.purchaseDate as Date,
+    category: "Accessories",
+    description: a.name,
+    amount: a.price as number,
+    vendor: null,
+    remarks: null,
+    source: "accessory",
+  }));
+
+  const records = [...fuelRecords, ...maintenanceRecords, ...accessoryRecords].sort(
     (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
   );
 
