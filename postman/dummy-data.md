@@ -136,7 +136,9 @@ Soft delete (`isDeleted: true`). No body.
 | `isFullTank`           | yes      | boolean — drives mileage-record closing logic |
 | `pricePerLiter`        | yes      | positive number                               |
 | `fuelStation`, `notes` | no       | strings                                       |
-| `date`                 | no       | defaults to now; use for back-logging         |
+| `date`                 | no       | defaults to now; use for back-logging — but never before the bike's own `purchaseDate` (see below) |
+
+**`date` can't predate the bike's `purchaseDate`** — a fuel log dated earlier than the bike's own `purchaseDate` gets a `400` ("Fuel log date cannot be before the bike's purchase date (YYYY-MM-DD)"), on both create and update. A date exactly equal to `purchaseDate` is allowed (you can log fuel the day you bought the bike); omitting `date` (defaults to now) is always fine, since "now" is necessarily after purchase.
 
 **Never send `totalCost`** — the Zod schema technically accepts it, but the service always overwrites it with `litersAdded * pricePerLiter` server-side and discards whatever you send (this was a real bug fixed in a later audit — see `context/progress-tracker.md`'s "Recent Activity").
 

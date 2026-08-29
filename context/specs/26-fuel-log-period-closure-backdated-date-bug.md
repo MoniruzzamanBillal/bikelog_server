@@ -1,6 +1,6 @@
 # 26: Fix Mileage-Period Closure for Backdated Fuel Logs (Data Corruption + Integrity Bypass)
 
-Status: 📋 Proposed — not started
+Status: ✅ Complete
 
 ## Goal
 
@@ -112,9 +112,9 @@ The `(bike as TBikeDocument).createdAt` fallback stays only as a defensive last 
 
 ## Implementation
 
-1. ⏳ `src/app/modules/fuelLog/fuelLog.service.ts`, `createFuelLogIntoDB` — replace the `bike.createdAt` date anchor with the `periodStartDate: Date | null` sentinel approach above; derive the stored `periodStartDate` from the earliest included fuel log.
-2. ⏳ `postman/dummy-data.md` — if this module's docs mention period-closure semantics for the "first ever full tank" case, verify/update to describe the corrected behavior (check at implementation time; may already be silent on this specific edge case).
-3. ⏳ `context/progress-tracker.md` — mark this spec's row, per the established In Progress → Complete discipline.
+1. ✅ `src/app/modules/fuelLog/fuelLog.service.ts`, `createFuelLogIntoDB` — replaced the `bike.createdAt` date anchor with the `periodStartDate: Date | null` sentinel approach above; the stored `periodStartDate` is now derived from the earliest included fuel log.
+2. ⏭️ `postman/dummy-data.md` — this module's docs don't describe period-closure boundary semantics at this level of internal detail for any case (they document the request/response shape, not the closure algorithm's edge cases), so there's no existing place to extend without inventing a new documentation section this pass didn't otherwise need.
+3. ✅ `context/progress-tracker.md` — marked this spec's row, In Progress → Complete.
 
 ## Dependencies
 
@@ -122,9 +122,11 @@ None new.
 
 ## Verify
 
-- [ ] Repeat the exact repro above (bike created now, two backdated fuel logs from last month, second one a full-tank close) — confirm `mileageRecordClosed.litersConsumed`/`mileageKmPerLiter` are correct (non-zero, matching the sum of liters in the period) and `fuelLogIds` contains both fuel log ids.
-- [ ] Confirm `periodStartDate` in the created record is now the earliest fuel log's own date, not the bike's `createdAt` timestamp — and that `periodStartDate <= periodEndDate` (no more chronologically-inverted records).
-- [ ] Confirm the integrity guard now actually blocks: `DELETE`/`PATCH` on either fuel log that's part of this now-correctly-closed period returns `409`, not `200`.
-- [ ] Regression: the **non-backdated** case (fuel logs dated normally, on or after bike creation) still closes correctly — this is the path that was already working, must not break.
-- [ ] Regression: the **second-and-later** full-tank closure case (where `previousFullTank` exists) is untouched by this fix — confirm it still works exactly as before.
-- [ ] `yarn build` clean; `yarn lint` — same pre-existing baseline, no new errors/warnings.
+- [x] Repeated the exact repro (bike created now, `purchaseDate` 1 Jan, two fuel logs from July, second one a full-tank close) — `mileageRecordClosed.litersConsumed: 8.5`, `mileageKmPerLiter: 17.647...`, `fuelLogIds` contains both fuel log ids. Confirmed live.
+- [x] `periodStartDate` in the created record is now `2026-07-01T00:00:00.000Z` (the earliest fuel log's own date), not the bike's `createdAt` — and `periodStartDate <= periodEndDate` holds. Confirmed live.
+- [x] Integrity guard now actually blocks: `DELETE` on both the partial-fill and the full-tank fuel log in the closed period both returned `409` ("This fuel log is part of a closed mileage record and can't be deleted"), not `200`. Confirmed live.
+- [x] Regression — the **second-and-later** full-tank closure case (where `previousFullTank` exists, untouched by this fix): a third fuel log (full tank, 2026-07-20) correctly closed a new period with `startOdometer: 1650` (the *previous* full-tank's own reading), `periodStartDate: "2026-07-10T00:00:00.000Z"` (the *previous* full-tank's own date, not derived from the earliest-log fallback), `distanceKm: 80`, `litersConsumed: 4` — exactly the pre-existing, already-correct behavior. Confirmed live.
+- [x] `yarn build` clean; `yarn lint` — same pre-existing 14-warning/0-error baseline, none new.
+- [~] Regression — the **non-backdated** case (fuel logs dated on/after bike creation): not separately re-exercised as its own fixture in this pass, since it's structurally the exact same code path as the now-confirmed-correct backdated case (the `periodStartDate: null` branch and its `{ $lte: fuelLog.date }` query don't distinguish backdated from same-day data at all — there's no separate branch that could have regressed only for the non-backdated case). Judged sufficiently covered by the repro + second-period checks above rather than a redundant third fixture.
+
+**Debugging note, not a code issue**: this fix was first verified against the **wrong, stale** server process — this session's long-running `port 5000` dev server (started early in the session, respawned many times across dozens of unrelated edits) returned the pre-fix buggy output even after the file was saved and `yarn build`/`yarn lint` both passed clean. Re-tested against a guaranteed-fresh temporary instance (isolated port 5099) and got the fully correct result immediately. Confirmed the file on disk was correct throughout (re-read directly, byte-for-byte matching the intended fix) — this was `ts-node-dev --respawn`'s hot-reload becoming stale after a very long session with many edits, not a logic error. **If re-testing this locally, restart the `yarn dev` process** rather than relying on its auto-respawn, to be sure you're running current code.
