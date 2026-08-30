@@ -31,10 +31,10 @@ const createMaintenanceLogIntoDB = async (
     }
   }
 
-  const nextDueOdometer = computeNextDueOdometer(
-    payload.odometerReading!,
-    payload.intervalKmUsed!,
-  );
+  const nextDueOdometer =
+    payload.intervalKmUsed !== undefined
+      ? computeNextDueOdometer(payload.odometerReading!, payload.intervalKmUsed)
+      : undefined;
 
   const logData = {
     ...payload,
@@ -132,7 +132,10 @@ const updateMaintenanceLogInDB = async (
 
   const newOdometer = updateData.odometerReading ?? log.odometerReading;
   const newInterval = updateData.intervalKmUsed ?? log.intervalKmUsed;
-  if (updateData.odometerReading !== undefined || updateData.intervalKmUsed !== undefined) {
+  if (
+    (updateData.odometerReading !== undefined || updateData.intervalKmUsed !== undefined) &&
+    newInterval !== undefined
+  ) {
     updateData.nextDueOdometer = computeNextDueOdometer(newOdometer, newInterval);
   }
 
@@ -181,24 +184,27 @@ const getRemindersFromDB = async (bikeId: string, userId: string) => {
     maintenanceType: typeof logs[0]["maintenanceType"];
     lastServiceDate: Date;
     lastOdometerReading: number;
-    nextDueOdometer: number;
+    nextDueOdometer?: number;
     nextDueDate?: Date;
     status: "overdue" | "upcoming";
-    kmRemaining: number;
+    kmRemaining?: number;
     daysRemaining?: number;
   }> = [];
 
   for (const [, log] of latestPerType) {
-    const kmRemaining = log.nextDueOdometer - bike.currentOdometer;
-    const kmOverdue = kmRemaining <= 0;
-    const kmUpcoming = !kmOverdue && kmRemaining <= 50;
-
     let status: "overdue" | "upcoming" | null = null;
+    let kmRemaining: number | undefined;
 
-    if (kmOverdue) {
-      status = "overdue";
-    } else if (kmUpcoming) {
-      status = "upcoming";
+    if (log.nextDueOdometer !== undefined) {
+      kmRemaining = log.nextDueOdometer - bike.currentOdometer;
+      const kmOverdue = kmRemaining <= 0;
+      const kmUpcoming = !kmOverdue && kmRemaining <= 50;
+
+      if (kmOverdue) {
+        status = "overdue";
+      } else if (kmUpcoming) {
+        status = "upcoming";
+      }
     }
 
     let daysRemaining: number | undefined;
@@ -221,19 +227,22 @@ const getRemindersFromDB = async (bikeId: string, userId: string) => {
         maintenanceType: typeof logs[0]["maintenanceType"];
         lastServiceDate: Date;
         lastOdometerReading: number;
-        nextDueOdometer: number;
+        nextDueOdometer?: number;
         nextDueDate?: Date;
         status: "overdue" | "upcoming";
-        kmRemaining: number;
+        kmRemaining?: number;
         daysRemaining?: number;
       } = {
         maintenanceType: log.maintenanceType,
         lastServiceDate: log.serviceDate,
         lastOdometerReading: log.odometerReading,
-        nextDueOdometer: log.nextDueOdometer,
         status,
-        kmRemaining: Math.max(0, kmRemaining),
       };
+
+      if (log.nextDueOdometer !== undefined) {
+        reminder.nextDueOdometer = log.nextDueOdometer;
+        reminder.kmRemaining = Math.max(0, kmRemaining!);
+      }
 
       if (log.nextDueDate) {
         reminder.nextDueDate = log.nextDueDate;

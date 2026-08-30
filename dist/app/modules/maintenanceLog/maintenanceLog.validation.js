@@ -11,9 +11,7 @@ const createMaintenanceLogSchema = zod_1.z.object({
             required_error: "Odometer reading is required",
         }),
         oilType: zod_1.z.string().optional(),
-        intervalKmUsed: zod_1.z.number({
-            required_error: "Interval km used is required",
-        }),
+        intervalKmUsed: zod_1.z.number().optional(),
         nextDueDate: zod_1.z.coerce.date().optional(),
         cost: zod_1.z.number({ required_error: "Cost is required" }).nonnegative(),
         serviceDate: zod_1.z.coerce.date().optional(),

@@ -10,36 +10,38 @@ All 8 original Bike Log modules (`user`, `bike`, `fuelLog`, `mileageRecord`, `ma
 
 Tracks work items defined in `context/specs/`. Update the moment implementation starts or finishes on a spec.
 
-| Spec                                                                                             | Status      |
-| ------------------------------------------------------------------------------------------------ | ----------- |
-| [`00-build-plan.md`](specs/00-build-plan.md)                                                     | Not Started |
-| [`01-module-scaffolding-and-models.md`](specs/01-module-scaffolding-and-models.md)               | Complete    |
-| [`02-auth-hardening.md`](specs/02-auth-hardening.md)                                             | Complete    |
-| [`03-bike-crud.md`](specs/03-bike-crud.md)                                                       | Complete    |
-| [`04-fuel-log-and-mileage-closure.md`](specs/04-fuel-log-and-mileage-closure.md)                 | Complete    |
-| [`05-mileage-stats.md`](specs/05-mileage-stats.md)                                               | Complete    |
-| [`06-maintenance-type-catalog.md`](specs/06-maintenance-type-catalog.md)                         | Complete    |
-| [`07-engine-oil-type-catalog.md`](specs/07-engine-oil-type-catalog.md)                           | Complete    |
-| [`08-maintenance-log-and-reminders.md`](specs/08-maintenance-log-and-reminders.md)               | Complete    |
-| [`09-spending-summary.md`](specs/09-spending-summary.md)                                         | Complete    |
-| [`10-bike-issue.md`](specs/10-bike-issue.md)                                                     | Complete    |
-| [`11-bike-accessory.md`](specs/11-bike-accessory.md)                                             | Complete    |
-| [`12-bike-issue-list-sort-order.md`](specs/12-bike-issue-list-sort-order.md)                     | Complete    |
-| [`13-bike-accessory-list-sort-order.md`](specs/13-bike-accessory-list-sort-order.md)             | Complete    |
-| [`14-bike-accessory-price.md`](specs/14-bike-accessory-price.md)                                 | Complete    |
-| [`15-spending-and-mileage-trend-endpoints.md`](specs/15-spending-and-mileage-trend-endpoints.md) | Complete    |
-| [`16-ai-integration.md`](specs/16-ai-integration.md)                                             | Complete    |
-| [`17-image-file-upload.md`](specs/17-image-file-upload.md)                                       | Complete    |
-| [`18-bike-manual-ai-integration.md`](specs/18-bike-manual-ai-integration.md)                     | Complete    |
-| [`19-bike-documents.md`](specs/19-bike-documents.md)                                             | Complete    |
-| [`20-decimal-number-field-audit.md`](specs/20-decimal-number-field-audit.md)                     | Complete    |
-| [`21-weekly-bike-summary-notification.md`](specs/21-weekly-bike-summary-notification.md)         | Complete    |
-| [`22-trend-endpoint-6-month-window.md`](specs/22-trend-endpoint-6-month-window.md)               | Complete    |
-| [`23-spending-details-export-endpoint.md`](specs/23-spending-details-export-endpoint.md)         | Complete    |
-| [`24-error-log-system.md`](specs/24-error-log-system.md)                                         | Complete    |
-| [`25-bike-accessory-purchase-lock-and-spending.md`](specs/25-bike-accessory-purchase-lock-and-spending.md) | Complete    |
+| Spec                                                                                                         | Status      |
+| ------------------------------------------------------------------------------------------------------------ | ----------- |
+| [`00-build-plan.md`](specs/00-build-plan.md)                                                                 | Not Started |
+| [`01-module-scaffolding-and-models.md`](specs/01-module-scaffolding-and-models.md)                           | Complete    |
+| [`02-auth-hardening.md`](specs/02-auth-hardening.md)                                                         | Complete    |
+| [`03-bike-crud.md`](specs/03-bike-crud.md)                                                                   | Complete    |
+| [`04-fuel-log-and-mileage-closure.md`](specs/04-fuel-log-and-mileage-closure.md)                             | Complete    |
+| [`05-mileage-stats.md`](specs/05-mileage-stats.md)                                                           | Complete    |
+| [`06-maintenance-type-catalog.md`](specs/06-maintenance-type-catalog.md)                                     | Complete    |
+| [`07-engine-oil-type-catalog.md`](specs/07-engine-oil-type-catalog.md)                                       | Complete    |
+| [`08-maintenance-log-and-reminders.md`](specs/08-maintenance-log-and-reminders.md)                           | Complete    |
+| [`09-spending-summary.md`](specs/09-spending-summary.md)                                                     | Complete    |
+| [`10-bike-issue.md`](specs/10-bike-issue.md)                                                                 | Complete    |
+| [`11-bike-accessory.md`](specs/11-bike-accessory.md)                                                         | Complete    |
+| [`12-bike-issue-list-sort-order.md`](specs/12-bike-issue-list-sort-order.md)                                 | Complete    |
+| [`13-bike-accessory-list-sort-order.md`](specs/13-bike-accessory-list-sort-order.md)                         | Complete    |
+| [`14-bike-accessory-price.md`](specs/14-bike-accessory-price.md)                                             | Complete    |
+| [`15-spending-and-mileage-trend-endpoints.md`](specs/15-spending-and-mileage-trend-endpoints.md)             | Complete    |
+| [`16-ai-integration.md`](specs/16-ai-integration.md)                                                         | Complete    |
+| [`17-image-file-upload.md`](specs/17-image-file-upload.md)                                                   | Complete    |
+| [`18-bike-manual-ai-integration.md`](specs/18-bike-manual-ai-integration.md)                                 | Complete    |
+| [`19-bike-documents.md`](specs/19-bike-documents.md)                                                         | Complete    |
+| [`20-decimal-number-field-audit.md`](specs/20-decimal-number-field-audit.md)                                 | Complete    |
+| [`21-weekly-bike-summary-notification.md`](specs/21-weekly-bike-summary-notification.md)                     | Complete    |
+| [`22-trend-endpoint-6-month-window.md`](specs/22-trend-endpoint-6-month-window.md)                           | Complete    |
+| [`23-spending-details-export-endpoint.md`](specs/23-spending-details-export-endpoint.md)                     | Complete    |
+| [`24-error-log-system.md`](specs/24-error-log-system.md)                                                     | Complete    |
+| [`25-bike-accessory-purchase-lock-and-spending.md`](specs/25-bike-accessory-purchase-lock-and-spending.md)   | Complete    |
 | [`26-fuel-log-period-closure-backdated-date-bug.md`](specs/26-fuel-log-period-closure-backdated-date-bug.md) | Complete    |
-| [`27-fuel-log-date-before-purchase-validation.md`](specs/27-fuel-log-date-before-purchase-validation.md) | Complete    |
+| [`27-fuel-log-date-before-purchase-validation.md`](specs/27-fuel-log-date-before-purchase-validation.md)     | Complete    |
+| [`28-maintenance-log-optional-service-interval.md`](specs/28-maintenance-log-optional-service-interval.md)   | Complete    |
+| [`29-push-notification-delivery-diagnostics.md`](specs/29-push-notification-delivery-diagnostics.md)         | Not Started |
 
 ## Completed
 
@@ -56,6 +58,10 @@ Tracks work items defined in `context/specs/`. Update the moment implementation 
 - **Spec 08 — maintenance log + reminders**: Implemented all 6 service functions in `maintenanceLog.service.ts` — `createMaintenanceLogIntoDB` (ownership + referential checks on `maintenanceType`/`oilType`, server-computed `nextDueOdometer`, odometer bump), `getMaintenanceLogsFromDB` (QueryBuilder with `-serviceDate` sort + optional `maintenanceType` filter), `getMaintenanceLogByIdFromDB`, `updateMaintenanceLogInDB` (recomputes `nextDueOdometer` if `odometerReading` or `intervalKmUsed` changes, referential checks on update, strips client-supplied `nextDueOdometer`), `deleteMaintenanceLogFromDB` (soft delete), `getRemindersFromDB` (groups by `maintenanceType` → most recent log, km-based status with 50km buffer, date-based status with 14-day buffer, omits entries that are neither due nor upcoming). Wired all 6 controller handlers in `maintenanceLog.controller.ts` with `sendResponse`. No validation/route/model changes needed. `yarn build` clean, `yarn lint` clean (no new errors).
 
 ## Recent Activity
+
+- **2026-08-30 — Spec 28 (make maintenance log's `intervalKmUsed` optional) implemented, per direct user request.** `intervalKmUsed` ("Service Interval (km)") is no longer required on `POST .../maintenance-logs` — dropped the `required_error` in `maintenanceLog.validation.ts`'s create schema, made both `intervalKmUsed`/`nextDueOdometer` optional in the interface and dropped `required` on both in the Mongoose model. `createMaintenanceLogIntoDB` now only computes `nextDueOdometer` when `intervalKmUsed` is supplied (left `undefined`/omitted otherwise, never a stray `0`/`null`); `updateMaintenanceLogInDB`'s recompute guard now also requires the effective (new-or-existing) interval to be defined, so a lone `odometerReading` edit on an interval-less log doesn't fabricate a `nextDueOdometer`. `getRemindersFromDB`'s km-based overdue/upcoming branch is now guarded on `log.nextDueOdometer !== undefined` — an interval-less log falls back to a purely date-based reminder via its own `nextDueDate` (unchanged logic, already independent), and a log with neither produces no reminder at all (pre-existing behavior for the mirror-image case, not a new gap). Updated `postman/dummy-data.md`'s Maintenance Logs field table (`intervalKmUsed` moved from required to optional) and its `nextDueOdometer` note to describe the new fallback behavior.
+
+  Verified live against a fresh local `yarn dev` instance (a throwaway test user/bike, cleaned up — soft-deleted — afterward): (1) `POST` with `intervalKmUsed` omitted → `201`, response has no `intervalKmUsed`/`nextDueOdometer` keys at all; (2) `POST` with `intervalKmUsed` present → `201`, `nextDueOdometer` computed correctly, no regression; (3) `PATCH` touching only `odometerReading` on an interval-less log → `nextDueOdometer` stays absent; (4) `PATCH` adding `intervalKmUsed` to that same log → `nextDueOdometer` now computed; (5) `GET .../reminders` with a km-based log (odometer at the due point) and a separate interval-less/date-only log (past `nextDueDate`) in the same response → each reminder has exactly the right optional fields (km-based: `nextDueOdometer`/`kmRemaining`, no date fields; date-only: `nextDueDate`/`daysRemaining`, no km fields); (6) a log with neither `intervalKmUsed` nor `nextDueDate` produced no reminder. `yarn build` clean; `yarn lint` — same 0-error/14-warning pre-existing baseline, no new issues in any touched file. No bugs found during testing, so no follow-up fix-spec was needed. Out of scope, not touched: `bikelog_client-web-`'s equivalent form (per this repo's cross-project rule) and `bikelog_app`'s paired client spec 33 (depends on this spec, tracked separately in that project's own `ai context/progress-tracker.md`).
 
 - **2026-08-29 — Spec 26 (fuel-log period-closure bug for backdated dates) implemented, immediately after spec 27, as part of a "check the full project for errors" pass per direct user instruction.** Spec 27's new purchase-date validation makes backdating fuel history right after buying a bike an explicitly-encouraged, validated-as-legitimate flow — exactly the scenario spec 26 (found during the earlier full-system test pass, written as a plan but not yet built) already diagnosed as broken, so it was implemented now rather than left open. In `createFuelLogIntoDB`, the "no previous full-tank fill yet" branch's `periodStartDate` anchor changed from `bike.createdAt` (the DB-record-insertion timestamp — meaningless for this purpose, and almost always later than a backdated log's own date, which silently inverted the query range and zeroed out the whole period) to `null`, meaning "no lower date bound" — every fuel log dated on/before the closing fill genuinely belongs to the bike's first-ever period, regardless of when the bike record itself was created. The `MileageRecord`'s stored/displayed `periodStartDate` is now derived from the earliest fuel log actually included in the period (falling back to `bike.createdAt` only as a defensive, practically-unreachable last resort) instead of that same meaningless timestamp.
 
