@@ -32,6 +32,9 @@ const sendWeeklySummaries = async (): Promise<TWeeklySummaryResult> => {
 
   for (const user of users) {
     if (!user.expoPushToken || !Expo.isExpoPushToken(user.expoPushToken)) {
+      console.error(
+        `[weekly-summary] skipping user ${user._id}: invalid/missing expoPushToken`,
+      );
       notificationsFailed += 1;
       continue;
     }
@@ -84,6 +87,7 @@ const sendWeeklySummaries = async (): Promise<TWeeklySummaryResult> => {
     try {
       const tickets: ExpoPushTicket[] = await expo.sendPushNotificationsAsync(chunk);
       for (const ticket of tickets) {
+        console.log(`[weekly-summary] ticket:`, ticket);
         if (ticket.status === "ok") {
           notificationsSent += 1;
         } else {

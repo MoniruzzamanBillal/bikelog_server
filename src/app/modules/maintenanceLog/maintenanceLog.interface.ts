@@ -6,8 +6,8 @@ export type TMaintenanceLog = {
   maintenanceType: ObjectId;
   odometerReading: number;
   oilType?: ObjectId;
-  intervalKmUsed: number;
-  nextDueOdometer: number;
+  intervalKmUsed?: number;
+  nextDueOdometer?: number;
   nextDueDate?: Date;
   cost: number;
   serviceDate: Date;

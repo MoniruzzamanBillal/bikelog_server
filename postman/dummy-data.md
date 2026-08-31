@@ -242,18 +242,19 @@ Both fields required; `suggestedIntervalKm` positive.
 }
 ```
 
-| Field                                       | Required | Notes                                                    |
-| ------------------------------------------- | -------- | -------------------------------------------------------- |
-| `maintenanceType`                           | yes      | ObjectId ref to a `MaintenanceType` — must already exist |
-| `odometerReading`, `intervalKmUsed`, `cost` | yes      | numbers (`cost` nonnegative)                             |
-| `oilType`                                   | no       | ObjectId ref to an `EngineOilType` if provided           |
-| `nextDueDate`, `serviceDate`                | no       | dates; `serviceDate` defaults to now                     |
-| `serviceCenter`, `notes`                    | no       | strings                                                  |
-| `partsReplaced`                             | no       | array of strings                                         |
+| Field                            | Required | Notes                                                    |
+| --------------------------------- | -------- | -------------------------------------------------------- |
+| `maintenanceType`                 | yes      | ObjectId ref to a `MaintenanceType` — must already exist |
+| `odometerReading`, `cost`         | yes      | numbers (`cost` nonnegative)                             |
+| `intervalKmUsed`                  | no       | number — the service interval actually applied; omit for a one-off item with no recurring interval |
+| `oilType`                         | no       | ObjectId ref to an `EngineOilType` if provided           |
+| `nextDueDate`, `serviceDate`      | no       | dates; `serviceDate` defaults to now                     |
+| `serviceCenter`, `notes`          | no       | strings                                                  |
+| `partsReplaced`                   | no       | array of strings                                         |
 
 `maintenanceType`/`oilType` are real Mongo ObjectIds referencing other collections — they can't be made up. The Postman collection uses `{{maintenanceTypeId}}` / `{{engineOilTypeId}}`, auto-filled by the `Create Maintenance Type`/`Create Engine Oil Type` requests (or paste in a seeded catalog id from the `List` requests).
 
-**Never send `nextDueOdometer`** — always computed server-side as `odometerReading + intervalKmUsed`; any client value is dropped.
+**Never send `nextDueOdometer`** — always computed server-side as `odometerReading + intervalKmUsed`; any client value is dropped. When `intervalKmUsed` is omitted, `nextDueOdometer` is left unset too (no default interval is assumed), and `GET .../reminders` falls back to that log's `nextDueDate` alone — a log with neither `intervalKmUsed` nor `nextDueDate` set never produces a reminder.
 
 ### `GET .../maintenance-logs` — auth required
 

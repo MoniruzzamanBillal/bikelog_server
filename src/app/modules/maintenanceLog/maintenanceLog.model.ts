@@ -23,11 +23,9 @@ const maintenanceLogSchema = new Schema<TMaintenanceLog>(
     },
     intervalKmUsed: {
       type: Number,
-      required: [true, "interval km used is required "],
     },
     nextDueOdometer: {
       type: Number,
-      required: [true, "next due odometer is required "],
     },
     nextDueDate: {
       type: Date,

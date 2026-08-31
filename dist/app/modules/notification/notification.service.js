@@ -32,6 +32,7 @@ const sendWeeklySummaries = () => __awaiter(void 0, void 0, void 0, function* ()
     const messages = [];
     for (const user of users) {
         if (!user.expoPushToken || !expo_server_sdk_1.Expo.isExpoPushToken(user.expoPushToken)) {
+            console.error(`[weekly-summary] skipping user ${user._id}: invalid/missing expoPushToken`);
             notificationsFailed += 1;
             continue;
         }
@@ -74,6 +75,7 @@ const sendWeeklySummaries = () => __awaiter(void 0, void 0, void 0, function* ()
         try {
             const tickets = yield expo.sendPushNotificationsAsync(chunk);
             for (const ticket of tickets) {
+                console.log(`[weekly-summary] ticket:`, ticket);
                 if (ticket.status === "ok") {
                     notificationsSent += 1;
                 }
