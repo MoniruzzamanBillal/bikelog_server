@@ -1,11 +1,11 @@
+import { askOpenRouter, TChatMessage } from "../../util/openRouterClient";
 import { bikeModel } from "../bike/bike.model";
 import { findOwnedBikeOrThrow } from "../bike/bike.utils";
+import { bikeManualServices } from "../bikeManual/bikeManual.service";
 import { fuelLogModel } from "../fuelLog/fuelLog.model";
 import { maintenanceLogModel } from "../maintenanceLog/maintenanceLog.model";
 import { mileageRecordServices } from "../mileageRecord/mileageRecord.service";
 import { spendingServices } from "../spending/spending.service";
-import { bikeManualServices } from "../bikeManual/bikeManual.service";
-import { askOpenRouter, TChatMessage } from "../../util/openRouterClient";
 import {
   TBikeChatResponse,
   TChatRequestMessage,
@@ -40,7 +40,11 @@ const getSpendingInsightFromDB = async (
   const currentLogCount = fuelLogCount + maintenanceLogCount;
 
   if (currentLogCount === 0) {
-    return { insight: NO_DATA_SPENDING_MESSAGE, generated: false, cached: false };
+    return {
+      insight: NO_DATA_SPENDING_MESSAGE,
+      generated: false,
+      cached: false,
+    };
   }
 
   if (
@@ -89,7 +93,11 @@ const getMileageInsightFromDB = async (
   });
 
   if (currentFuelLogCount === 0) {
-    return { insight: NO_DATA_MILEAGE_MESSAGE, generated: false, cached: false };
+    return {
+      insight: NO_DATA_MILEAGE_MESSAGE,
+      generated: false,
+      cached: false,
+    };
   }
 
   if (
@@ -135,28 +143,32 @@ const getBikeChatReply = async (
   const latestUserQuestion =
     [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
 
-  const [recentFuelLogs, recentMaintenanceLogs, lifetimeSpending, relevantManualChunks] =
-    await Promise.all([
-      fuelLogModel
-        .find({ bike: bikeId, isDeleted: false })
-        .sort({ date: -1 })
-        .limit(CHAT_LOG_LIMIT)
-        .lean(),
-      maintenanceLogModel
-        .find({ bike: bikeId, isDeleted: false })
-        .sort({ date: -1 })
-        .limit(CHAT_LOG_LIMIT)
-        .populate("maintenanceType", "name")
-        .lean(),
-      spendingServices.getSpendingSummaryFromDB(bikeId, userId, "lifetime"),
-      bike.manual
-        ? bikeManualServices.getRelevantManualChunksForChat(
-            bikeId,
-            latestUserQuestion,
-            MANUAL_CHUNK_TOP_K,
-          )
-        : Promise.resolve([]),
-    ]);
+  const [
+    recentFuelLogs,
+    recentMaintenanceLogs,
+    lifetimeSpending,
+    relevantManualChunks,
+  ] = await Promise.all([
+    fuelLogModel
+      .find({ bike: bikeId, isDeleted: false })
+      .sort({ date: -1 })
+      .limit(CHAT_LOG_LIMIT)
+      .lean(),
+    maintenanceLogModel
+      .find({ bike: bikeId, isDeleted: false })
+      .sort({ date: -1 })
+      .limit(CHAT_LOG_LIMIT)
+      .populate("maintenanceType", "name")
+      .lean(),
+    spendingServices.getSpendingSummaryFromDB(bikeId, userId, "lifetime"),
+    bike.manual
+      ? bikeManualServices.getRelevantManualChunksForChat(
+          bikeId,
+          latestUserQuestion,
+          MANUAL_CHUNK_TOP_K,
+        )
+      : Promise.resolve([]),
+  ]);
 
   // ! only non-empty when relevant chunks were actually found — otherwise the section
   // ! is omitted entirely rather than injecting an empty/misleading heading
