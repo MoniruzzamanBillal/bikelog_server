@@ -1,6 +1,7 @@
 import httpStatus from "http-status";
 import catchAsync from "../../util/catchAsync";
 import sendResponse from "../../util/sendResponse";
+import { notifyExpenseTracker } from "../../util/expenseTrackerClient";
 import { fuelLogServices } from "./fuelLog.service";
 
 const createFuelLog = catchAsync(async (req, res) => {
@@ -9,6 +10,17 @@ const createFuelLog = catchAsync(async (req, res) => {
     req.user.userId,
     req.body,
   );
+
+  notifyExpenseTracker({
+    sourceType: "fuel",
+    sourceRecordId: String(fuelLog._id),
+    userEmail: req.user.userEmail,
+    userId: req.user.userId,
+    title: `Fuel: ${fuelLog.fuelStation || "Fuel top-up"}`,
+    description: fuelLog.notes,
+    amount: fuelLog.totalCost,
+    occurredAt: fuelLog.date,
+  });
 
   sendResponse(res, {
     status: httpStatus.CREATED,

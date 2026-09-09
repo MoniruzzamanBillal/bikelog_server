@@ -1,20 +1,32 @@
 import httpStatus from "http-status";
 import catchAsync from "../../util/catchAsync";
 import sendResponse from "../../util/sendResponse";
+import { notifyExpenseTracker } from "../../util/expenseTrackerClient";
 import { maintenanceLogServices } from "./maintenanceLog.service";
 
 const createMaintenanceLog = catchAsync(async (req, res) => {
-  const result = await maintenanceLogServices.createMaintenanceLogIntoDB(
+  const { log, maintenanceTypeName } = await maintenanceLogServices.createMaintenanceLogIntoDB(
     req.params.bikeId,
     req.user.userId,
     req.body,
   );
 
+  notifyExpenseTracker({
+    sourceType: "maintenance",
+    sourceRecordId: String(log._id),
+    userEmail: req.user.userEmail,
+    userId: req.user.userId,
+    title: `Maintenance: ${maintenanceTypeName || "Service"}`,
+    description: log.notes,
+    amount: log.cost,
+    occurredAt: log.serviceDate,
+  });
+
   sendResponse(res, {
     status: httpStatus.CREATED,
     success: true,
     message: "Maintenance log created successfully",
-    data: result,
+    data: log,
   });
 });
 
