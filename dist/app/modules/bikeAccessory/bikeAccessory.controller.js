@@ -16,6 +16,7 @@ exports.bikeAccessoryController = void 0;
 const http_status_1 = __importDefault(require("http-status"));
 const catchAsync_1 = __importDefault(require("../../util/catchAsync"));
 const sendResponse_1 = __importDefault(require("../../util/sendResponse"));
+const expenseTrackerClient_1 = require("../../util/expenseTrackerClient");
 const bikeAccessory_service_1 = require("./bikeAccessory.service");
 const createBikeAccessory = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const result = yield bikeAccessory_service_1.bikeAccessoryServices.createBikeAccessoryIntoDB(req.params.bikeId, req.user.userId, req.body);
@@ -45,12 +46,23 @@ const getBikeAccessoryById = (0, catchAsync_1.default)((req, res) => __awaiter(v
     });
 }));
 const updateBikeAccessory = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const result = yield bikeAccessory_service_1.bikeAccessoryServices.updateBikeAccessoryInDB(req.params.bikeId, req.user.userId, req.params.id, req.body);
+    const { accessory, justPurchased } = yield bikeAccessory_service_1.bikeAccessoryServices.updateBikeAccessoryInDB(req.params.bikeId, req.user.userId, req.params.id, req.body);
+    if (justPurchased) {
+        (0, expenseTrackerClient_1.notifyExpenseTracker)({
+            sourceType: "accessory",
+            sourceRecordId: String(accessory._id),
+            userEmail: req.user.userEmail,
+            userId: req.user.userId,
+            title: `Accessory: ${accessory.name}`,
+            amount: accessory.price,
+            occurredAt: accessory.purchaseDate,
+        });
+    }
     (0, sendResponse_1.default)(res, {
         status: http_status_1.default.OK,
         success: true,
         message: "Bike accessory updated successfully",
-        data: result,
+        data: accessory,
     });
 }));
 const deleteBikeAccessory = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {

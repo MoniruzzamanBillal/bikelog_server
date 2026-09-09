@@ -164,17 +164,18 @@ const updateBikeAccessoryInDB = async (
   // ! stamp purchaseDate exactly once, at the moment status actually transitions into
   // ! purchased — never re-stamped afterward, since the lock above guarantees this only
   // ! ever fires once per accessory
-  if (
+  const justPurchased =
     accessory.status !== AccessoryStatus.purchased &&
-    resultingStatus === AccessoryStatus.purchased
-  ) {
+    resultingStatus === AccessoryStatus.purchased;
+
+  if (justPurchased) {
     updateData.purchaseDate = new Date();
   }
 
   Object.assign(accessory, updateData);
   await accessory.save();
 
-  return accessory;
+  return { accessory, justPurchased };
 };
 
 const deleteBikeAccessoryFromDB = async (

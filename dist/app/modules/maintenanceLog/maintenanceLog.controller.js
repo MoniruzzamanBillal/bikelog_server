@@ -16,14 +16,25 @@ exports.maintenanceLogController = void 0;
 const http_status_1 = __importDefault(require("http-status"));
 const catchAsync_1 = __importDefault(require("../../util/catchAsync"));
 const sendResponse_1 = __importDefault(require("../../util/sendResponse"));
+const expenseTrackerClient_1 = require("../../util/expenseTrackerClient");
 const maintenanceLog_service_1 = require("./maintenanceLog.service");
 const createMaintenanceLog = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const result = yield maintenanceLog_service_1.maintenanceLogServices.createMaintenanceLogIntoDB(req.params.bikeId, req.user.userId, req.body);
+    const { log, maintenanceTypeName } = yield maintenanceLog_service_1.maintenanceLogServices.createMaintenanceLogIntoDB(req.params.bikeId, req.user.userId, req.body);
+    (0, expenseTrackerClient_1.notifyExpenseTracker)({
+        sourceType: "maintenance",
+        sourceRecordId: String(log._id),
+        userEmail: req.user.userEmail,
+        userId: req.user.userId,
+        title: `Maintenance: ${maintenanceTypeName || "Service"}`,
+        description: log.notes,
+        amount: log.cost,
+        occurredAt: log.serviceDate,
+    });
     (0, sendResponse_1.default)(res, {
         status: http_status_1.default.CREATED,
         success: true,
         message: "Maintenance log created successfully",
-        data: result,
+        data: log,
     });
 }));
 const getMaintenanceLogs = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {

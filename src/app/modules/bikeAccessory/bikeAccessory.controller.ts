@@ -1,6 +1,7 @@
 import httpStatus from "http-status";
 import catchAsync from "../../util/catchAsync";
 import sendResponse from "../../util/sendResponse";
+import { notifyExpenseTracker } from "../../util/expenseTrackerClient";
 import { bikeAccessoryServices } from "./bikeAccessory.service";
 
 const createBikeAccessory = catchAsync(async (req, res) => {
@@ -49,18 +50,30 @@ const getBikeAccessoryById = catchAsync(async (req, res) => {
 });
 
 const updateBikeAccessory = catchAsync(async (req, res) => {
-  const result = await bikeAccessoryServices.updateBikeAccessoryInDB(
+  const { accessory, justPurchased } = await bikeAccessoryServices.updateBikeAccessoryInDB(
     req.params.bikeId,
     req.user.userId,
     req.params.id,
     req.body,
   );
 
+  if (justPurchased) {
+    notifyExpenseTracker({
+      sourceType: "accessory",
+      sourceRecordId: String(accessory._id),
+      userEmail: req.user.userEmail,
+      userId: req.user.userId,
+      title: `Accessory: ${accessory.name}`,
+      amount: accessory.price!,
+      occurredAt: accessory.purchaseDate!,
+    });
+  }
+
   sendResponse(res, {
     status: httpStatus.OK,
     success: true,
     message: "Bike accessory updated successfully",
-    data: result,
+    data: accessory,
   });
 });
 

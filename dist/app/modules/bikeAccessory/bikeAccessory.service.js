@@ -108,13 +108,14 @@ const updateBikeAccessoryInDB = (bikeId, userId, id, payload) => __awaiter(void 
     // ! stamp purchaseDate exactly once, at the moment status actually transitions into
     // ! purchased — never re-stamped afterward, since the lock above guarantees this only
     // ! ever fires once per accessory
-    if (accessory.status !== bikeAccessory_constant_1.AccessoryStatus.purchased &&
-        resultingStatus === bikeAccessory_constant_1.AccessoryStatus.purchased) {
+    const justPurchased = accessory.status !== bikeAccessory_constant_1.AccessoryStatus.purchased &&
+        resultingStatus === bikeAccessory_constant_1.AccessoryStatus.purchased;
+    if (justPurchased) {
         updateData.purchaseDate = new Date();
     }
     Object.assign(accessory, updateData);
     yield accessory.save();
-    return accessory;
+    return { accessory, justPurchased };
 });
 const deleteBikeAccessoryFromDB = (bikeId, userId, id) => __awaiter(void 0, void 0, void 0, function* () {
     yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);

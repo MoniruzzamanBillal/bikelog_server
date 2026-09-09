@@ -15,4 +15,6 @@ export default {
   cloudinary_api_key: process.env.CLOUDINARY_API_KEY,
   cloudinary_api_secret: process.env.CLOUDINARY_API_SECRET,
   cronSecret: process.env.CRON_SECRET,
+  expenseTrackerBaseUrl: process.env.EXPENSE_TRACKER_BASE_URL,
+  expenseTrackerIntegrationKey: process.env.EXPENSE_TRACKER_INTEGRATION_KEY,
 };
