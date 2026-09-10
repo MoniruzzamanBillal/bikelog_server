@@ -10,14 +10,14 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.aiServices = void 0;
+const openRouterClient_1 = require("../../util/openRouterClient");
 const bike_model_1 = require("../bike/bike.model");
 const bike_utils_1 = require("../bike/bike.utils");
+const bikeManual_service_1 = require("../bikeManual/bikeManual.service");
 const fuelLog_model_1 = require("../fuelLog/fuelLog.model");
 const maintenanceLog_model_1 = require("../maintenanceLog/maintenanceLog.model");
 const mileageRecord_service_1 = require("../mileageRecord/mileageRecord.service");
 const spending_service_1 = require("../spending/spending.service");
-const bikeManual_service_1 = require("../bikeManual/bikeManual.service");
-const openRouterClient_1 = require("../../util/openRouterClient");
 const NO_DATA_SPENDING_MESSAGE = "No spending data yet for this bike — log a fuel-up or maintenance entry to get an AI-generated spending insight.";
 const NO_DATA_MILEAGE_MESSAGE = "No mileage data yet for this bike — log a fuel-up to get an AI-generated mileage insight.";
 // ! recent-log cap for the chat context — bounds prompt size/cost regardless of how much
@@ -34,7 +34,11 @@ const getSpendingInsightFromDB = (bikeId, userId) => __awaiter(void 0, void 0, v
     ]);
     const currentLogCount = fuelLogCount + maintenanceLogCount;
     if (currentLogCount === 0) {
-        return { insight: NO_DATA_SPENDING_MESSAGE, generated: false, cached: false };
+        return {
+            insight: NO_DATA_SPENDING_MESSAGE,
+            generated: false,
+            cached: false,
+        };
     }
     if (bike.aiSpendingInsight &&
         bike.aiSpendingInsightLogCount === currentLogCount) {
@@ -64,7 +68,11 @@ const getMileageInsightFromDB = (bikeId, userId) => __awaiter(void 0, void 0, vo
         isDeleted: false,
     });
     if (currentFuelLogCount === 0) {
-        return { insight: NO_DATA_MILEAGE_MESSAGE, generated: false, cached: false };
+        return {
+            insight: NO_DATA_MILEAGE_MESSAGE,
+            generated: false,
+            cached: false,
+        };
     }
     if (bike.aiMileageInsight &&
         bike.aiMileageInsightFuelLogCount === currentFuelLogCount) {
@@ -94,7 +102,7 @@ const getBikeChatReply = (bikeId, userId, messages) => __awaiter(void 0, void 0,
     var _a, _b, _c;
     const bike = yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
     const latestUserQuestion = (_b = (_a = [...messages].reverse().find((m) => m.role === "user")) === null || _a === void 0 ? void 0 : _a.content) !== null && _b !== void 0 ? _b : "";
-    const [recentFuelLogs, recentMaintenanceLogs, lifetimeSpending, relevantManualChunks] = yield Promise.all([
+    const [recentFuelLogs, recentMaintenanceLogs, lifetimeSpending, relevantManualChunks,] = yield Promise.all([
         fuelLog_model_1.fuelLogModel
             .find({ bike: bikeId, isDeleted: false })
             .sort({ date: -1 })
