@@ -29,12 +29,20 @@ const openRouterClient = new openai_1.default({
     },
 });
 // ! free models to try in order - if one is rate limited/down, fall back to the next
+// ! ordered fastest-first by architecture, not measured latency (no live benchmark run against
+// ! OpenRouter for this pass): "lightning" is explicitly speed-branded; gemma-4-26b-a4b-it's 4B
+// ! active params (MoE) beat nano-omni's 3B once you factor in nano-omni's "-reasoning" variant,
+// ! which emits extra chain-of-thought tokens before the real answer, inflating total latency
+// ! despite its smaller active size; nemotron-3-super's 12B active params make it slower still;
+// ! minimax-m2.7 is MiniMax's large flagship-tier model, placed last as the likely slowest.
+// ! Re-order this list from real timing data (e.g. log askOpenRouter's per-model duration) once
+// ! that's available - this ordering is a best-effort inference, not a confirmed ranking.
 const FREE_MODELS = [
-    "nvidia/nemotron-3-super-120b-a12b:free",
-    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
-    "google/gemma-4-26b-a4b-it:free",
-    "minimax/minimax-m2.7:free",
     "nvidia/nemotron-3.5-lightning:free",
+    "google/gemma-4-26b-a4b-it:free",
+    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",
+    "minimax/minimax-m2.7:free",
 ];
 // ! single choke point every ai feature talks through
 const askOpenRouter = (messages, options) => __awaiter(void 0, void 0, void 0, function* () {
