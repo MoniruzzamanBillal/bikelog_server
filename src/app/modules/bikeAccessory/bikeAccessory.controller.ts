@@ -2,20 +2,37 @@ import httpStatus from "http-status";
 import catchAsync from "../../util/catchAsync";
 import sendResponse from "../../util/sendResponse";
 import { notifyExpenseTracker } from "../../util/expenseTrackerClient";
+import { buildAccessorySummary } from "../../util/transactionRequestSummary";
+import { AccessoryStatus } from "./bikeAccessory.constant";
 import { bikeAccessoryServices } from "./bikeAccessory.service";
 
 const createBikeAccessory = catchAsync(async (req, res) => {
-  const result = await bikeAccessoryServices.createBikeAccessoryIntoDB(
+  const { accessory, bikeNickname } = await bikeAccessoryServices.createBikeAccessoryIntoDB(
     req.params.bikeId,
     req.user.userId,
     req.body,
   );
 
+  if (accessory.status === AccessoryStatus.purchased) {
+    const { title, description } = buildAccessorySummary(accessory, bikeNickname);
+
+    notifyExpenseTracker({
+      sourceType: "accessory",
+      sourceRecordId: String(accessory._id),
+      userEmail: req.user.userEmail,
+      userId: req.user.userId,
+      title,
+      description,
+      amount: accessory.price!,
+      occurredAt: accessory.purchaseDate!,
+    });
+  }
+
   sendResponse(res, {
     status: httpStatus.CREATED,
     success: true,
     message: "Bike accessory created successfully",
-    data: result,
+    data: accessory,
   });
 });
 
@@ -50,20 +67,24 @@ const getBikeAccessoryById = catchAsync(async (req, res) => {
 });
 
 const updateBikeAccessory = catchAsync(async (req, res) => {
-  const { accessory, justPurchased } = await bikeAccessoryServices.updateBikeAccessoryInDB(
-    req.params.bikeId,
-    req.user.userId,
-    req.params.id,
-    req.body,
-  );
+  const { accessory, justPurchased, bikeNickname } =
+    await bikeAccessoryServices.updateBikeAccessoryInDB(
+      req.params.bikeId,
+      req.user.userId,
+      req.params.id,
+      req.body,
+    );
 
   if (justPurchased) {
+    const { title, description } = buildAccessorySummary(accessory, bikeNickname);
+
     notifyExpenseTracker({
       sourceType: "accessory",
       sourceRecordId: String(accessory._id),
       userEmail: req.user.userEmail,
       userId: req.user.userId,
-      title: `Accessory: ${accessory.name}`,
+      title,
+      description,
       amount: accessory.price!,
       occurredAt: accessory.purchaseDate!,
     });

@@ -2,13 +2,21 @@ import httpStatus from "http-status";
 import catchAsync from "../../util/catchAsync";
 import sendResponse from "../../util/sendResponse";
 import { notifyExpenseTracker } from "../../util/expenseTrackerClient";
+import { buildMaintenanceLogSummary } from "../../util/transactionRequestSummary";
 import { maintenanceLogServices } from "./maintenanceLog.service";
 
 const createMaintenanceLog = catchAsync(async (req, res) => {
-  const { log, maintenanceTypeName } = await maintenanceLogServices.createMaintenanceLogIntoDB(
-    req.params.bikeId,
-    req.user.userId,
-    req.body,
+  const { log, maintenanceTypeName, bikeNickname } =
+    await maintenanceLogServices.createMaintenanceLogIntoDB(
+      req.params.bikeId,
+      req.user.userId,
+      req.body,
+    );
+
+  const { title, description } = buildMaintenanceLogSummary(
+    log,
+    maintenanceTypeName,
+    bikeNickname,
   );
 
   notifyExpenseTracker({
@@ -16,8 +24,8 @@ const createMaintenanceLog = catchAsync(async (req, res) => {
     sourceRecordId: String(log._id),
     userEmail: req.user.userEmail,
     userId: req.user.userId,
-    title: `Maintenance: ${maintenanceTypeName || "Service"}`,
-    description: log.notes,
+    title,
+    description,
     amount: log.cost,
     occurredAt: log.serviceDate,
   });

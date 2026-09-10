@@ -17,16 +17,18 @@ const http_status_1 = __importDefault(require("http-status"));
 const catchAsync_1 = __importDefault(require("../../util/catchAsync"));
 const sendResponse_1 = __importDefault(require("../../util/sendResponse"));
 const expenseTrackerClient_1 = require("../../util/expenseTrackerClient");
+const transactionRequestSummary_1 = require("../../util/transactionRequestSummary");
 const maintenanceLog_service_1 = require("./maintenanceLog.service");
 const createMaintenanceLog = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { log, maintenanceTypeName } = yield maintenanceLog_service_1.maintenanceLogServices.createMaintenanceLogIntoDB(req.params.bikeId, req.user.userId, req.body);
+    const { log, maintenanceTypeName, bikeNickname } = yield maintenanceLog_service_1.maintenanceLogServices.createMaintenanceLogIntoDB(req.params.bikeId, req.user.userId, req.body);
+    const { title, description } = (0, transactionRequestSummary_1.buildMaintenanceLogSummary)(log, maintenanceTypeName, bikeNickname);
     (0, expenseTrackerClient_1.notifyExpenseTracker)({
         sourceType: "maintenance",
         sourceRecordId: String(log._id),
         userEmail: req.user.userEmail,
         userId: req.user.userId,
-        title: `Maintenance: ${maintenanceTypeName || "Service"}`,
-        description: log.notes,
+        title,
+        description,
         amount: log.cost,
         occurredAt: log.serviceDate,
     });

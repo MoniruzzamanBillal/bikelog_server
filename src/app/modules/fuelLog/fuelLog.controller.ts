@@ -2,22 +2,26 @@ import httpStatus from "http-status";
 import catchAsync from "../../util/catchAsync";
 import sendResponse from "../../util/sendResponse";
 import { notifyExpenseTracker } from "../../util/expenseTrackerClient";
+import { buildFuelLogSummary } from "../../util/transactionRequestSummary";
 import { fuelLogServices } from "./fuelLog.service";
 
 const createFuelLog = catchAsync(async (req, res) => {
-  const { fuelLog, mileageRecordClosed } = await fuelLogServices.createFuelLogIntoDB(
-    req.params.bikeId,
-    req.user.userId,
-    req.body,
-  );
+  const { fuelLog, mileageRecordClosed, bikeNickname } =
+    await fuelLogServices.createFuelLogIntoDB(
+      req.params.bikeId,
+      req.user.userId,
+      req.body,
+    );
+
+  const { title, description } = buildFuelLogSummary(fuelLog, bikeNickname);
 
   notifyExpenseTracker({
     sourceType: "fuel",
     sourceRecordId: String(fuelLog._id),
     userEmail: req.user.userEmail,
     userId: req.user.userId,
-    title: `Fuel: ${fuelLog.fuelStation || "Fuel top-up"}`,
-    description: fuelLog.notes,
+    title,
+    description,
     amount: fuelLog.totalCost,
     occurredAt: fuelLog.date,
   });
