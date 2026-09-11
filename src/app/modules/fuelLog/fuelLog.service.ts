@@ -114,7 +114,7 @@ const createFuelLogIntoDB = async (
     });
   }
 
-  return { fuelLog, mileageRecordClosed };
+  return { fuelLog, mileageRecordClosed, bikeNickname: bike.nickname };
 };
 
 const getFuelLogsFromDB = async (

@@ -43,7 +43,7 @@ const createMaintenanceLogIntoDB = (bikeId, userId, payload) => __awaiter(void 0
     const logData = Object.assign(Object.assign({}, payload), { bike: bikeId, nextDueOdometer, serviceDate: (_a = payload.serviceDate) !== null && _a !== void 0 ? _a : new Date() });
     const log = yield maintenanceLog_model_1.maintenanceLogModel.create(logData);
     yield (0, bike_utils_1.bumpOdometerIfHigher)(bike, payload.odometerReading);
-    return { log, maintenanceTypeName: maintenanceType.name };
+    return { log, maintenanceTypeName: maintenanceType.name, bikeNickname: bike.nickname };
 });
 const getMaintenanceLogsFromDB = (bikeId, userId, query) => __awaiter(void 0, void 0, void 0, function* () {
     yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);

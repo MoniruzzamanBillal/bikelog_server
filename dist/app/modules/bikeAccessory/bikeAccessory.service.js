@@ -20,7 +20,7 @@ const bikeAccessory_constant_1 = require("./bikeAccessory.constant");
 const bikeAccessory_model_1 = require("./bikeAccessory.model");
 const cloudinary_1 = require("../../util/cloudinary");
 const createBikeAccessoryIntoDB = (bikeId, userId, payload) => __awaiter(void 0, void 0, void 0, function* () {
-    yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
+    const bike = yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
     if (payload.status === bikeAccessory_constant_1.AccessoryStatus.purchased && !payload.price) {
         throw new AppError_1.default(http_status_1.default.BAD_REQUEST, "Price is required when marking an accessory as purchased");
     }
@@ -28,7 +28,7 @@ const createBikeAccessoryIntoDB = (bikeId, userId, payload) => __awaiter(void 0,
         ? { purchaseDate: new Date() }
         : {}));
     const accessory = yield bikeAccessory_model_1.bikeAccessoryModel.create(accessoryData);
-    return accessory;
+    return { accessory, bikeNickname: bike.nickname };
 });
 const getBikeAccessoriesFromDB = (bikeId, userId, query) => __awaiter(void 0, void 0, void 0, function* () {
     yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
@@ -84,7 +84,7 @@ const getBikeAccessoryByIdFromDB = (bikeId, userId, id) => __awaiter(void 0, voi
 });
 const updateBikeAccessoryInDB = (bikeId, userId, id, payload) => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b;
-    yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
+    const bike = yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
     const accessory = yield bikeAccessory_model_1.bikeAccessoryModel.findOne({
         _id: id,
         bike: bikeId,
@@ -115,7 +115,7 @@ const updateBikeAccessoryInDB = (bikeId, userId, id, payload) => __awaiter(void 
     }
     Object.assign(accessory, updateData);
     yield accessory.save();
-    return { accessory, justPurchased };
+    return { accessory, justPurchased, bikeNickname: bike.nickname };
 });
 const deleteBikeAccessoryFromDB = (bikeId, userId, id) => __awaiter(void 0, void 0, void 0, function* () {
     yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);

@@ -95,7 +95,7 @@ const createFuelLogIntoDB = (bikeId, userId, payload) => __awaiter(void 0, void 
             fuelLogIds,
         });
     }
-    return { fuelLog, mileageRecordClosed };
+    return { fuelLog, mileageRecordClosed, bikeNickname: bike.nickname };
 });
 const getFuelLogsFromDB = (bikeId, userId, query) => __awaiter(void 0, void 0, void 0, function* () {
     yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);

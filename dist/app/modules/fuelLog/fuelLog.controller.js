@@ -17,16 +17,18 @@ const http_status_1 = __importDefault(require("http-status"));
 const catchAsync_1 = __importDefault(require("../../util/catchAsync"));
 const sendResponse_1 = __importDefault(require("../../util/sendResponse"));
 const expenseTrackerClient_1 = require("../../util/expenseTrackerClient");
+const transactionRequestSummary_1 = require("../../util/transactionRequestSummary");
 const fuelLog_service_1 = require("./fuelLog.service");
 const createFuelLog = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { fuelLog, mileageRecordClosed } = yield fuelLog_service_1.fuelLogServices.createFuelLogIntoDB(req.params.bikeId, req.user.userId, req.body);
+    const { fuelLog, mileageRecordClosed, bikeNickname } = yield fuelLog_service_1.fuelLogServices.createFuelLogIntoDB(req.params.bikeId, req.user.userId, req.body);
+    const { title, description } = (0, transactionRequestSummary_1.buildFuelLogSummary)(fuelLog, bikeNickname);
     (0, expenseTrackerClient_1.notifyExpenseTracker)({
         sourceType: "fuel",
         sourceRecordId: String(fuelLog._id),
         userEmail: req.user.userEmail,
         userId: req.user.userId,
-        title: `Fuel: ${fuelLog.fuelStation || "Fuel top-up"}`,
-        description: fuelLog.notes,
+        title,
+        description,
         amount: fuelLog.totalCost,
         occurredAt: fuelLog.date,
     });

@@ -11,7 +11,7 @@ const createBikeAccessoryIntoDB = async (
   userId: string,
   payload: Partial<TBikeAccessory>,
 ) => {
-  await findOwnedBikeOrThrow(bikeId, userId);
+  const bike = await findOwnedBikeOrThrow(bikeId, userId);
 
   if (payload.status === AccessoryStatus.purchased && !payload.price) {
     throw new AppError(
@@ -30,7 +30,7 @@ const createBikeAccessoryIntoDB = async (
 
   const accessory = await bikeAccessoryModel.create(accessoryData);
 
-  return accessory;
+  return { accessory, bikeNickname: bike.nickname };
 };
 
 const getBikeAccessoriesFromDB = async (
@@ -125,7 +125,7 @@ const updateBikeAccessoryInDB = async (
   id: string,
   payload: Partial<TBikeAccessory>,
 ) => {
-  await findOwnedBikeOrThrow(bikeId, userId);
+  const bike = await findOwnedBikeOrThrow(bikeId, userId);
 
   const accessory = await bikeAccessoryModel.findOne({
     _id: id,
@@ -175,7 +175,7 @@ const updateBikeAccessoryInDB = async (
   Object.assign(accessory, updateData);
   await accessory.save();
 
-  return { accessory, justPurchased };
+  return { accessory, justPurchased, bikeNickname: bike.nickname };
 };
 
 const deleteBikeAccessoryFromDB = async (

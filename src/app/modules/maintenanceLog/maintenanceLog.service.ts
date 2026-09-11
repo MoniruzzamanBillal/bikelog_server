@@ -47,7 +47,7 @@ const createMaintenanceLogIntoDB = async (
 
   await bumpOdometerIfHigher(bike, payload.odometerReading!);
 
-  return { log, maintenanceTypeName: maintenanceType.name };
+  return { log, maintenanceTypeName: maintenanceType.name, bikeNickname: bike.nickname };
 };
 
 const getMaintenanceLogsFromDB = async (
