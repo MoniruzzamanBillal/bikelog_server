@@ -1,7 +1,28 @@
-import { model, Schema } from "mongoose";
-import { TMaintenanceLog } from "./maintenanceLog.interface";
+import { model, Schema, ObjectId } from "mongoose";
+import { TCloudinaryImage } from "../../interface/image.interface";
 
-const maintenanceLogSchema = new Schema<TMaintenanceLog>(
+// Full Mongoose-document shape, kept separate from the Prisma-era
+// `TMaintenanceLog` (create-payload only, see maintenanceLog.interface.ts)
+// since this model must keep compiling until Phase 7 rewrites
+// spending.service.ts/ai.service.ts's still-Mongo direct imports.
+type TMaintenanceLogFields = {
+  bike: ObjectId;
+  maintenanceType: ObjectId;
+  odometerReading: number;
+  oilType?: ObjectId;
+  intervalKmUsed?: number;
+  nextDueOdometer?: number;
+  nextDueDate?: Date;
+  cost: number;
+  serviceDate: Date;
+  serviceCenter?: string;
+  partsReplaced?: string[];
+  notes?: string;
+  serviceImage?: TCloudinaryImage;
+  isDeleted: boolean;
+};
+
+const maintenanceLogSchema = new Schema<TMaintenanceLogFields>(
   {
     bike: {
       type: Schema.Types.ObjectId,
@@ -77,7 +98,7 @@ maintenanceLogSchema.pre("findOne", async function (next) {
 });
 
 //
-export const maintenanceLogModel = model<TMaintenanceLog>(
+export const maintenanceLogModel = model<TMaintenanceLogFields>(
   "MaintenanceLog",
   maintenanceLogSchema,
 );

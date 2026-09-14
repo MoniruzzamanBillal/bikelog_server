@@ -1,12 +1,33 @@
+import { Prisma } from "@prisma/client";
 import httpStatus from "http-status";
 import AppError from "../../Error/AppError";
-import QueryBuilder from "../../builder/Queryuilder";
+import { prisma } from "../../lib/prisma";
+import { generateObjectId } from "../../util/generateObjectId";
+import { buildPrismaListQuery } from "../../builder/buildPrismaListQuery";
 import { findOwnedBikeOrThrow, bumpOdometerIfHigher } from "../bike/bike.utils";
-import { maintenanceTypeModel } from "../maintenanceType/maintenanceType.model";
-import { engineOilTypeModel } from "../engineOilType/engineOilType.model";
-import { maintenanceLogModel } from "./maintenanceLog.model";
 import { TMaintenanceLog } from "./maintenanceLog.interface";
 import { deleteCloudinaryImage } from "../../util/cloudinary";
+
+// every returned maintenance log gets three FK renames (not just _id/bike — spec 34
+// decision A) plus Decimal->Number conversion for cost
+const toApiShape = <
+  T extends {
+    id: string;
+    bikeId: string;
+    maintenanceTypeId: string;
+    oilTypeId: string | null;
+    cost: unknown;
+  },
+>(
+  log: T,
+) => ({
+  ...log,
+  _id: log.id,
+  bike: log.bikeId,
+  maintenanceType: log.maintenanceTypeId,
+  oilType: log.oilTypeId,
+  cost: Number(log.cost),
+});
 
 const computeNextDueOdometer = (odometerReading: number, intervalKmUsed: number): number => {
   return odometerReading + intervalKmUsed;
@@ -19,13 +40,17 @@ const createMaintenanceLogIntoDB = async (
 ) => {
   const bike = await findOwnedBikeOrThrow(bikeId, userId);
 
-  const maintenanceType = await maintenanceTypeModel.findById(payload.maintenanceType);
+  const maintenanceType = await prisma.maintenanceType.findUnique({
+    where: { id: payload.maintenanceType },
+  });
   if (!maintenanceType) {
     throw new AppError(httpStatus.NOT_FOUND, "Maintenance type not found");
   }
 
   if (payload.oilType) {
-    const oilType = await engineOilTypeModel.findById(payload.oilType);
+    const oilType = await prisma.engineOilType.findUnique({
+      where: { id: payload.oilType },
+    });
     if (!oilType) {
       throw new AppError(httpStatus.NOT_FOUND, "Engine oil type not found");
     }
@@ -36,18 +61,31 @@ const createMaintenanceLogIntoDB = async (
       ? computeNextDueOdometer(payload.odometerReading!, payload.intervalKmUsed)
       : undefined;
 
-  const logData = {
-    ...payload,
-    bike: bikeId,
-    nextDueOdometer,
-    serviceDate: payload.serviceDate ?? new Date(),
-  };
-
-  const log = await maintenanceLogModel.create(logData);
+  const log = await prisma.maintenanceLog.create({
+    data: {
+      id: generateObjectId(),
+      bikeId,
+      maintenanceTypeId: payload.maintenanceType as string,
+      oilTypeId: payload.oilType,
+      odometerReading: payload.odometerReading as number,
+      intervalKmUsed: payload.intervalKmUsed,
+      nextDueOdometer,
+      nextDueDate: payload.nextDueDate,
+      cost: payload.cost as number,
+      serviceDate: payload.serviceDate ?? new Date(),
+      serviceCenter: payload.serviceCenter,
+      partsReplaced: payload.partsReplaced ?? [],
+      notes: payload.notes,
+    },
+  });
 
   await bumpOdometerIfHigher(bike, payload.odometerReading!);
 
-  return { log, maintenanceTypeName: maintenanceType.name, bikeNickname: bike.nickname };
+  return {
+    log: toApiShape(log),
+    maintenanceTypeName: maintenanceType.name,
+    bikeNickname: bike.nickname,
+  };
 };
 
 const getMaintenanceLogsFromDB = async (
@@ -57,42 +95,39 @@ const getMaintenanceLogsFromDB = async (
 ) => {
   await findOwnedBikeOrThrow(bikeId, userId);
 
-  // ! strip client-controlled "bike"/"isDeleted" keys before they reach QueryBuilder.filter() —
-  // ! its .find(queryObj) call merges into the query and a later key wins, so an unsanitized
+  // ! strip client-controlled "bike"/"isDeleted" keys before they reach buildPrismaListQuery —
+  // ! it merges whatever's left in query as equality filters, and an unsanitized
   // ! `?bike=<otherBikeId>` would silently override the ownership-scoped filter below
   const sanitizedQuery = { ...query };
   delete sanitizedQuery.bike;
   delete sanitizedQuery.isDeleted;
 
-  const logsQuery = new QueryBuilder(
-    maintenanceLogModel.find({ bike: bikeId, isDeleted: false }),
-    sanitizedQuery,
-  )
-    .filter()
-    .sort("-serviceDate")
-    .pagination()
-    .field();
+  const { where, orderBy, skip, take } = buildPrismaListQuery({
+    baseWhere: { bikeId, isDeleted: false },
+    query: sanitizedQuery,
+    defaultSort: "-serviceDate",
+  });
 
-  const result = await logsQuery.queryModel;
-  const meta = await logsQuery.countTotal();
+  const [result, meta] = await Promise.all([
+    prisma.maintenanceLog.findMany({ where, orderBy, skip, take }),
+    prisma.maintenanceLog.count({ where }),
+  ]);
 
-  return { result, meta };
+  return { result: result.map(toApiShape), meta };
 };
 
 const getMaintenanceLogByIdFromDB = async (bikeId: string, userId: string, id: string) => {
   await findOwnedBikeOrThrow(bikeId, userId);
 
-  const log = await maintenanceLogModel.findOne({
-    _id: id,
-    bike: bikeId,
-    isDeleted: false,
+  const log = await prisma.maintenanceLog.findFirst({
+    where: { id, bikeId, isDeleted: false },
   });
 
   if (!log) {
     throw new AppError(httpStatus.NOT_FOUND, "Maintenance log not found");
   }
 
-  return log;
+  return toApiShape(log);
 };
 
 const updateMaintenanceLogInDB = async (
@@ -103,10 +138,8 @@ const updateMaintenanceLogInDB = async (
 ) => {
   await findOwnedBikeOrThrow(bikeId, userId);
 
-  const log = await maintenanceLogModel.findOne({
-    _id: id,
-    bike: bikeId,
-    isDeleted: false,
+  const log = await prisma.maintenanceLog.findFirst({
+    where: { id, bikeId, isDeleted: false },
   });
 
   if (!log) {
@@ -114,74 +147,92 @@ const updateMaintenanceLogInDB = async (
   }
 
   if (payload.maintenanceType) {
-    const maintenanceType = await maintenanceTypeModel.findById(payload.maintenanceType);
+    const maintenanceType = await prisma.maintenanceType.findUnique({
+      where: { id: payload.maintenanceType },
+    });
     if (!maintenanceType) {
       throw new AppError(httpStatus.NOT_FOUND, "Maintenance type not found");
     }
   }
 
   if (payload.oilType) {
-    const oilType = await engineOilTypeModel.findById(payload.oilType);
+    const oilType = await prisma.engineOilType.findUnique({
+      where: { id: payload.oilType },
+    });
     if (!oilType) {
       throw new AppError(httpStatus.NOT_FOUND, "Engine oil type not found");
     }
   }
 
-  const updateData = { ...payload };
+  const updateData: Record<string, unknown> = { ...payload };
   delete updateData.nextDueOdometer;
+  // ! client sends maintenanceType/oilType (plain id strings) — the Prisma column
+  // ! names are maintenanceTypeId/oilTypeId, remap before handing off to update()
+  if ("maintenanceType" in updateData) {
+    updateData.maintenanceTypeId = updateData.maintenanceType;
+    delete updateData.maintenanceType;
+  }
+  if ("oilType" in updateData) {
+    updateData.oilTypeId = updateData.oilType;
+    delete updateData.oilType;
+  }
 
-  const newOdometer = updateData.odometerReading ?? log.odometerReading;
-  const newInterval = updateData.intervalKmUsed ?? log.intervalKmUsed;
+  const newOdometer = payload.odometerReading ?? log.odometerReading;
+  const newInterval = payload.intervalKmUsed ?? log.intervalKmUsed ?? undefined;
   if (
-    (updateData.odometerReading !== undefined || updateData.intervalKmUsed !== undefined) &&
+    (payload.odometerReading !== undefined || payload.intervalKmUsed !== undefined) &&
     newInterval !== undefined
   ) {
     updateData.nextDueOdometer = computeNextDueOdometer(newOdometer, newInterval);
   }
 
-  Object.assign(log, updateData);
-  await log.save();
+  const updated = await prisma.maintenanceLog.update({
+    where: { id: log.id },
+    data: updateData,
+  });
 
-  return log;
+  return toApiShape(updated);
 };
 
 const deleteMaintenanceLogFromDB = async (bikeId: string, userId: string, id: string) => {
   await findOwnedBikeOrThrow(bikeId, userId);
 
-  const log = await maintenanceLogModel.findOne({
-    _id: id,
-    bike: bikeId,
-    isDeleted: false,
+  const log = await prisma.maintenanceLog.findFirst({
+    where: { id, bikeId, isDeleted: false },
   });
 
   if (!log) {
     throw new AppError(httpStatus.NOT_FOUND, "Maintenance log not found");
   }
 
-  log.isDeleted = true;
-  await log.save();
+  const updated = await prisma.maintenanceLog.update({
+    where: { id: log.id },
+    data: { isDeleted: true },
+  });
 
-  return log;
+  return toApiShape(updated);
 };
 
 const getRemindersFromDB = async (bikeId: string, userId: string) => {
   const bike = await findOwnedBikeOrThrow(bikeId, userId);
 
-  const logs = await maintenanceLogModel
-    .find({ bike: bikeId, isDeleted: false })
-    .sort({ serviceDate: -1 })
-    .lean();
+  const logs = await prisma.maintenanceLog.findMany({
+    where: { bikeId, isDeleted: false },
+    orderBy: { serviceDate: "desc" },
+  });
 
-  const latestPerType = new Map<string, typeof logs[0]>();
+  // ! log.maintenanceTypeId is already a plain string off a Prisma row — no .toString()
+  // ! coercion needed (that was only ever undoing a Mongoose ObjectId)
+  const latestPerType = new Map<string, (typeof logs)[0]>();
   for (const log of logs) {
-    const key = log.maintenanceType.toString();
+    const key = log.maintenanceTypeId;
     if (!latestPerType.has(key)) {
       latestPerType.set(key, log);
     }
   }
 
   const reminders: Array<{
-    maintenanceType: typeof logs[0]["maintenanceType"];
+    maintenanceType: string;
     lastServiceDate: Date;
     lastOdometerReading: number;
     nextDueOdometer?: number;
@@ -195,7 +246,7 @@ const getRemindersFromDB = async (bikeId: string, userId: string) => {
     let status: "overdue" | "upcoming" | null = null;
     let kmRemaining: number | undefined;
 
-    if (log.nextDueOdometer !== undefined) {
+    if (log.nextDueOdometer !== null) {
       kmRemaining = log.nextDueOdometer - bike.currentOdometer;
       const kmOverdue = kmRemaining <= 0;
       const kmUpcoming = !kmOverdue && kmRemaining <= 50;
@@ -224,7 +275,7 @@ const getRemindersFromDB = async (bikeId: string, userId: string) => {
 
     if (status) {
       const reminder: {
-        maintenanceType: typeof logs[0]["maintenanceType"];
+        maintenanceType: string;
         lastServiceDate: Date;
         lastOdometerReading: number;
         nextDueOdometer?: number;
@@ -233,13 +284,15 @@ const getRemindersFromDB = async (bikeId: string, userId: string) => {
         kmRemaining?: number;
         daysRemaining?: number;
       } = {
-        maintenanceType: log.maintenanceType,
+        // ! same pre-existing shape as before the migration (a bare id string, not the
+        // ! { _id, name } object the client type declares) — port verbatim, see spec 34 §E
+        maintenanceType: log.maintenanceTypeId,
         lastServiceDate: log.serviceDate,
         lastOdometerReading: log.odometerReading,
         status,
       };
 
-      if (log.nextDueOdometer !== undefined) {
+      if (log.nextDueOdometer !== null) {
         reminder.nextDueOdometer = log.nextDueOdometer;
         reminder.kmRemaining = Math.max(0, kmRemaining!);
       }
@@ -268,24 +321,29 @@ const uploadMaintenanceLogImageIntoDB = async (
     throw new AppError(httpStatus.BAD_REQUEST, "Image file is required");
   }
 
-  const log = await maintenanceLogModel.findOne({
-    _id: id,
-    bike: bikeId,
-    isDeleted: false,
+  const log = await prisma.maintenanceLog.findFirst({
+    where: { id, bikeId, isDeleted: false },
   });
 
   if (!log) {
     throw new AppError(httpStatus.NOT_FOUND, "Maintenance log not found");
   }
 
-  if (log.serviceImage) {
-    await deleteCloudinaryImage(log.serviceImage.publicId);
+  const existingServiceImage = log.serviceImage as {
+    url: string;
+    publicId: string;
+  } | null;
+
+  if (existingServiceImage) {
+    await deleteCloudinaryImage(existingServiceImage.publicId);
   }
 
-  log.serviceImage = { url: file.path, publicId: file.filename };
-  await log.save();
+  const updated = await prisma.maintenanceLog.update({
+    where: { id: log.id },
+    data: { serviceImage: { url: file.path, publicId: file.filename } },
+  });
 
-  return log;
+  return toApiShape(updated);
 };
 
 const deleteMaintenanceLogImageFromDB = async (
@@ -295,26 +353,31 @@ const deleteMaintenanceLogImageFromDB = async (
 ) => {
   await findOwnedBikeOrThrow(bikeId, userId);
 
-  const log = await maintenanceLogModel.findOne({
-    _id: id,
-    bike: bikeId,
-    isDeleted: false,
+  const log = await prisma.maintenanceLog.findFirst({
+    where: { id, bikeId, isDeleted: false },
   });
 
   if (!log) {
     throw new AppError(httpStatus.NOT_FOUND, "Maintenance log not found");
   }
 
-  if (!log.serviceImage) {
+  const existingServiceImage = log.serviceImage as {
+    url: string;
+    publicId: string;
+  } | null;
+
+  if (!existingServiceImage) {
     throw new AppError(httpStatus.NOT_FOUND, "Service image not found");
   }
 
-  await deleteCloudinaryImage(log.serviceImage.publicId);
+  await deleteCloudinaryImage(existingServiceImage.publicId);
 
-  log.serviceImage = undefined;
-  await log.save();
+  const updated = await prisma.maintenanceLog.update({
+    where: { id: log.id },
+    data: { serviceImage: Prisma.JsonNull },
+  });
 
-  return log;
+  return toApiShape(updated);
 };
 
 export const maintenanceLogServices = {
