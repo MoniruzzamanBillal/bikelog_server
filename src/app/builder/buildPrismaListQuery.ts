@@ -26,11 +26,18 @@ export const buildPrismaListQuery = ({
   );
 
   const sortStr = (query.sort as string) || defaultSort;
-  const orderBy = sortStr.split(",").map((field) =>
-    field.startsWith("-")
-      ? { [field.slice(1)]: "desc" as const }
-      : { [field]: "asc" as const },
-  );
+  // ! split on comma OR whitespace — some callers pass a space-separated multi-field
+  // ! Mongoose-style sort string (e.g. "status -dateReported") as their defaultSort, which a
+  // ! comma-only split would parse as one garbage field name. Whitespace-splitting a
+  // ! comma-separated string with no spaces is a no-op, so existing callers are unaffected.
+  const orderBy = sortStr
+    .trim()
+    .split(/[\s,]+/)
+    .map((field) =>
+      field.startsWith("-")
+        ? { [field.slice(1)]: "desc" as const }
+        : { [field]: "asc" as const },
+    );
 
   const limit = Number(query.limit) || 10;
   const page = Number(query.page) || 1;

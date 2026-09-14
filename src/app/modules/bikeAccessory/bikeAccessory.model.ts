@@ -1,8 +1,28 @@
-import { model, Schema } from "mongoose";
-import { AccessoryStatus, AccessoryUrgency } from "./bikeAccessory.constant";
-import { TBikeAccessory } from "./bikeAccessory.interface";
+import { model, Schema, ObjectId } from "mongoose";
+import {
+  AccessoryStatus,
+  AccessoryUrgency,
+  TAccessoryStatus,
+  TAccessoryUrgency,
+} from "./bikeAccessory.constant";
+import { TCloudinaryImage } from "../../interface/image.interface";
 
-const bikeAccessorySchema = new Schema<TBikeAccessory>(
+// Full Mongoose-document shape, kept separate from the Prisma-era
+// `TBikeAccessory` (create-payload only, see bikeAccessory.interface.ts)
+// since this model must keep compiling until Phase 7 rewrites
+// spending.service.ts's still-Mongo direct import.
+type TBikeAccessoryFields = {
+  bike: ObjectId;
+  name: string;
+  urgency: TAccessoryUrgency;
+  status: TAccessoryStatus;
+  price?: number;
+  purchaseDate?: Date;
+  productImage?: TCloudinaryImage;
+  isDeleted: boolean;
+};
+
+const bikeAccessorySchema = new Schema<TBikeAccessoryFields>(
   {
     bike: {
       type: Schema.Types.ObjectId,
@@ -58,7 +78,7 @@ bikeAccessorySchema.pre("findOne", async function (next) {
 });
 
 //
-export const bikeAccessoryModel = model<TBikeAccessory>(
+export const bikeAccessoryModel = model<TBikeAccessoryFields>(
   "BikeAccessory",
   bikeAccessorySchema,
 );

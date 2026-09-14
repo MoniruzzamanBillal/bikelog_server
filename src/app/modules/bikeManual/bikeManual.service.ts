@@ -1,9 +1,10 @@
 import httpStatus from "http-status";
 import pdfParse from "pdf-parse";
 import AppError from "../../Error/AppError";
+import { prisma } from "../../lib/prisma";
+import { generateObjectId } from "../../util/generateObjectId";
 import { findOwnedBikeOrThrow, updateBikeManual } from "../bike/bike.utils";
 import { deleteCloudinaryImage, uploadRawBuffer } from "../../util/cloudinary";
-import { bikeManualChunkModel } from "./bikeManual.model";
 import { chunkManualText, scoreAndRankChunks } from "./bikeManual.utils";
 import { TBikeManualMeta } from "./bikeManual.interface";
 
@@ -37,18 +38,19 @@ const uploadBikeManualIntoDB = async (
   // ! replace case — delete old asset + chunks before uploading/inserting the new ones
   if (existingManual) {
     await deleteCloudinaryImage(existingManual.publicId, "raw");
-    await bikeManualChunkModel.deleteMany({ bike: bikeId });
+    await prisma.bikeManualChunk.deleteMany({ where: { bikeId } });
   }
 
   const { url, publicId } = await uploadRawBuffer(file.buffer, file.originalname);
 
-  await bikeManualChunkModel.insertMany(
-    chunkTexts.map((chunkText, chunkIndex) => ({
-      bike: bikeId,
+  await prisma.bikeManualChunk.createMany({
+    data: chunkTexts.map((chunkText, chunkIndex) => ({
+      id: generateObjectId(),
+      bikeId,
       chunkIndex,
       chunkText,
     })),
-  );
+  });
 
   const manual: TBikeManualMeta = {
     url,
@@ -82,7 +84,7 @@ const deleteBikeManualFromDB = async (bikeId: string, userId: string) => {
   }
 
   await deleteCloudinaryImage(manual.publicId, "raw");
-  await bikeManualChunkModel.deleteMany({ bike: bikeId });
+  await prisma.bikeManualChunk.deleteMany({ where: { bikeId } });
 
   await updateBikeManual(bikeId, null);
 
@@ -95,10 +97,10 @@ const getRelevantManualChunksForChat = async (
   question: string,
   topK: number,
 ) => {
-  const chunks = await bikeManualChunkModel
-    .find({ bike: bikeId })
-    .select("chunkIndex chunkText")
-    .lean();
+  const chunks = await prisma.bikeManualChunk.findMany({
+    where: { bikeId },
+    select: { chunkIndex: true, chunkText: true },
+  });
 
   return scoreAndRankChunks(chunks, question, topK);
 };
