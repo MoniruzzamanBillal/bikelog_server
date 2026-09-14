@@ -1,7 +1,5 @@
-import { ObjectId } from "mongoose";
-
 export type TMileageRecord = {
-  bike: ObjectId;
+  bikeId: string;
   startOdometer: number;
   endOdometer: number;
   distanceKm: number;
@@ -9,5 +7,5 @@ export type TMileageRecord = {
   mileageKmPerLiter: number;
   periodStartDate: Date;
   periodEndDate: Date;
-  fuelLogIds: ObjectId[];
+  fuelLogIds: string[];
 };

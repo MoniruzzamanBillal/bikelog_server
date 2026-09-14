@@ -1,11 +1,31 @@
+import { Prisma } from "@prisma/client";
 import { TFuelLog } from "./fuelLog.interface";
-import { fuelLogModel } from "./fuelLog.model";
-import { mileageRecordModel } from "../mileageRecord/mileageRecord.model";
 import httpStatus from "http-status";
 import AppError from "../../Error/AppError";
-import QueryBuilder from "../../builder/Queryuilder";
+import { prisma } from "../../lib/prisma";
+import { generateObjectId } from "../../util/generateObjectId";
+import { buildPrismaListQuery } from "../../builder/buildPrismaListQuery";
 import { findOwnedBikeOrThrow, bumpOdometerIfHigher } from "../bike/bike.utils";
 import { deleteCloudinaryImage } from "../../util/cloudinary";
+
+// every returned fuel log gets the _id/bike remap (spec 31/32 precedent) plus
+// Decimal->Number conversion for pricePerLiter/totalCost (top-level plan decision #6)
+const toApiShape = <
+  T extends {
+    id: string;
+    bikeId: string;
+    pricePerLiter: unknown;
+    totalCost: unknown;
+  },
+>(
+  fuelLog: T,
+) => ({
+  ...fuelLog,
+  _id: fuelLog.id,
+  bike: fuelLog.bikeId,
+  pricePerLiter: Number(fuelLog.pricePerLiter),
+  totalCost: Number(fuelLog.totalCost),
+});
 
 const createFuelLogIntoDB = async (
   bikeId: string,
@@ -25,29 +45,35 @@ const createFuelLogIntoDB = async (
 
   const totalCost = (payload.litersAdded ?? 0) * (payload.pricePerLiter ?? 0);
 
-  const fuelLogData = {
-    ...payload,
-    bike: bikeId,
-    totalCost,
-    date,
-  };
-
-  const fuelLog = await fuelLogModel.create(fuelLogData);
+  const fuelLog = await prisma.fuelLog.create({
+    data: {
+      id: generateObjectId(),
+      bikeId,
+      odometerReading: payload.odometerReading as number,
+      litersAdded: payload.litersAdded as number,
+      isFullTank: payload.isFullTank as boolean,
+      pricePerLiter: payload.pricePerLiter as number,
+      totalCost,
+      fuelStation: payload.fuelStation,
+      date,
+      notes: payload.notes,
+    },
+  });
 
   await bumpOdometerIfHigher(bike, fuelLog.odometerReading);
 
   let mileageRecordClosed = null;
 
   if (fuelLog.isFullTank) {
-    const previousFullTank = await fuelLogModel
-      .findOne({
-        bike: bikeId,
+    const previousFullTank = await prisma.fuelLog.findFirst({
+      where: {
+        bikeId,
         isFullTank: true,
-        date: { $lt: fuelLog.date },
+        date: { lt: fuelLog.date },
         isDeleted: false,
-      })
-      .sort({ date: -1 })
-      .lean();
+      },
+      orderBy: { date: "desc" },
+    });
 
     let periodStartOdometer: number;
     let periodStartDate: Date | null;
@@ -69,18 +95,18 @@ const createFuelLogIntoDB = async (
       periodStartDate = null;
     }
 
-    const periodFuelLogs = await fuelLogModel
-      .find({
-        bike: bikeId,
-        // ! $gt, not $gte — periodStartDate is the PREVIOUS closing full-tank fill's date;
+    const periodFuelLogs = await prisma.fuelLog.findMany({
+      where: {
+        bikeId,
+        // ! gt, not gte — periodStartDate is the PREVIOUS closing full-tank fill's date;
         // ! its liters already belong to the prior period and must not be double-counted here
         date: periodStartDate
-          ? { $gt: periodStartDate, $lte: fuelLog.date }
-          : { $lte: fuelLog.date },
+          ? { gt: periodStartDate, lte: fuelLog.date }
+          : { lte: fuelLog.date },
         isDeleted: false,
-      })
-      .sort({ date: 1 })
-      .lean();
+      },
+      orderBy: { date: "asc" },
+    });
 
     const litersConsumed = periodFuelLogs.reduce(
       (sum, log) => sum + log.litersAdded,
@@ -91,29 +117,39 @@ const createFuelLogIntoDB = async (
     const mileageKmPerLiter =
       litersConsumed > 0 ? distanceKm / litersConsumed : 0;
 
-    const fuelLogIds = periodFuelLogs.map((log) => log._id);
+    const fuelLogIds = periodFuelLogs.map((log) => log.id);
 
     // ! for the first-ever period, derive the displayed start from the earliest fuel log
     // ! actually in it — reflects real fuel-log history instead of the bike's own creation
     // ! moment. periodFuelLogs[0] can't actually be undefined here (the just-created
-    // ! fuelLog always satisfies its own $lte bound), the createdAt fallback is defensive only.
+    // ! fuelLog always satisfies its own lte bound), the createdAt fallback is defensive only.
     const resolvedPeriodStartDate =
       periodStartDate ?? periodFuelLogs[0]?.date ?? bike.createdAt;
 
-    mileageRecordClosed = await mileageRecordModel.create({
-      bike: bikeId,
-      startOdometer: periodStartOdometer,
-      endOdometer: fuelLog.odometerReading,
-      distanceKm,
-      litersConsumed,
-      mileageKmPerLiter,
-      periodStartDate: resolvedPeriodStartDate,
-      periodEndDate: fuelLog.date,
-      fuelLogIds,
+    mileageRecordClosed = await prisma.mileageRecord.create({
+      data: {
+        id: generateObjectId(),
+        bikeId,
+        startOdometer: periodStartOdometer,
+        endOdometer: fuelLog.odometerReading,
+        distanceKm,
+        litersConsumed,
+        mileageKmPerLiter,
+        periodStartDate: resolvedPeriodStartDate,
+        periodEndDate: fuelLog.date,
+        fuelLogIds,
+      },
     });
   }
 
-  return { fuelLog, mileageRecordClosed, bikeNickname: bike.nickname };
+  return {
+    fuelLog: toApiShape(fuelLog),
+    // ! both clients require TMileageRecordClosed.bike: string alongside _id (spec 33 decision A)
+    mileageRecordClosed: mileageRecordClosed
+      ? { ...mileageRecordClosed, _id: mileageRecordClosed.id, bike: mileageRecordClosed.bikeId }
+      : null,
+    bikeNickname: bike.nickname,
+  };
 };
 
 const getFuelLogsFromDB = async (
@@ -123,42 +159,39 @@ const getFuelLogsFromDB = async (
 ) => {
   await findOwnedBikeOrThrow(bikeId, userId);
 
-  // ! strip client-controlled "bike"/"isDeleted" keys before they reach QueryBuilder.filter() —
-  // ! its .find(queryObj) call merges into the query and a later key wins, so an unsanitized
-  // ! `?bike=<otherBikeId>` would silently override the ownership-scoped filter below
+  // ! strip client-controlled "bike"/"isDeleted" keys before they reach buildPrismaListQuery —
+  // ! it merges whatever's left in query as equality filters, and an unsanitized `?bike=<otherBikeId>`
+  // ! would silently override the ownership-scoped filter below
   const sanitizedQuery = { ...query };
   delete sanitizedQuery.bike;
   delete sanitizedQuery.isDeleted;
 
-  const fuelLogsQuery = new QueryBuilder(
-    fuelLogModel.find({ bike: bikeId, isDeleted: false }),
-    sanitizedQuery,
-  )
-    .filter()
-    .sort("-date")
-    .pagination()
-    .field();
+  const { where, orderBy, skip, take } = buildPrismaListQuery({
+    baseWhere: { bikeId, isDeleted: false },
+    query: sanitizedQuery,
+    defaultSort: "-date",
+  });
 
-  const result = await fuelLogsQuery.queryModel;
-  const meta = await fuelLogsQuery.countTotal();
+  const [result, meta] = await Promise.all([
+    prisma.fuelLog.findMany({ where, orderBy, skip, take }),
+    prisma.fuelLog.count({ where }),
+  ]);
 
-  return { result, meta };
+  return { result: result.map(toApiShape), meta };
 };
 
 const getFuelLogByIdFromDB = async (bikeId: string, userId: string, id: string) => {
   await findOwnedBikeOrThrow(bikeId, userId);
 
-  const fuelLog = await fuelLogModel.findOne({
-    _id: id,
-    bike: bikeId,
-    isDeleted: false,
+  const fuelLog = await prisma.fuelLog.findFirst({
+    where: { id, bikeId, isDeleted: false },
   });
 
   if (!fuelLog) {
     throw new AppError(httpStatus.NOT_FOUND, "Fuel log not found");
   }
 
-  return fuelLog;
+  return toApiShape(fuelLog);
 };
 
 const updateFuelLogInDB = async (
@@ -176,11 +209,11 @@ const updateFuelLogInDB = async (
     );
   }
 
-  const existsInMileageRecord = await mileageRecordModel.exists({
-    fuelLogIds: id,
+  const isLocked = await prisma.mileageRecord.findFirst({
+    where: { fuelLogIds: { has: id } },
   });
 
-  if (existsInMileageRecord) {
+  if (isLocked) {
     throw new AppError(
       httpStatus.CONFLICT,
       "This fuel log is part of a closed mileage record and can't be edited",
@@ -190,53 +223,65 @@ const updateFuelLogInDB = async (
   // ! totalCost is always server-derived — never trust a client-submitted value directly
   delete payload.totalCost;
 
+  const updateData: Record<string, unknown> = { ...payload };
+
   if (payload.litersAdded !== undefined || payload.pricePerLiter !== undefined) {
-    const fuelLog = await fuelLogModel.findOne({ _id: id, bike: bikeId });
-    if (fuelLog) {
-      const newLiters = payload.litersAdded ?? fuelLog.litersAdded;
-      const newPrice = payload.pricePerLiter ?? fuelLog.pricePerLiter;
-      payload.totalCost = newLiters * newPrice;
+    const existing = await prisma.fuelLog.findFirst({
+      where: { id, bikeId },
+    });
+    if (existing) {
+      const newLiters = payload.litersAdded ?? existing.litersAdded;
+      // ! existing.pricePerLiter off a freshly-fetched Prisma row is a Prisma.Decimal
+      // ! instance, not a plain number — multiplying it directly is unreliable, convert first
+      const newPrice = payload.pricePerLiter ?? Number(existing.pricePerLiter);
+      updateData.totalCost = newLiters * newPrice;
     }
   }
 
-  const fuelLog = await fuelLogModel.findOneAndUpdate(
-    { _id: id, bike: bikeId, isDeleted: false },
-    payload,
-    { new: true, runValidators: true },
-  );
+  const fuelLog = await prisma.fuelLog.findFirst({
+    where: { id, bikeId, isDeleted: false },
+  });
 
   if (!fuelLog) {
     throw new AppError(httpStatus.NOT_FOUND, "Fuel log not found");
   }
 
-  return fuelLog;
+  const updated = await prisma.fuelLog.update({
+    where: { id: fuelLog.id },
+    data: updateData,
+  });
+
+  return toApiShape(updated);
 };
 
 const deleteFuelLogFromDB = async (bikeId: string, userId: string, id: string) => {
   await findOwnedBikeOrThrow(bikeId, userId);
 
-  const existsInMileageRecord = await mileageRecordModel.exists({
-    fuelLogIds: id,
+  const isLocked = await prisma.mileageRecord.findFirst({
+    where: { fuelLogIds: { has: id } },
   });
 
-  if (existsInMileageRecord) {
+  if (isLocked) {
     throw new AppError(
       httpStatus.CONFLICT,
       "This fuel log is part of a closed mileage record and can't be deleted",
     );
   }
 
-  const fuelLog = await fuelLogModel.findOneAndUpdate(
-    { _id: id, bike: bikeId, isDeleted: false },
-    { isDeleted: true },
-    { new: true },
-  );
+  const fuelLog = await prisma.fuelLog.findFirst({
+    where: { id, bikeId, isDeleted: false },
+  });
 
   if (!fuelLog) {
     throw new AppError(httpStatus.NOT_FOUND, "Fuel log not found");
   }
 
-  return fuelLog;
+  const updated = await prisma.fuelLog.update({
+    where: { id: fuelLog.id },
+    data: { isDeleted: true },
+  });
+
+  return toApiShape(updated);
 };
 
 const uploadFuelLogImageIntoDB = async (
@@ -251,24 +296,29 @@ const uploadFuelLogImageIntoDB = async (
     throw new AppError(httpStatus.BAD_REQUEST, "Image file is required");
   }
 
-  const fuelLog = await fuelLogModel.findOne({
-    _id: id,
-    bike: bikeId,
-    isDeleted: false,
+  const fuelLog = await prisma.fuelLog.findFirst({
+    where: { id, bikeId, isDeleted: false },
   });
 
   if (!fuelLog) {
     throw new AppError(httpStatus.NOT_FOUND, "Fuel log not found");
   }
 
-  if (fuelLog.receiptImage) {
-    await deleteCloudinaryImage(fuelLog.receiptImage.publicId);
+  const existingReceiptImage = fuelLog.receiptImage as {
+    url: string;
+    publicId: string;
+  } | null;
+
+  if (existingReceiptImage) {
+    await deleteCloudinaryImage(existingReceiptImage.publicId);
   }
 
-  fuelLog.receiptImage = { url: file.path, publicId: file.filename };
-  await fuelLog.save();
+  const updated = await prisma.fuelLog.update({
+    where: { id: fuelLog.id },
+    data: { receiptImage: { url: file.path, publicId: file.filename } },
+  });
 
-  return fuelLog;
+  return toApiShape(updated);
 };
 
 const deleteFuelLogImageFromDB = async (
@@ -278,26 +328,31 @@ const deleteFuelLogImageFromDB = async (
 ) => {
   await findOwnedBikeOrThrow(bikeId, userId);
 
-  const fuelLog = await fuelLogModel.findOne({
-    _id: id,
-    bike: bikeId,
-    isDeleted: false,
+  const fuelLog = await prisma.fuelLog.findFirst({
+    where: { id, bikeId, isDeleted: false },
   });
 
   if (!fuelLog) {
     throw new AppError(httpStatus.NOT_FOUND, "Fuel log not found");
   }
 
-  if (!fuelLog.receiptImage) {
+  const existingReceiptImage = fuelLog.receiptImage as {
+    url: string;
+    publicId: string;
+  } | null;
+
+  if (!existingReceiptImage) {
     throw new AppError(httpStatus.NOT_FOUND, "Receipt image not found");
   }
 
-  await deleteCloudinaryImage(fuelLog.receiptImage.publicId);
+  await deleteCloudinaryImage(existingReceiptImage.publicId);
 
-  fuelLog.receiptImage = undefined;
-  await fuelLog.save();
+  const updated = await prisma.fuelLog.update({
+    where: { id: fuelLog.id },
+    data: { receiptImage: Prisma.JsonNull },
+  });
 
-  return fuelLog;
+  return toApiShape(updated);
 };
 
 export const fuelLogServices = {

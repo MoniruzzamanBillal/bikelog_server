@@ -1,8 +1,25 @@
-import { model, Schema } from "mongoose";
-import { TMileageRecord } from "./mileageRecord.interface";
+import { model, Schema, ObjectId } from "mongoose";
+
+// Full Mongoose-document shape, kept separate from the Prisma-era
+// `TMileageRecord` (see mileageRecord.interface.ts). Nothing imports
+// mileageRecordModel outside this file after this phase's rewrite, but the
+// file itself must still compile independently (tsc builds every file under
+// src/, not just imported ones) — kept in place per spec 33's explicit
+// "do not delete" instruction rather than removed as dead code.
+type TMileageRecordFields = {
+  bike: ObjectId;
+  startOdometer: number;
+  endOdometer: number;
+  distanceKm: number;
+  litersConsumed: number;
+  mileageKmPerLiter: number;
+  periodStartDate: Date;
+  periodEndDate: Date;
+  fuelLogIds: ObjectId[];
+};
 
 // ! no soft delete here — MileageRecord is derived/auto-generated from FuelLog closures, not directly user-managed
-const mileageRecordSchema = new Schema<TMileageRecord>(
+const mileageRecordSchema = new Schema<TMileageRecordFields>(
   {
     bike: {
       type: Schema.Types.ObjectId,
@@ -48,7 +65,7 @@ const mileageRecordSchema = new Schema<TMileageRecord>(
 );
 
 //
-export const mileageRecordModel = model<TMileageRecord>(
+export const mileageRecordModel = model<TMileageRecordFields>(
   "MileageRecord",
   mileageRecordSchema,
 );
