@@ -43,6 +43,13 @@ Tracks work items defined in `context/specs/`. Update the moment implementation 
 | [`28-maintenance-log-optional-service-interval.md`](specs/28-maintenance-log-optional-service-interval.md)   | Complete    |
 | [`29-push-notification-delivery-diagnostics.md`](specs/29-push-notification-delivery-diagnostics.md)         | Complete    |
 | [`30-sync-spend-logs-to-expense-tracker.md`](specs/30-sync-spend-logs-to-expense-tracker.md)                 | Complete    |
+| [`31-postgres-migration-phase1-foundational-modules.md`](specs/31-postgres-migration-phase1-foundational-modules.md) | Not Started |
+| [`32-postgres-migration-phase2-bike-module.md`](specs/32-postgres-migration-phase2-bike-module.md)                 | Not Started |
+| [`33-postgres-migration-phase3-fuellog-mileagerecord.md`](specs/33-postgres-migration-phase3-fuellog-mileagerecord.md) | Not Started |
+| [`34-postgres-migration-phase4-maintenancelog.md`](specs/34-postgres-migration-phase4-maintenancelog.md)           | Not Started |
+| [`35-postgres-migration-phase5-bikeissue-accessory-document-manual.md`](specs/35-postgres-migration-phase5-bikeissue-accessory-document-manual.md) | Not Started |
+| [`36-postgres-migration-phase6-errorlog.md`](specs/36-postgres-migration-phase6-errorlog.md)                       | Not Started |
+| [`37-postgres-migration-phase7-spending-ai-notification.md`](specs/37-postgres-migration-phase7-spending-ai-notification.md) | Not Started |
 
 ## Completed
 

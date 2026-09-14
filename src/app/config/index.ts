@@ -6,7 +6,11 @@ dotenv.config({ path: path.join(process.cwd(), ".env") });
 export default {
   node_env: process.env.NODE_ENV,
   port: process.env.PORT,
+  // Postgres (Prisma) — the app's live DB connection, per the mongodb-to-postgres-migration-plan.md Phase 0 setup.
   database_url: process.env.DATABASE_URL,
+  // MongoDB (Mongoose) — still the actual source of truth until the migration's Phase 8 cutover; kept under its
+  // own var name (renamed from the old DATABASE_URL) so both DBs can be configured side by side during the migration.
+  mongo_database_url: process.env.MONGO_DATABASE_URL,
 
   jwt_secret: process.env.JWT_ACCESS_SECRET,
   jwt_expires_in: process.env.JWT_EXPIRES_IN || "10d",

@@ -9,7 +9,7 @@ import config from "./app/config";
 
 async function Main() {
   try {
-    await mongoose.connect(config.database_url as string);
+    await mongoose.connect(config.mongo_database_url as string);
     app.listen(config.port, () => {
       console.log(`listening from port ${config.port}`);
     });
