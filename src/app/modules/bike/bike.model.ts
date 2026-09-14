@@ -1,7 +1,31 @@
 import { model, Schema, Document } from "mongoose";
-import { TBike } from "./bike.interface";
+import { TBikeManualMeta } from "../bikeManual/bikeManual.interface";
 
-export type TBikeDocument = TBike & Document;
+// Full Mongoose-document shape, kept separate from the Prisma-era `TBike`
+// (create-payload only, see bike.interface.ts) since this model must keep
+// compiling until Phase 7 rewrites ai.service.ts/notification.service.ts's
+// direct imports.
+type TBikeFields = {
+  owner: string;
+  nickname: string;
+  brand: string;
+  model: string;
+  registrationNumber: string;
+  purchaseDate: Date;
+  fuelTankCapacityLiters: number;
+  currentOdometer: number;
+  initialOdometer: number;
+  isDeleted: boolean;
+  aiSpendingInsight?: string;
+  aiSpendingInsightLogCount?: number;
+  aiMileageInsight?: string;
+  aiMileageInsightFuelLogCount?: number;
+  manual?: TBikeManualMeta;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type TBikeDocument = TBikeFields & Document;
 
 const bikeSchema = new Schema(
   {

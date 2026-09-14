@@ -1,7 +1,6 @@
 import { TFuelLog } from "./fuelLog.interface";
 import { fuelLogModel } from "./fuelLog.model";
 import { mileageRecordModel } from "../mileageRecord/mileageRecord.model";
-import { TBikeDocument } from "../bike/bike.model";
 import httpStatus from "http-status";
 import AppError from "../../Error/AppError";
 import QueryBuilder from "../../builder/Queryuilder";
@@ -35,7 +34,7 @@ const createFuelLogIntoDB = async (
 
   const fuelLog = await fuelLogModel.create(fuelLogData);
 
-  await bumpOdometerIfHigher(bike as TBikeDocument, fuelLog.odometerReading);
+  await bumpOdometerIfHigher(bike, fuelLog.odometerReading);
 
   let mileageRecordClosed = null;
 
@@ -99,7 +98,7 @@ const createFuelLogIntoDB = async (
     // ! moment. periodFuelLogs[0] can't actually be undefined here (the just-created
     // ! fuelLog always satisfies its own $lte bound), the createdAt fallback is defensive only.
     const resolvedPeriodStartDate =
-      periodStartDate ?? periodFuelLogs[0]?.date ?? (bike as TBikeDocument).createdAt;
+      periodStartDate ?? periodFuelLogs[0]?.date ?? bike.createdAt;
 
     mileageRecordClosed = await mileageRecordModel.create({
       bike: bikeId,

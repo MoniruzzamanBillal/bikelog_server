@@ -99,8 +99,11 @@ const getMileageInsightFromDB = (bikeId, userId) => __awaiter(void 0, void 0, vo
     return { insight, generated: true, cached: false };
 });
 const getBikeChatReply = (bikeId, userId, messages) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b, _c;
+    var _a, _b;
     const bike = yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
+    // ! bike.manual is a Prisma Json? column, deserialized as an untyped JsonValue —
+    // ! cast to the known shape (same pattern as bikeManual.service.ts)
+    const manual = bike.manual;
     const latestUserQuestion = (_b = (_a = [...messages].reverse().find((m) => m.role === "user")) === null || _a === void 0 ? void 0 : _a.content) !== null && _b !== void 0 ? _b : "";
     const [recentFuelLogs, recentMaintenanceLogs, lifetimeSpending, relevantManualChunks,] = yield Promise.all([
         fuelLog_model_1.fuelLogModel
@@ -115,14 +118,14 @@ const getBikeChatReply = (bikeId, userId, messages) => __awaiter(void 0, void 0,
             .populate("maintenanceType", "name")
             .lean(),
         spending_service_1.spendingServices.getSpendingSummaryFromDB(bikeId, userId, "lifetime"),
-        bike.manual
+        manual
             ? bikeManual_service_1.bikeManualServices.getRelevantManualChunksForChat(bikeId, latestUserQuestion, MANUAL_CHUNK_TOP_K)
             : Promise.resolve([]),
     ]);
     // ! only non-empty when relevant chunks were actually found — otherwise the section
     // ! is omitted entirely rather than injecting an empty/misleading heading
     const manualSection = relevantManualChunks.length > 0
-        ? `Relevant excerpts from the owner's manual ("${(_c = bike.manual) === null || _c === void 0 ? void 0 : _c.originalName}"):\n` +
+        ? `Relevant excerpts from the owner's manual ("${manual === null || manual === void 0 ? void 0 : manual.originalName}"):\n` +
             relevantManualChunks.map((chunk) => chunk.chunkText).join("\n---\n") +
             `\n\n`
         : "";

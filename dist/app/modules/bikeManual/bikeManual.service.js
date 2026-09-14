@@ -31,9 +31,12 @@ const uploadBikeManualIntoDB = (bikeId, userId, file) => __awaiter(void 0, void 
         throw new AppError_1.default(http_status_1.default.BAD_REQUEST, "Could not extract text from this PDF");
     }
     const chunkTexts = (0, bikeManual_utils_1.chunkManualText)(text);
+    // ! bike.manual is a Prisma Json? column, deserialized as an untyped JsonValue —
+    // ! cast to the known shape rather than typing findOwnedBikeOrThrow's return itself
+    const existingManual = bike.manual;
     // ! replace case — delete old asset + chunks before uploading/inserting the new ones
-    if (bike.manual) {
-        yield (0, cloudinary_1.deleteCloudinaryImage)(bike.manual.publicId, "raw");
+    if (existingManual) {
+        yield (0, cloudinary_1.deleteCloudinaryImage)(existingManual.publicId, "raw");
         yield bikeManual_model_1.bikeManualChunkModel.deleteMany({ bike: bikeId });
     }
     const { url, publicId } = yield (0, cloudinary_1.uploadRawBuffer)(file.buffer, file.originalname);
@@ -42,32 +45,33 @@ const uploadBikeManualIntoDB = (bikeId, userId, file) => __awaiter(void 0, void 
         chunkIndex,
         chunkText,
     })));
-    bike.manual = {
+    const manual = {
         url,
         publicId,
         originalName: file.originalname,
         uploadedAt: new Date(),
         chunkCount: chunkTexts.length,
     };
-    yield bike.save();
-    return bike.manual;
+    yield (0, bike_utils_1.updateBikeManual)(bikeId, manual);
+    return manual;
 });
 const getBikeManualMetaFromDB = (bikeId, userId) => __awaiter(void 0, void 0, void 0, function* () {
     const bike = yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
-    if (!bike.manual) {
+    const manual = bike.manual;
+    if (!manual) {
         return { hasManual: false, manual: null };
     }
-    return { hasManual: true, manual: bike.manual };
+    return { hasManual: true, manual };
 });
 const deleteBikeManualFromDB = (bikeId, userId) => __awaiter(void 0, void 0, void 0, function* () {
     const bike = yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
-    if (!bike.manual) {
+    const manual = bike.manual;
+    if (!manual) {
         throw new AppError_1.default(http_status_1.default.NOT_FOUND, "This bike has no manual uploaded");
     }
-    yield (0, cloudinary_1.deleteCloudinaryImage)(bike.manual.publicId, "raw");
+    yield (0, cloudinary_1.deleteCloudinaryImage)(manual.publicId, "raw");
     yield bikeManual_model_1.bikeManualChunkModel.deleteMany({ bike: bikeId });
-    bike.manual = undefined;
-    yield bike.save();
+    yield (0, bike_utils_1.updateBikeManual)(bikeId, null);
     return null;
 });
 // ! the only function ai.service.ts imports from this module

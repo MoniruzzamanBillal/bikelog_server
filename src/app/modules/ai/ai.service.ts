@@ -2,6 +2,7 @@ import { askOpenRouter, TChatMessage } from "../../util/openRouterClient";
 import { bikeModel } from "../bike/bike.model";
 import { findOwnedBikeOrThrow } from "../bike/bike.utils";
 import { bikeManualServices } from "../bikeManual/bikeManual.service";
+import { TBikeManualMeta } from "../bikeManual/bikeManual.interface";
 import { fuelLogModel } from "../fuelLog/fuelLog.model";
 import { maintenanceLogModel } from "../maintenanceLog/maintenanceLog.model";
 import { mileageRecordServices } from "../mileageRecord/mileageRecord.service";
@@ -139,6 +140,9 @@ const getBikeChatReply = async (
   messages: TChatRequestMessage[],
 ): Promise<TBikeChatResponse> => {
   const bike = await findOwnedBikeOrThrow(bikeId, userId);
+  // ! bike.manual is a Prisma Json? column, deserialized as an untyped JsonValue —
+  // ! cast to the known shape (same pattern as bikeManual.service.ts)
+  const manual = bike.manual as TBikeManualMeta | null;
 
   const latestUserQuestion =
     [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
@@ -161,7 +165,7 @@ const getBikeChatReply = async (
       .populate("maintenanceType", "name")
       .lean(),
     spendingServices.getSpendingSummaryFromDB(bikeId, userId, "lifetime"),
-    bike.manual
+    manual
       ? bikeManualServices.getRelevantManualChunksForChat(
           bikeId,
           latestUserQuestion,
@@ -174,7 +178,7 @@ const getBikeChatReply = async (
   // ! is omitted entirely rather than injecting an empty/misleading heading
   const manualSection =
     relevantManualChunks.length > 0
-      ? `Relevant excerpts from the owner's manual ("${bike.manual?.originalName}"):\n` +
+      ? `Relevant excerpts from the owner's manual ("${manual?.originalName}"):\n` +
         relevantManualChunks.map((chunk) => chunk.chunkText).join("\n---\n") +
         `\n\n`
       : "";

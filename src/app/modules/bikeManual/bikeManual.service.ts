@@ -1,10 +1,11 @@
 import httpStatus from "http-status";
 import pdfParse from "pdf-parse";
 import AppError from "../../Error/AppError";
-import { findOwnedBikeOrThrow } from "../bike/bike.utils";
+import { findOwnedBikeOrThrow, updateBikeManual } from "../bike/bike.utils";
 import { deleteCloudinaryImage, uploadRawBuffer } from "../../util/cloudinary";
 import { bikeManualChunkModel } from "./bikeManual.model";
 import { chunkManualText, scoreAndRankChunks } from "./bikeManual.utils";
+import { TBikeManualMeta } from "./bikeManual.interface";
 
 const uploadBikeManualIntoDB = async (
   bikeId: string,
@@ -29,9 +30,13 @@ const uploadBikeManualIntoDB = async (
 
   const chunkTexts = chunkManualText(text);
 
+  // ! bike.manual is a Prisma Json? column, deserialized as an untyped JsonValue —
+  // ! cast to the known shape rather than typing findOwnedBikeOrThrow's return itself
+  const existingManual = bike.manual as TBikeManualMeta | null;
+
   // ! replace case — delete old asset + chunks before uploading/inserting the new ones
-  if (bike.manual) {
-    await deleteCloudinaryImage(bike.manual.publicId, "raw");
+  if (existingManual) {
+    await deleteCloudinaryImage(existingManual.publicId, "raw");
     await bikeManualChunkModel.deleteMany({ bike: bikeId });
   }
 
@@ -45,40 +50,41 @@ const uploadBikeManualIntoDB = async (
     })),
   );
 
-  bike.manual = {
+  const manual: TBikeManualMeta = {
     url,
     publicId,
     originalName: file.originalname,
     uploadedAt: new Date(),
     chunkCount: chunkTexts.length,
   };
-  await bike.save();
+  await updateBikeManual(bikeId, manual);
 
-  return bike.manual;
+  return manual;
 };
 
 const getBikeManualMetaFromDB = async (bikeId: string, userId: string) => {
   const bike = await findOwnedBikeOrThrow(bikeId, userId);
+  const manual = bike.manual as TBikeManualMeta | null;
 
-  if (!bike.manual) {
+  if (!manual) {
     return { hasManual: false, manual: null };
   }
 
-  return { hasManual: true, manual: bike.manual };
+  return { hasManual: true, manual };
 };
 
 const deleteBikeManualFromDB = async (bikeId: string, userId: string) => {
   const bike = await findOwnedBikeOrThrow(bikeId, userId);
+  const manual = bike.manual as TBikeManualMeta | null;
 
-  if (!bike.manual) {
+  if (!manual) {
     throw new AppError(httpStatus.NOT_FOUND, "This bike has no manual uploaded");
   }
 
-  await deleteCloudinaryImage(bike.manual.publicId, "raw");
+  await deleteCloudinaryImage(manual.publicId, "raw");
   await bikeManualChunkModel.deleteMany({ bike: bikeId });
 
-  bike.manual = undefined;
-  await bike.save();
+  await updateBikeManual(bikeId, null);
 
   return null;
 };
