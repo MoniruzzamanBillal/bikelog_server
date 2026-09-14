@@ -80,6 +80,10 @@ const routeArray = [
         route: notification_route_1.notificationRouter,
     },
     {
+        path: "/cron",
+        route: errorLog_route_1.errorLogCronRouter,
+    },
+    {
         path: "/admin/error-logs",
         route: errorLog_route_1.errorLogRouter,
     },
