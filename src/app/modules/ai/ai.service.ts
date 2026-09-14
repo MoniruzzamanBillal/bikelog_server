@@ -1,10 +1,8 @@
 import { askOpenRouter, TChatMessage } from "../../util/openRouterClient";
-import { bikeModel } from "../bike/bike.model";
+import { prisma } from "../../lib/prisma";
 import { findOwnedBikeOrThrow } from "../bike/bike.utils";
 import { bikeManualServices } from "../bikeManual/bikeManual.service";
 import { TBikeManualMeta } from "../bikeManual/bikeManual.interface";
-import { fuelLogModel } from "../fuelLog/fuelLog.model";
-import { maintenanceLogModel } from "../maintenanceLog/maintenanceLog.model";
 import { mileageRecordServices } from "../mileageRecord/mileageRecord.service";
 import { spendingServices } from "../spending/spending.service";
 import {
@@ -35,8 +33,8 @@ const getSpendingInsightFromDB = async (
   const bike = await findOwnedBikeOrThrow(bikeId, userId);
 
   const [fuelLogCount, maintenanceLogCount] = await Promise.all([
-    fuelLogModel.countDocuments({ bike: bikeId, isDeleted: false }),
-    maintenanceLogModel.countDocuments({ bike: bikeId, isDeleted: false }),
+    prisma.fuelLog.count({ where: { bikeId, isDeleted: false } }),
+    prisma.maintenanceLog.count({ where: { bikeId, isDeleted: false } }),
   ]);
   const currentLogCount = fuelLogCount + maintenanceLogCount;
 
@@ -74,9 +72,12 @@ const getSpendingInsightFromDB = async (
 
   const insight = await askOpenRouter([systemMessage]);
 
-  await bikeModel.findByIdAndUpdate(bikeId, {
-    aiSpendingInsight: insight,
-    aiSpendingInsightLogCount: currentLogCount,
+  await prisma.bike.update({
+    where: { id: bikeId },
+    data: {
+      aiSpendingInsight: insight,
+      aiSpendingInsightLogCount: currentLogCount,
+    },
   });
 
   return { insight, generated: true, cached: false };
@@ -88,9 +89,8 @@ const getMileageInsightFromDB = async (
 ): Promise<TMileageInsightResponse> => {
   const bike = await findOwnedBikeOrThrow(bikeId, userId);
 
-  const currentFuelLogCount = await fuelLogModel.countDocuments({
-    bike: bikeId,
-    isDeleted: false,
+  const currentFuelLogCount = await prisma.fuelLog.count({
+    where: { bikeId, isDeleted: false },
   });
 
   if (currentFuelLogCount === 0) {
@@ -126,9 +126,12 @@ const getMileageInsightFromDB = async (
 
   const insight = await askOpenRouter([systemMessage]);
 
-  await bikeModel.findByIdAndUpdate(bikeId, {
-    aiMileageInsight: insight,
-    aiMileageInsightFuelLogCount: currentFuelLogCount,
+  await prisma.bike.update({
+    where: { id: bikeId },
+    data: {
+      aiMileageInsight: insight,
+      aiMileageInsightFuelLogCount: currentFuelLogCount,
+    },
   });
 
   return { insight, generated: true, cached: false };
@@ -148,22 +151,22 @@ const getBikeChatReply = async (
     [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
 
   const [
-    recentFuelLogs,
-    recentMaintenanceLogs,
+    rawRecentFuelLogs,
+    rawRecentMaintenanceLogs,
     lifetimeSpending,
     relevantManualChunks,
   ] = await Promise.all([
-    fuelLogModel
-      .find({ bike: bikeId, isDeleted: false })
-      .sort({ date: -1 })
-      .limit(CHAT_LOG_LIMIT)
-      .lean(),
-    maintenanceLogModel
-      .find({ bike: bikeId, isDeleted: false })
-      .sort({ date: -1 })
-      .limit(CHAT_LOG_LIMIT)
-      .populate("maintenanceType", "name")
-      .lean(),
+    prisma.fuelLog.findMany({
+      where: { bikeId, isDeleted: false },
+      orderBy: { date: "desc" },
+      take: CHAT_LOG_LIMIT,
+    }),
+    prisma.maintenanceLog.findMany({
+      where: { bikeId, isDeleted: false },
+      orderBy: { serviceDate: "desc" },
+      take: CHAT_LOG_LIMIT,
+      include: { maintenanceType: { select: { name: true } } },
+    }),
     spendingServices.getSpendingSummaryFromDB(bikeId, userId, "lifetime"),
     manual
       ? bikeManualServices.getRelevantManualChunksForChat(
@@ -173,6 +176,19 @@ const getBikeChatReply = async (
         )
       : Promise.resolve([]),
   ]);
+
+  // ! JSON.stringify on a raw Prisma Decimal instance produces a STRING in the resulting
+  // ! JSON text (e.g. "totalCost":"450.00"), not a bare number — silently changes what the
+  // ! model sees. Convert before stringifying, same as the list/get endpoints' toApiShape.
+  const recentFuelLogs = rawRecentFuelLogs.map((log) => ({
+    ...log,
+    pricePerLiter: Number(log.pricePerLiter),
+    totalCost: Number(log.totalCost),
+  }));
+  const recentMaintenanceLogs = rawRecentMaintenanceLogs.map((log) => ({
+    ...log,
+    cost: Number(log.cost),
+  }));
 
   // ! only non-empty when relevant chunks were actually found — otherwise the section
   // ! is omitted entirely rather than injecting an empty/misleading heading

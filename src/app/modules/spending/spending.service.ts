@@ -1,10 +1,8 @@
 import httpStatus from "http-status";
 import AppError from "../../Error/AppError";
+import { prisma } from "../../lib/prisma";
 import { findOwnedBikeOrThrow } from "../bike/bike.utils";
 import { AccessoryStatus } from "../bikeAccessory/bikeAccessory.constant";
-import { bikeAccessoryModel } from "../bikeAccessory/bikeAccessory.model";
-import { fuelLogModel } from "../fuelLog/fuelLog.model";
-import { maintenanceLogModel } from "../maintenanceLog/maintenanceLog.model";
 import { TSpendingRecord } from "./spending.interface";
 
 // ! shared by getSpendingSummaryFromDB and getSpendingDetailsFromDB so the two endpoints'
@@ -62,53 +60,54 @@ const computeSpendingForRange = async (
   categoryBreakdown: { category: string; total: number }[];
   records: TSpendingRecord[];
 }> => {
-  const fuelLogsPromise = fuelLogModel
-    .find({
-      bike: bikeId,
-      isDeleted: false,
-      ...(startDate && endDate ? { date: { $gte: startDate, $lte: endDate } } : {}),
-    })
-    .lean();
-
-  const maintenanceLogsPromise = maintenanceLogModel
-    .find({
-      bike: bikeId,
-      isDeleted: false,
-      ...(startDate && endDate ? { serviceDate: { $gte: startDate, $lte: endDate } } : {}),
-    })
-    .populate("maintenanceType", "name")
-    .lean();
-
-  // ! only purchased accessories count as real spending — pending/cancelled wishlist
-  // ! entries are never included
-  const accessoriesPromise = bikeAccessoryModel
-    .find({
-      bike: bikeId,
-      isDeleted: false,
-      status: AccessoryStatus.purchased,
-      ...(startDate && endDate ? { purchaseDate: { $gte: startDate, $lte: endDate } } : {}),
-    })
-    .lean();
-
   const [fuelLogs, maintenanceLogs, accessories] = await Promise.all([
-    fuelLogsPromise,
-    maintenanceLogsPromise,
-    accessoriesPromise,
+    prisma.fuelLog.findMany({
+      where: {
+        bikeId,
+        isDeleted: false,
+        ...(startDate && endDate ? { date: { gte: startDate, lte: endDate } } : {}),
+      },
+    }),
+    prisma.maintenanceLog.findMany({
+      where: {
+        bikeId,
+        isDeleted: false,
+        ...(startDate && endDate ? { serviceDate: { gte: startDate, lte: endDate } } : {}),
+      },
+      // ! replaces Mongoose's .populate("maintenanceType", "name")
+      include: { maintenanceType: { select: { name: true } } },
+    }),
+    // ! only purchased accessories count as real spending — pending/cancelled wishlist
+    // ! entries are never included
+    prisma.bikeAccessory.findMany({
+      where: {
+        bikeId,
+        isDeleted: false,
+        status: AccessoryStatus.purchased,
+        ...(startDate && endDate ? { purchaseDate: { gte: startDate, lte: endDate } } : {}),
+      },
+    }),
   ]);
 
-  const fuelTotal = fuelLogs.reduce((sum, log) => sum + log.totalCost, 0);
+  // ! every Decimal(12,2) field read here MUST go through Number(...) before arithmetic —
+  // ! a Prisma Decimal instance doesn't do real arithmetic through JS's +/* operators
+  const fuelTotal = fuelLogs.reduce((sum, log) => sum + Number(log.totalCost), 0);
 
   const maintenanceByCategory = maintenanceLogs.reduce<Record<string, number>>(
     (acc, log) => {
-      const mt = log.maintenanceType as unknown as { _id: string; name: string } | null;
-      const category = mt?.name ?? "Unknown";
-      acc[category] = (acc[category] ?? 0) + log.cost;
+      // ! maintenanceType is a required FK, so null shouldn't actually occur — the "Unknown"
+      // ! fallback is defensive, matching pre-migration behavior rather than tightening it
+      const category = log.maintenanceType?.name ?? "Unknown";
+      acc[category] = (acc[category] ?? 0) + Number(log.cost);
       return acc;
     },
     {},
   );
 
-  const accessoryTotal = accessories.reduce((sum, a) => sum + (a.price ?? 0), 0);
+  const accessoryTotal = accessories.reduce(
+    (sum, a) => sum + (a.price ? Number(a.price) : 0),
+    0,
+  );
 
   const categoryBreakdown: { category: string; total: number }[] = [
     { category: "Fuel", total: fuelTotal },
@@ -121,27 +120,29 @@ const computeSpendingForRange = async (
 
   categoryBreakdown.sort((a, b) => b.total - a.total);
 
-  const maintenanceTotal = maintenanceLogs.reduce((sum, log) => sum + log.cost, 0);
+  const maintenanceTotal = maintenanceLogs.reduce(
+    (sum, log) => sum + Number(log.cost),
+    0,
+  );
   const totalSpending = fuelTotal + maintenanceTotal + accessoryTotal;
 
   const fuelRecords: TSpendingRecord[] = fuelLogs.map((log) => ({
     date: log.date,
     category: "Fuel",
-    description: `${log.litersAdded}L${log.isFullTank ? " (Full Tank)" : ""} @ ৳${log.pricePerLiter}/L`,
-    amount: log.totalCost,
+    description: `${log.litersAdded}L${log.isFullTank ? " (Full Tank)" : ""} @ ৳${Number(log.pricePerLiter)}/L`,
+    amount: Number(log.totalCost),
     vendor: log.fuelStation ?? null,
     remarks: log.notes ?? null,
     source: "fuel",
   }));
 
   const maintenanceRecords: TSpendingRecord[] = maintenanceLogs.map((log) => {
-    const mt = log.maintenanceType as unknown as { _id: string; name: string } | null;
-    const category = mt?.name ?? "Unknown";
+    const category = log.maintenanceType?.name ?? "Unknown";
     return {
       date: log.serviceDate,
       category,
       description: log.partsReplaced?.length ? log.partsReplaced.join(", ") : category,
-      amount: log.cost,
+      amount: Number(log.cost),
       vendor: log.serviceCenter ?? null,
       remarks: log.notes ?? null,
       source: "maintenance",
@@ -152,7 +153,7 @@ const computeSpendingForRange = async (
     date: a.purchaseDate as Date,
     category: "Accessories",
     description: a.name,
-    amount: a.price as number,
+    amount: a.price !== null ? Number(a.price) : 0,
     vendor: null,
     remarks: null,
     source: "accessory",

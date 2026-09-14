@@ -11,8 +11,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.notificationServices = void 0;
 const expo_server_sdk_1 = require("expo-server-sdk");
-const bike_model_1 = require("../bike/bike.model");
-const user_model_1 = require("../user/user.model");
+const prisma_1 = require("../../lib/prisma");
 const mileageRecord_service_1 = require("../mileageRecord/mileageRecord.service");
 const spending_service_1 = require("../spending/spending.service");
 const notification_utils_1 = require("./notification.utils");
@@ -23,24 +22,24 @@ const expo = new expo_server_sdk_1.Expo();
 // ! skipped (nothing meaningful to summarize) rather than sent an empty digest — see
 // ! notification.utils.ts / spec 21 for the exact week-boundary logic.
 const sendWeeklySummaries = () => __awaiter(void 0, void 0, void 0, function* () {
-    const users = yield user_model_1.userModel
-        .find({ expoPushToken: { $ne: null }, isDeleted: false })
-        .lean();
+    const users = yield prisma_1.prisma.user.findMany({
+        where: { expoPushToken: { not: null }, isDeleted: false },
+    });
     const { startDate, endDate } = (0, notification_utils_1.getCurrentWeekRange)(new Date());
     let bikesSkipped = 0;
     let notificationsFailed = 0;
     const messages = [];
     for (const user of users) {
         if (!user.expoPushToken || !expo_server_sdk_1.Expo.isExpoPushToken(user.expoPushToken)) {
-            console.error(`[weekly-summary] skipping user ${user._id}: invalid/missing expoPushToken`);
+            console.error(`[weekly-summary] skipping user ${user.id}: invalid/missing expoPushToken`);
             notificationsFailed += 1;
             continue;
         }
-        const bikes = yield bike_model_1.bikeModel
-            .find({ owner: user._id, isDeleted: false })
-            .lean();
+        const bikes = yield prisma_1.prisma.bike.findMany({
+            where: { ownerId: user.id, isDeleted: false },
+        });
         for (const bike of bikes) {
-            const bikeId = bike._id.toString();
+            const bikeId = bike.id;
             const [mileage, spending] = yield Promise.all([
                 mileageRecord_service_1.mileageRecordServices.computeMileageForRange(bikeId, startDate, endDate),
                 spending_service_1.spendingServices.computeSpendingForRange(bikeId, startDate, endDate),
