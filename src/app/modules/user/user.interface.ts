@@ -10,10 +10,6 @@ export type TUser = {
   name: string;
   email: string;
   password: string;
-
-  isDeleted: boolean;
-  userRole: TUserRole;
-  expoPushToken?: string | null;
 };
 
 export const UserRole = {

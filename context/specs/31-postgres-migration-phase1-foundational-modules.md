@@ -12,7 +12,7 @@ Rewrite the three modules with **no dependencies on any other not-yet-migrated m
 
 - `user` has no FK dependency on anything.
 - `maintenanceType`/`engineOilType` are standalone catalogs (no FK either) — grouping them with `user` in one phase matches the top-level plan's Phase 1 exactly and lets all three be reviewed as one coherent, low-risk PR.
-- Nothing downstream in *this* phase needs them yet — `Bike` (Phase 2) is the first model with a real FK (`ownerId → User`).
+- Nothing downstream in _this_ phase needs them yet — `Bike` (Phase 2) is the first model with a real FK (`ownerId → User`).
 
 ## Design decisions (module-specific, additive to the top-level plan's 11 numbered decisions)
 
@@ -27,7 +27,7 @@ export interface TMaintenanceType { _id: string; name: string; ... }
 export interface TEngineOilType { _id: string; name: string; ... }
 ```
 
-Mongoose auto-serializes `_id` on every returned document; Prisma returns a plain `id` field and does nothing magic. Every service function in this phase that returns a row (or array of rows) must map it before returning — same pattern as `expenseTracker2/server`'s migration (`{ ...row, _id: row.id }`, or `.map(...)` for lists). This isn't called out as its own numbered decision in the top-level plan (which mostly discusses ID *storage*, not response *shape*), but it's the same underlying issue ExpenseTracker's spec 01 flagged explicitly (§"Response shape compatibility") and it applies here just as directly — skipping it silently breaks both clients' catalog screens, not with an error, but with `undefined` keys/hrefs.
+Mongoose auto-serializes `_id` on every returned document; Prisma returns a plain `id` field and does nothing magic. Every service function in this phase that returns a row (or array of rows) must map it before returning — same pattern as `expenseTracker2/server`'s migration (`{ ...row, _id: row.id }`, or `.map(...)` for lists). This isn't called out as its own numbered decision in the top-level plan (which mostly discusses ID _storage_, not response _shape_), but it's the same underlying issue ExpenseTracker's spec 01 flagged explicitly (§"Response shape compatibility") and it applies here just as directly — skipping it silently breaks both clients' catalog screens, not with an error, but with `undefined` keys/hrefs.
 
 No dedicated `TUser` client-side type was found with the same `_id` requirement (`getMe`/`signIn` responses aren't strictly typed on the client), but map `_id` on `user` responses anyway for consistency and because `signIn`/`getMe`/`updatePushToken` all currently return whatever Mongoose hands back, `_id` included — changing that silently is exactly the kind of drive-by shape change the top-level plan says to avoid.
 

@@ -10,46 +10,46 @@ All 8 original Bike Log modules (`user`, `bike`, `fuelLog`, `mileageRecord`, `ma
 
 Tracks work items defined in `context/specs/`. Update the moment implementation starts or finishes on a spec.
 
-| Spec                                                                                                         | Status      |
-| ------------------------------------------------------------------------------------------------------------ | ----------- |
-| [`00-build-plan.md`](specs/00-build-plan.md)                                                                 | Not Started |
-| [`01-module-scaffolding-and-models.md`](specs/01-module-scaffolding-and-models.md)                           | Complete    |
-| [`02-auth-hardening.md`](specs/02-auth-hardening.md)                                                         | Complete    |
-| [`03-bike-crud.md`](specs/03-bike-crud.md)                                                                   | Complete    |
-| [`04-fuel-log-and-mileage-closure.md`](specs/04-fuel-log-and-mileage-closure.md)                             | Complete    |
-| [`05-mileage-stats.md`](specs/05-mileage-stats.md)                                                           | Complete    |
-| [`06-maintenance-type-catalog.md`](specs/06-maintenance-type-catalog.md)                                     | Complete    |
-| [`07-engine-oil-type-catalog.md`](specs/07-engine-oil-type-catalog.md)                                       | Complete    |
-| [`08-maintenance-log-and-reminders.md`](specs/08-maintenance-log-and-reminders.md)                           | Complete    |
-| [`09-spending-summary.md`](specs/09-spending-summary.md)                                                     | Complete    |
-| [`10-bike-issue.md`](specs/10-bike-issue.md)                                                                 | Complete    |
-| [`11-bike-accessory.md`](specs/11-bike-accessory.md)                                                         | Complete    |
-| [`12-bike-issue-list-sort-order.md`](specs/12-bike-issue-list-sort-order.md)                                 | Complete    |
-| [`13-bike-accessory-list-sort-order.md`](specs/13-bike-accessory-list-sort-order.md)                         | Complete    |
-| [`14-bike-accessory-price.md`](specs/14-bike-accessory-price.md)                                             | Complete    |
-| [`15-spending-and-mileage-trend-endpoints.md`](specs/15-spending-and-mileage-trend-endpoints.md)             | Complete    |
-| [`16-ai-integration.md`](specs/16-ai-integration.md)                                                         | Complete    |
-| [`17-image-file-upload.md`](specs/17-image-file-upload.md)                                                   | Complete    |
-| [`18-bike-manual-ai-integration.md`](specs/18-bike-manual-ai-integration.md)                                 | Complete    |
-| [`19-bike-documents.md`](specs/19-bike-documents.md)                                                         | Complete    |
-| [`20-decimal-number-field-audit.md`](specs/20-decimal-number-field-audit.md)                                 | Complete    |
-| [`21-weekly-bike-summary-notification.md`](specs/21-weekly-bike-summary-notification.md)                     | Complete    |
-| [`22-trend-endpoint-6-month-window.md`](specs/22-trend-endpoint-6-month-window.md)                           | Complete    |
-| [`23-spending-details-export-endpoint.md`](specs/23-spending-details-export-endpoint.md)                     | Complete    |
-| [`24-error-log-system.md`](specs/24-error-log-system.md)                                                     | Complete    |
-| [`25-bike-accessory-purchase-lock-and-spending.md`](specs/25-bike-accessory-purchase-lock-and-spending.md)   | Complete    |
-| [`26-fuel-log-period-closure-backdated-date-bug.md`](specs/26-fuel-log-period-closure-backdated-date-bug.md) | Complete    |
-| [`27-fuel-log-date-before-purchase-validation.md`](specs/27-fuel-log-date-before-purchase-validation.md)     | Complete    |
-| [`28-maintenance-log-optional-service-interval.md`](specs/28-maintenance-log-optional-service-interval.md)   | Complete    |
-| [`29-push-notification-delivery-diagnostics.md`](specs/29-push-notification-delivery-diagnostics.md)         | Complete    |
-| [`30-sync-spend-logs-to-expense-tracker.md`](specs/30-sync-spend-logs-to-expense-tracker.md)                 | Complete    |
-| [`31-postgres-migration-phase1-foundational-modules.md`](specs/31-postgres-migration-phase1-foundational-modules.md) | Not Started |
-| [`32-postgres-migration-phase2-bike-module.md`](specs/32-postgres-migration-phase2-bike-module.md)                 | Not Started |
-| [`33-postgres-migration-phase3-fuellog-mileagerecord.md`](specs/33-postgres-migration-phase3-fuellog-mileagerecord.md) | Not Started |
-| [`34-postgres-migration-phase4-maintenancelog.md`](specs/34-postgres-migration-phase4-maintenancelog.md)           | Not Started |
+| Spec                                                                                                                                               | Status      |
+| -------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| [`00-build-plan.md`](specs/00-build-plan.md)                                                                                                       | Not Started |
+| [`01-module-scaffolding-and-models.md`](specs/01-module-scaffolding-and-models.md)                                                                 | Complete    |
+| [`02-auth-hardening.md`](specs/02-auth-hardening.md)                                                                                               | Complete    |
+| [`03-bike-crud.md`](specs/03-bike-crud.md)                                                                                                         | Complete    |
+| [`04-fuel-log-and-mileage-closure.md`](specs/04-fuel-log-and-mileage-closure.md)                                                                   | Complete    |
+| [`05-mileage-stats.md`](specs/05-mileage-stats.md)                                                                                                 | Complete    |
+| [`06-maintenance-type-catalog.md`](specs/06-maintenance-type-catalog.md)                                                                           | Complete    |
+| [`07-engine-oil-type-catalog.md`](specs/07-engine-oil-type-catalog.md)                                                                             | Complete    |
+| [`08-maintenance-log-and-reminders.md`](specs/08-maintenance-log-and-reminders.md)                                                                 | Complete    |
+| [`09-spending-summary.md`](specs/09-spending-summary.md)                                                                                           | Complete    |
+| [`10-bike-issue.md`](specs/10-bike-issue.md)                                                                                                       | Complete    |
+| [`11-bike-accessory.md`](specs/11-bike-accessory.md)                                                                                               | Complete    |
+| [`12-bike-issue-list-sort-order.md`](specs/12-bike-issue-list-sort-order.md)                                                                       | Complete    |
+| [`13-bike-accessory-list-sort-order.md`](specs/13-bike-accessory-list-sort-order.md)                                                               | Complete    |
+| [`14-bike-accessory-price.md`](specs/14-bike-accessory-price.md)                                                                                   | Complete    |
+| [`15-spending-and-mileage-trend-endpoints.md`](specs/15-spending-and-mileage-trend-endpoints.md)                                                   | Complete    |
+| [`16-ai-integration.md`](specs/16-ai-integration.md)                                                                                               | Complete    |
+| [`17-image-file-upload.md`](specs/17-image-file-upload.md)                                                                                         | Complete    |
+| [`18-bike-manual-ai-integration.md`](specs/18-bike-manual-ai-integration.md)                                                                       | Complete    |
+| [`19-bike-documents.md`](specs/19-bike-documents.md)                                                                                               | Complete    |
+| [`20-decimal-number-field-audit.md`](specs/20-decimal-number-field-audit.md)                                                                       | Complete    |
+| [`21-weekly-bike-summary-notification.md`](specs/21-weekly-bike-summary-notification.md)                                                           | Complete    |
+| [`22-trend-endpoint-6-month-window.md`](specs/22-trend-endpoint-6-month-window.md)                                                                 | Complete    |
+| [`23-spending-details-export-endpoint.md`](specs/23-spending-details-export-endpoint.md)                                                           | Complete    |
+| [`24-error-log-system.md`](specs/24-error-log-system.md)                                                                                           | Complete    |
+| [`25-bike-accessory-purchase-lock-and-spending.md`](specs/25-bike-accessory-purchase-lock-and-spending.md)                                         | Complete    |
+| [`26-fuel-log-period-closure-backdated-date-bug.md`](specs/26-fuel-log-period-closure-backdated-date-bug.md)                                       | Complete    |
+| [`27-fuel-log-date-before-purchase-validation.md`](specs/27-fuel-log-date-before-purchase-validation.md)                                           | Complete    |
+| [`28-maintenance-log-optional-service-interval.md`](specs/28-maintenance-log-optional-service-interval.md)                                         | Complete    |
+| [`29-push-notification-delivery-diagnostics.md`](specs/29-push-notification-delivery-diagnostics.md)                                               | Complete    |
+| [`30-sync-spend-logs-to-expense-tracker.md`](specs/30-sync-spend-logs-to-expense-tracker.md)                                                       | Complete    |
+| [`31-postgres-migration-phase1-foundational-modules.md`](specs/31-postgres-migration-phase1-foundational-modules.md)                               | Complete    |
+| [`32-postgres-migration-phase2-bike-module.md`](specs/32-postgres-migration-phase2-bike-module.md)                                                 | Not Started |
+| [`33-postgres-migration-phase3-fuellog-mileagerecord.md`](specs/33-postgres-migration-phase3-fuellog-mileagerecord.md)                             | Not Started |
+| [`34-postgres-migration-phase4-maintenancelog.md`](specs/34-postgres-migration-phase4-maintenancelog.md)                                           | Not Started |
 | [`35-postgres-migration-phase5-bikeissue-accessory-document-manual.md`](specs/35-postgres-migration-phase5-bikeissue-accessory-document-manual.md) | Not Started |
-| [`36-postgres-migration-phase6-errorlog.md`](specs/36-postgres-migration-phase6-errorlog.md)                       | Not Started |
-| [`37-postgres-migration-phase7-spending-ai-notification.md`](specs/37-postgres-migration-phase7-spending-ai-notification.md) | Not Started |
+| [`36-postgres-migration-phase6-errorlog.md`](specs/36-postgres-migration-phase6-errorlog.md)                                                       | Not Started |
+| [`37-postgres-migration-phase7-spending-ai-notification.md`](specs/37-postgres-migration-phase7-spending-ai-notification.md)                       | Not Started |
 
 ## Completed
 
@@ -66,6 +66,11 @@ Tracks work items defined in `context/specs/`. Update the moment implementation 
 - **Spec 08 — maintenance log + reminders**: Implemented all 6 service functions in `maintenanceLog.service.ts` — `createMaintenanceLogIntoDB` (ownership + referential checks on `maintenanceType`/`oilType`, server-computed `nextDueOdometer`, odometer bump), `getMaintenanceLogsFromDB` (QueryBuilder with `-serviceDate` sort + optional `maintenanceType` filter), `getMaintenanceLogByIdFromDB`, `updateMaintenanceLogInDB` (recomputes `nextDueOdometer` if `odometerReading` or `intervalKmUsed` changes, referential checks on update, strips client-supplied `nextDueOdometer`), `deleteMaintenanceLogFromDB` (soft delete), `getRemindersFromDB` (groups by `maintenanceType` → most recent log, km-based status with 50km buffer, date-based status with 14-day buffer, omits entries that are neither due nor upcoming). Wired all 6 controller handlers in `maintenanceLog.controller.ts` with `sendResponse`. No validation/route/model changes needed. `yarn build` clean, `yarn lint` clean (no new errors).
 
 ## Recent Activity
+
+- **2026-09-15 — Spec 31 (Postgres migration Phase 1: `user`, `maintenanceType`, `engineOilType`) implemented and verified.** Rewrote all three modules' `.service.ts` files against `prisma.<model>` per the spec's decisions A–F: every returned row/array now maps `{ ...row, _id: row.id }`; duplicate-name/-email conflicts now caught via `error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002"` (was Mongo's numeric `11000`); `user`'s password hashing moved from the (now-bypassed) Mongoose `pre("save")` hook into an explicit `argon2.hash(...)` call inside `createUser`; `.select("-password")` became an explicit Prisma `select` (`safeUserSelect`, every `User` field except `password`); every `prisma.<model>.create(...)` passes `id: generateObjectId()` explicitly (Prisma 7's `id String @id` has no `@default`); catalog sort order moved to `orderBy: { name: "asc" }`. Trimmed `TUser` in `user.interface.ts` to the create-payload shape only (`{ name, email, password }`), per the spec's decision — `TUserRole`/`TJwtPayload`/`UserRole` left untouched (still imported by `authCheck.ts` etc.). Rewrote both seed scripts (`seedMaintenanceTypes.ts`, `seedEngineOilTypes.ts`) to import `prisma` from `../app/lib/prisma` and use `prisma.<model>.upsert(...)` instead of `mongoose.connect(process.env.DATABASE_URL)` — fixes the scripts, which Phase 0's env rename had silently broken (they'd have tried to `mongoose.connect()` a `postgresql://` string). Per the spec's explicit ordering constraint, did **not** delete any of the three `.model.ts` files — `notification.service.ts` (Phase 7) and `maintenanceLog.service.ts` (Phase 4) still import `userModel`/`maintenanceTypeModel`/`engineOilTypeModel` directly and stay on Mongoose until their own phases land; confirmed via `git diff --stat` that `maintenanceType.model.ts`/`engineOilType.model.ts` are byte-for-byte untouched and no `.controller.ts`/`.route.ts`/`.validation.ts` file for any of the three modules needed a change (pass-through check, as the spec predicted).
+  - **Fix 1 (documented in `specs/31a-fix-user-model-type-after-interface-trim.md`)**: trimming `TUser` broke `tsc` for `user.model.ts` (still-live Mongoose schema needs the full `isDeleted`/`userRole`/`expoPushToken` shape for `notification.service.ts`'s Phase-7-pending import) and knock-on errors in `notification.service.ts` itself. Fixed by giving `user.model.ts` its own local `TUserDocument` type (the pre-trim full shape) for the schema generic, exported for `notification.service.ts` to type against — zero behavior change, type-only fix.
+  - **Fix 2, larger (documented in `specs/31b-fix-local-postgres-to-real-neon.md`)**: manual endpoint verification hit a hard blocker — the Phase-0 session had pointed `DATABASE_URL`/`DATABASE_URL_UNPOOLED` at a **plain local Postgres** (`localhost:5432/bikelog_db`), but `lib/prisma.ts`'s `PrismaNeon` adapter (copied from `expenseTracker2/server` per the top-level plan) drives queries through `@neondatabase/serverless`, which speaks Neon's own WebSocket protocol — incompatible with raw local Postgres. `prisma migrate dev` (plain SQL) had worked fine against it, masking the problem, but every actual Prisma **query** failed with a bare `ErrorEvent`. Confirmed root cause by diffing against `expenseTracker2/server`'s own `.env` (a real `*.neon.tech` host) and by direct probe script. Fixed per the top-level plan's own Phase-0 instruction ("provision Neon"): used the Neon CLI's already-authenticated account on this machine (same account backing `expenseTracker2`/other projects — not a "no account" / Claimable-Neon situation) to create a new dedicated Neon project (`bikelog`, `aws-ap-southeast-1`, project id `delicate-surf-41507929`), ran `prisma migrate deploy` against it to apply the existing Phase-0 migration history (schema-only, zero data to move — Postgres had no real data yet either way), and re-pointed `.env`'s `DATABASE_URL`/`DATABASE_URL_UNPOOLED` at it. The local `bikelog_db` Postgres install was left alone (unused going forward, not dropped). This unblocks runtime verification for **all** remaining phases (32–37), not just this one.
+  - **Verified manually** (dev server against the new Neon DB, not Postman app but equivalent curl requests covering the same flows): `POST /api/auth/register` (201→200 envelope, Postgres `id` matches `generateObjectId()`'s hex shape, `_id` present, no `password` field), duplicate email → `409` unchanged wording; `POST /api/auth/login` → valid JWT, `argon2.verify` succeeds against the Prisma-stored hash; `GET /api/auth/me` and `POST /api/auth/push-token` both return `_id`, exclude `password`; `POST`/`GET /api/maintenance-types` and `POST`/`GET /api/engine-oil-types` create+list correctly (name-sorted, `_id`-shaped), duplicate name → `409` on both; both seed scripts run cleanly and are idempotent (verified by running each twice) against the Neon DB, populating the same 8/3 catalog rows. Test rows cleaned up afterward. `yarn build`/`yarn lint` clean (0 errors, same pre-existing console-statement warnings as before, no new ones). Committed on the `postgressMigrate` branch.
 
 - **2026-09-10 — Reordered `openRouterClient.ts`'s `FREE_MODELS` fallback list to try faster models first, per direct user request** (following a `bikelog_app`-side report of frequent "AI service is busy"/generic-error toasts from the AI Assistant chat, traced to this fallback chain — see that project's own Known Gaps). No live benchmark was run against OpenRouter for this pass — the new order (`nemotron-3.5-lightning` → `gemma-4-26b-a4b-it` → `nemotron-3-nano-omni-30b-a3b-reasoning` → `nemotron-3-super-120b-a12b` → `minimax-m2.7`) is a reasoned inference from each model's naming/architecture (explicit "lightning" speed branding; MoE active-parameter count where known; the `-reasoning` variant assumed slower overall despite fewer active params, since it emits extra chain-of-thought tokens; `minimax-m2.7` assumed slowest as MiniMax's large flagship-tier model) — see the comment above `FREE_MODELS` for the full reasoning and its own caveat. `yarn build` clean. **Not verified against real per-model timing** — see Known Gaps.
 

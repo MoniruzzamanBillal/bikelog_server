@@ -1,14 +1,28 @@
-import { TMaintenanceType } from "./maintenanceType.interface";
-import { maintenanceTypeModel } from "./maintenanceType.model";
+import { Prisma } from "@prisma/client";
 import httpStatus from "http-status";
 import AppError from "../../Error/AppError";
+import { prisma } from "../../lib/prisma";
+import { generateObjectId } from "../../util/generateObjectId";
+import { TMaintenanceType } from "./maintenanceType.interface";
 
-const createMaintenanceTypeIntoDB = async (payload: Partial<TMaintenanceType>) => {
+const createMaintenanceTypeIntoDB = async (
+  payload: Partial<TMaintenanceType>,
+) => {
   try {
-    const result = await maintenanceTypeModel.create(payload);
-    return result;
+    const result = await prisma.maintenanceType.create({
+      data: {
+        id: generateObjectId(),
+        name: payload.name as string,
+        defaultIntervalKm: payload.defaultIntervalKm,
+        defaultIntervalDays: payload.defaultIntervalDays,
+      },
+    });
+    return { ...result, _id: result.id };
   } catch (error: unknown) {
-    if (error && typeof error === "object" && "code" in error && (error as { code: number }).code === 11000) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
       throw new AppError(
         httpStatus.CONFLICT,
         "A maintenance type with this name already exists",
@@ -19,8 +33,10 @@ const createMaintenanceTypeIntoDB = async (payload: Partial<TMaintenanceType>) =
 };
 
 const getMaintenanceTypesFromDB = async () => {
-  const result = await maintenanceTypeModel.find().sort({ name: 1 });
-  return result;
+  const result = await prisma.maintenanceType.findMany({
+    orderBy: { name: "asc" },
+  });
+  return result.map((item) => ({ ...item, _id: item.id }));
 };
 
 export const maintenanceTypeServices = {

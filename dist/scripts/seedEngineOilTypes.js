@@ -8,24 +8,9 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
-const dotenv_1 = __importDefault(require("dotenv"));
-const mongoose_1 = __importDefault(require("mongoose"));
-const path_1 = __importDefault(require("path"));
-dotenv_1.default.config({ path: path_1.default.join(process.cwd(), ".env") });
-const DATABASE_URL = process.env.DATABASE_URL;
-if (!DATABASE_URL) {
-    console.error("DATABASE_URL not found in .env");
-    process.exit(1);
-}
-const engineOilTypeSchema = new mongoose_1.default.Schema({
-    name: { type: String, required: true, unique: true },
-    suggestedIntervalKm: { type: Number, required: true },
-}, { timestamps: true });
-const EngineOilType = mongoose_1.default.model("EngineOilType", engineOilTypeSchema);
+const prisma_1 = require("../app/lib/prisma");
+const generateObjectId_1 = require("../app/util/generateObjectId");
 const seedData = [
     { name: "Mineral", suggestedIntervalKm: 1000 },
     { name: "Semi-Synthetic", suggestedIntervalKm: 1500 },
@@ -34,17 +19,17 @@ const seedData = [
 function seed() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
-            yield mongoose_1.default.connect(DATABASE_URL);
-            console.log("Connected to DB");
             for (const type of seedData) {
-                const existing = yield EngineOilType.findOne({ name: type.name });
-                if (existing) {
-                    console.log(`Skipped (already exists): ${type.name}`);
-                }
-                else {
-                    yield EngineOilType.create(type);
-                    console.log(`Created: ${type.name} (${type.suggestedIntervalKm} km)`);
-                }
+                const result = yield prisma_1.prisma.engineOilType.upsert({
+                    where: { name: type.name },
+                    update: {},
+                    create: {
+                        id: (0, generateObjectId_1.generateObjectId)(),
+                        name: type.name,
+                        suggestedIntervalKm: type.suggestedIntervalKm,
+                    },
+                });
+                console.log(`Upserted: ${result.name} (${result.suggestedIntervalKm} km)`);
             }
             console.log("Engine oil types seeding complete");
             process.exit(0);

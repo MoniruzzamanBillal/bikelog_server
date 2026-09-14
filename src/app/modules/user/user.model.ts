@@ -1,8 +1,20 @@
 import argon2 from "argon2";
 import { model, Schema } from "mongoose";
-import { TUser, UserRole } from "./user.interface";
+import { TUserRole, UserRole } from "./user.interface";
 
-const userSchema = new Schema<TUser>(
+// Full Mongoose-document shape, kept separate from the Prisma-era `TUser`
+// (create-payload only, see user.interface.ts) since this model must keep
+// compiling until Phase 7 rewrites notification.service.ts's direct import.
+export type TUserDocument = {
+  name: string;
+  email: string;
+  password: string;
+  isDeleted: boolean;
+  userRole: TUserRole;
+  expoPushToken?: string | null;
+};
+
+const userSchema = new Schema<TUserDocument>(
   {
     name: {
       type: String,
@@ -46,4 +58,4 @@ userSchema.pre("save", async function (next) {
 });
 
 //
-export const userModel = model<TUser>("User", userSchema);
+export const userModel = model<TUserDocument>("User", userSchema);

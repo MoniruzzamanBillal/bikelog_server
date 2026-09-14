@@ -1,25 +1,5 @@
-import dotenv from "dotenv";
-import mongoose from "mongoose";
-import path from "path";
-
-dotenv.config({ path: path.join(process.cwd(), ".env") });
-
-const DATABASE_URL = process.env.DATABASE_URL!;
-
-if (!DATABASE_URL) {
-  console.error("DATABASE_URL not found in .env");
-  process.exit(1);
-}
-
-const engineOilTypeSchema = new mongoose.Schema(
-  {
-    name: { type: String, required: true, unique: true },
-    suggestedIntervalKm: { type: Number, required: true },
-  },
-  { timestamps: true },
-);
-
-const EngineOilType = mongoose.model("EngineOilType", engineOilTypeSchema);
+import { prisma } from "../app/lib/prisma";
+import { generateObjectId } from "../app/util/generateObjectId";
 
 const seedData = [
   { name: "Mineral", suggestedIntervalKm: 1000 },
@@ -29,17 +9,17 @@ const seedData = [
 
 async function seed() {
   try {
-    await mongoose.connect(DATABASE_URL);
-    console.log("Connected to DB");
-
     for (const type of seedData) {
-      const existing = await EngineOilType.findOne({ name: type.name });
-      if (existing) {
-        console.log(`Skipped (already exists): ${type.name}`);
-      } else {
-        await EngineOilType.create(type);
-        console.log(`Created: ${type.name} (${type.suggestedIntervalKm} km)`);
-      }
+      const result = await prisma.engineOilType.upsert({
+        where: { name: type.name },
+        update: {},
+        create: {
+          id: generateObjectId(),
+          name: type.name,
+          suggestedIntervalKm: type.suggestedIntervalKm,
+        },
+      });
+      console.log(`Upserted: ${result.name} (${result.suggestedIntervalKm} km)`);
     }
 
     console.log("Engine oil types seeding complete");
