@@ -1,10 +1,7 @@
-import { TBike } from "./bike.interface";
 import { prisma } from "../../lib/prisma";
 import { generateObjectId } from "../../util/generateObjectId";
-import {
-  findOwnedBikeOrThrow,
-  bumpOdometerIfHigher,
-} from "./bike.utils";
+import { TBike } from "./bike.interface";
+import { bumpOdometerIfHigher, findOwnedBikeOrThrow } from "./bike.utils";
 
 // every Bike row returned to a controller gets both the Prisma-era `id`→`_id`
 // remap (spec 31 decision A) and the relational `ownerId`→`owner` remap that
