@@ -9,7 +9,15 @@ const createEngineOilTypeSchema = z.object({
   }),
 });
 
+const updateEngineOilTypeSchema = z.object({
+  body: z.object({
+    name: z.string().optional(),
+    suggestedIntervalKm: z.number().positive().optional(),
+  }),
+});
+
 //
 export const engineOilTypeValidations = {
   createEngineOilTypeSchema,
+  updateEngineOilTypeSchema,
 };

@@ -44,7 +44,32 @@ const getMaintenanceTypesFromDB = () => __awaiter(void 0, void 0, void 0, functi
     });
     return result.map((item) => (Object.assign(Object.assign({}, item), { _id: item.id })));
 });
+const updateMaintenanceTypeInDB = (id, payload) => __awaiter(void 0, void 0, void 0, function* () {
+    const existing = yield prisma_1.prisma.maintenanceType.findUnique({ where: { id } });
+    if (!existing) {
+        throw new AppError_1.default(http_status_1.default.NOT_FOUND, "Maintenance type not found");
+    }
+    try {
+        const result = yield prisma_1.prisma.maintenanceType.update({
+            where: { id },
+            data: {
+                name: payload.name,
+                defaultIntervalKm: payload.defaultIntervalKm,
+                defaultIntervalDays: payload.defaultIntervalDays,
+            },
+        });
+        return Object.assign(Object.assign({}, result), { _id: result.id });
+    }
+    catch (error) {
+        if (error instanceof client_1.Prisma.PrismaClientKnownRequestError &&
+            error.code === "P2002") {
+            throw new AppError_1.default(http_status_1.default.CONFLICT, "A maintenance type with this name already exists");
+        }
+        throw error;
+    }
+});
 exports.maintenanceTypeServices = {
     createMaintenanceTypeIntoDB,
     getMaintenanceTypesFromDB,
+    updateMaintenanceTypeInDB,
 };

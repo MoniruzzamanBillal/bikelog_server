@@ -1046,6 +1046,52 @@
               }
             }
           ]
+        },
+        {
+          "name": "Update Maintenance Type",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/maintenance-types/{{maintenanceTypeId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "maintenance-types",
+                "{{maintenanceTypeId}}"
+              ]
+            },
+            "description": "Partial update \u2014 omit any field to leave it unchanged. Pass null for defaultIntervalKm/defaultIntervalDays to explicitly clear it.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Suspension Check (Updated)\",\n  \"defaultIntervalKm\": 6000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -1120,6 +1166,52 @@
               ]
             },
             "description": "Run `yarn seed:engine-oil-types` once against your DB first if this comes back empty."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Engine Oil Type",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/engine-oil-types/{{engineOilTypeId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "engine-oil-types",
+                "{{engineOilTypeId}}"
+              ]
+            },
+            "description": "Partial update \u2014 omit any field to leave it unchanged.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Fully Synthetic 10W-40 (Updated)\",\n  \"suggestedIntervalKm\": 1300\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           },
           "event": [
             {
@@ -1705,7 +1797,7 @@
                 "accessories"
               ]
             },
-            "description": "`status` defaults to \"pending\" if omitted. To create directly as \"purchased\", `price` is required (400 otherwise) and `purchaseDate` is stamped server-side to today automatically — never send `purchaseDate` yourself, it's rejected by the schema like any other server-computed field.",
+            "description": "`status` defaults to \"pending\" if omitted. To create directly as \"purchased\", `price` is required (400 otherwise) and `purchaseDate` is stamped server-side to today automatically \u2014 never send `purchaseDate` yourself, it's rejected by the schema like any other server-computed field.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": \"Crash Guard (Bumper)\",\n  \"urgency\": \"medium\",\n  \"status\": \"purchased\",\n  \"price\": 1290\n}",
@@ -1754,7 +1846,7 @@
                 "accessories"
               ]
             },
-            "description": "Grouped by status (pending → purchased → cancelled blocks, each internally sorted — not one flat chronological feed) unless `?status=` narrows to a single status. `{result, meta}` shape, same as every other paginated list endpoint."
+            "description": "Grouped by status (pending \u2192 purchased \u2192 cancelled blocks, each internally sorted \u2014 not one flat chronological feed) unless `?status=` narrows to a single status. `{result, meta}` shape, same as every other paginated list endpoint."
           },
           "event": [
             {
@@ -1793,7 +1885,7 @@
                 "{{bikeAccessoryId}}"
               ]
             },
-            "description": "Demonstrates the permanent purchase lock: once `status` is \"purchased\" it can never change to anything else (not even back to \"pending\"). Other fields (name/urgency/price/productImage) stay freely editable on the same PATCH — this request only fails because it touches `status`.",
+            "description": "Demonstrates the permanent purchase lock: once `status` is \"purchased\" it can never change to anything else (not even back to \"pending\"). Other fields (name/urgency/price/productImage) stay freely editable on the same PATCH \u2014 this request only fails because it touches `status`.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"status\": \"pending\"\n}",
@@ -2554,7 +2646,7 @@
                 "weekly-summary"
               ]
             },
-            "description": "Machine-to-machine endpoint hit by the scheduled GitHub Actions workflow (.github/workflows/weekly-summary-cron.yml, Thursday 10pm Asia/Dhaka), not by a logged-in user — protected by the x-cron-secret header (must match the server's CRON_SECRET env var) instead of a JWT. Computes each user's bikes' current Friday–Thursday week (the one about to end that same night) and pushes an Expo notification per bike that had at least one fuel log that week. Set the cronSecret collection variable to the same value as your local .env's CRON_SECRET before running this manually.",
+            "description": "Machine-to-machine endpoint hit by the scheduled GitHub Actions workflow (.github/workflows/weekly-summary-cron.yml, Thursday 10pm Asia/Dhaka), not by a logged-in user \u2014 protected by the x-cron-secret header (must match the server's CRON_SECRET env var) instead of a JWT. Computes each user's bikes' current Friday\u2013Thursday week (the one about to end that same night) and pushes an Expo notification per bike that had at least one fuel log that week. Set the cronSecret collection variable to the same value as your local .env's CRON_SECRET before running this manually.",
             "auth": {
               "type": "noauth"
             }
@@ -2608,7 +2700,7 @@
                 }
               ]
             },
-            "description": "Admin-only — the {{token}} bearer account must have userRole \"admin\" in the database (a manual DB write for now, no promotion endpoint exists yet) and must have logged in again after being promoted, since userRole is baked into the JWT at login time. Returns { result, meta } paginated, newest-first by default. Optional exact-match query params: status, method. A non-admin token gets 403; no token gets 401."
+            "description": "Admin-only \u2014 the {{token}} bearer account must have userRole \"admin\" in the database (a manual DB write for now, no promotion endpoint exists yet) and must have logged in again after being promoted, since userRole is baked into the JWT at login time. Returns { result, meta } paginated, newest-first by default. Optional exact-match query params: status, method. A non-admin token gets 403; no token gets 401."
           },
           "event": [
             {
@@ -2640,7 +2732,7 @@
                 "{{errorLogId}}"
               ]
             },
-            "description": "Admin-only. Returns the full error log document, including the full stack trace. {{errorLogId}} isn't auto-captured yet (no create/list-capture script wired up here) — paste in a real _id from the List Error Logs response. A nonexistent or already-expired (30-day TTL) id returns 404."
+            "description": "Admin-only. Returns the full error log document, including the full stack trace. {{errorLogId}} isn't auto-captured yet (no create/list-capture script wired up here) \u2014 paste in a real _id from the List Error Logs response. A nonexistent or already-expired (30-day TTL) id returns 404."
           },
           "event": [
             {

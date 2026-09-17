@@ -23,7 +23,21 @@ const getMaintenanceTypes = catchAsync(async (req, res) => {
   });
 });
 
+const updateMaintenanceType = catchAsync(async (req, res) => {
+  const result = await maintenanceTypeServices.updateMaintenanceTypeInDB(
+    req.params.id,
+    req.body,
+  );
+  sendResponse(res, {
+    status: httpStatus.OK,
+    success: true,
+    message: "Maintenance type updated successfully",
+    data: result,
+  });
+});
+
 export const maintenanceTypeController = {
   createMaintenanceType,
   getMaintenanceTypes,
+  updateMaintenanceType,
 };

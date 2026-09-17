@@ -17,5 +17,13 @@ router.post(
 // ! for getting all engine oil types
 router.get("/", authCheck, engineOilTypeController.getEngineOilTypes);
 
+// ! for updating an engine oil type
+router.patch(
+  "/:id",
+  authCheck,
+  validateRequest(engineOilTypeValidations.updateEngineOilTypeSchema),
+  engineOilTypeController.updateEngineOilType,
+);
+
 //
 export const engineOilTypeRouter = router;

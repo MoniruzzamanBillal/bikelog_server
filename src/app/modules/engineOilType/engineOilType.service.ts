@@ -38,7 +38,40 @@ const getEngineOilTypesFromDB = async () => {
   return result.map((item) => ({ ...item, _id: item.id }));
 };
 
+const updateEngineOilTypeInDB = async (
+  id: string,
+  payload: Partial<TEngineOilType>,
+) => {
+  const existing = await prisma.engineOilType.findUnique({ where: { id } });
+  if (!existing) {
+    throw new AppError(httpStatus.NOT_FOUND, "Engine oil type not found");
+  }
+
+  try {
+    const result = await prisma.engineOilType.update({
+      where: { id },
+      data: {
+        name: payload.name,
+        suggestedIntervalKm: payload.suggestedIntervalKm,
+      },
+    });
+    return { ...result, _id: result.id };
+  } catch (error: unknown) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      throw new AppError(
+        httpStatus.CONFLICT,
+        "An engine oil type with this name already exists",
+      );
+    }
+    throw error;
+  }
+};
+
 export const engineOilTypeServices = {
   createEngineOilTypeIntoDB,
   getEngineOilTypesFromDB,
+  updateEngineOilTypeInDB,
 };

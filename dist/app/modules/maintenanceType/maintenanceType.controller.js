@@ -35,7 +35,17 @@ const getMaintenanceTypes = (0, catchAsync_1.default)((req, res) => __awaiter(vo
         data: result,
     });
 }));
+const updateMaintenanceType = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const result = yield maintenanceType_service_1.maintenanceTypeServices.updateMaintenanceTypeInDB(req.params.id, req.body);
+    (0, sendResponse_1.default)(res, {
+        status: http_status_1.default.OK,
+        success: true,
+        message: "Maintenance type updated successfully",
+        data: result,
+    });
+}));
 exports.maintenanceTypeController = {
     createMaintenanceType,
     getMaintenanceTypes,
+    updateMaintenanceType,
 };

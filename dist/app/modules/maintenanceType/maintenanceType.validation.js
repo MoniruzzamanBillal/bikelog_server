@@ -9,7 +9,15 @@ const createMaintenanceTypeSchema = zod_1.z.object({
         defaultIntervalDays: zod_1.z.number().positive().nullable().optional(),
     }),
 });
+const updateMaintenanceTypeSchema = zod_1.z.object({
+    body: zod_1.z.object({
+        name: zod_1.z.string().optional(),
+        defaultIntervalKm: zod_1.z.number().positive().nullable().optional(),
+        defaultIntervalDays: zod_1.z.number().positive().nullable().optional(),
+    }),
+});
 //
 exports.maintenanceTypeValidations = {
     createMaintenanceTypeSchema,
+    updateMaintenanceTypeSchema,
 };

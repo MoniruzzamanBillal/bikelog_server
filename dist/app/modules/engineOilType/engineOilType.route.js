@@ -14,5 +14,7 @@ const router = (0, express_1.Router)();
 router.post("/", authCheck_1.default, (0, validateRequest_1.default)(engineOilType_validation_1.engineOilTypeValidations.createEngineOilTypeSchema), engineOilType_controller_1.engineOilTypeController.createEngineOilType);
 // ! for getting all engine oil types
 router.get("/", authCheck_1.default, engineOilType_controller_1.engineOilTypeController.getEngineOilTypes);
+// ! for updating an engine oil type
+router.patch("/:id", authCheck_1.default, (0, validateRequest_1.default)(engineOilType_validation_1.engineOilTypeValidations.updateEngineOilTypeSchema), engineOilType_controller_1.engineOilTypeController.updateEngineOilType);
 //
 exports.engineOilTypeRouter = router;
