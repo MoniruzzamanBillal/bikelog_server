@@ -13,15 +13,26 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 /* eslint-disable no-console */
-const mongoose_1 = __importDefault(require("mongoose"));
 const app_1 = __importDefault(require("./app"));
 const config_1 = __importDefault(require("./app/config"));
+const prisma_1 = require("./app/lib/prisma");
 // import { Server } from "http";
 // let server: Server;
+// async function Main() {
+//   try {
+//     await mongoose.connect(config.mongo_database_url as string);
+//     app.listen(config.port, () => {
+//       console.log(`listening from port ${config.port}`);
+//     });
+//   } catch (error) {
+//     console.log(error);
+//   }
+// }
+// Main();
 function Main() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
-            yield mongoose_1.default.connect(config_1.default.mongo_database_url);
+            yield prisma_1.prisma.$connect();
             app_1.default.listen(config_1.default.port, () => {
                 console.log(`listening from port ${config_1.default.port}`);
             });
