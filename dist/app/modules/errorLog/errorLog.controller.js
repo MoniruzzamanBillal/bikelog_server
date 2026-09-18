@@ -14,6 +14,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.errorLogController = void 0;
 const http_status_1 = __importDefault(require("http-status"));
+const config_1 = __importDefault(require("../../config"));
+const AppError_1 = __importDefault(require("../../Error/AppError"));
 const catchAsync_1 = __importDefault(require("../../util/catchAsync"));
 const sendResponse_1 = __importDefault(require("../../util/sendResponse"));
 const errorLog_service_1 = require("./errorLog.service");
@@ -35,7 +37,24 @@ const getErrorLogById = (0, catchAsync_1.default)((req, res) => __awaiter(void 0
         data: result,
     });
 }));
+// ! machine-to-machine endpoint hit by a scheduled job, not a logged-in admin — protected by
+// ! a shared secret header instead of authCheck/adminCheck (see
+// ! .github/workflows/daily-error-log-cleanup.yml and notification.controller.ts's identical pattern)
+const cleanupExpiredErrorLogs = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const secret = req.headers["x-cron-secret"];
+    if (typeof secret !== "string" || secret !== config_1.default.cronSecret) {
+        throw new AppError_1.default(http_status_1.default.UNAUTHORIZED, "Invalid or missing cron secret");
+    }
+    const result = yield errorLog_service_1.errorLogServices.cleanupExpiredErrorLogsFromDB();
+    (0, sendResponse_1.default)(res, {
+        status: http_status_1.default.OK,
+        success: true,
+        message: "Expired error logs cleaned up",
+        data: result,
+    });
+}));
 exports.errorLogController = {
     getErrorLogs,
     getErrorLogById,
+    cleanupExpiredErrorLogs,
 };

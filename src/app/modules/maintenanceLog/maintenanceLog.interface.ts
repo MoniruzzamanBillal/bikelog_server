@@ -1,19 +1,12 @@
-import { ObjectId } from "mongoose";
-import { TCloudinaryImage } from "../../interface/image.interface";
-
 export type TMaintenanceLog = {
-  bike: ObjectId;
-  maintenanceType: ObjectId;
+  maintenanceType: string;
   odometerReading: number;
-  oilType?: ObjectId;
+  oilType?: string;
   intervalKmUsed?: number;
-  nextDueOdometer?: number;
   nextDueDate?: Date;
   cost: number;
-  serviceDate: Date;
-  serviceCenter?: string;
+  serviceDate?: Date;
+  serviceCenter?: string | null;
   partsReplaced?: string[];
-  notes?: string;
-  serviceImage?: TCloudinaryImage;
-  isDeleted: boolean;
+  notes?: string | null;
 };

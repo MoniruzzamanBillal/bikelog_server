@@ -1,10 +1,20 @@
 import httpStatus from "http-status";
 import AppError from "../../Error/AppError";
-import QueryBuilder from "../../builder/Queryuilder";
+import { prisma } from "../../lib/prisma";
+import { generateObjectId } from "../../util/generateObjectId";
+import { buildPrismaListQuery } from "../../builder/buildPrismaListQuery";
 import { findOwnedBikeOrThrow } from "../bike/bike.utils";
 import { deleteCloudinaryImage, uploadDocumentBuffer } from "../../util/cloudinary";
-import { TBikeDocument } from "./bikeDocument.interface";
-import { bikeDocumentModel } from "./bikeDocument.model";
+import { TBikeDocument, TBikeDocumentFile } from "./bikeDocument.interface";
+
+const toApiShape = <T extends { id: string; bikeId: string }>(doc: T) => ({
+  ...doc,
+  _id: doc.id,
+  bike: doc.bikeId,
+});
+
+const getFiles = (doc: { files: unknown }): TBikeDocumentFile[] =>
+  (doc.files as TBikeDocumentFile[] | null) ?? [];
 
 const createBikeDocumentIntoDB = async (
   bikeId: string,
@@ -13,14 +23,17 @@ const createBikeDocumentIntoDB = async (
 ) => {
   await findOwnedBikeOrThrow(bikeId, userId);
 
-  const documentData = {
-    ...payload,
-    bike: bikeId,
-  };
+  const document = await prisma.bikeDocument.create({
+    data: {
+      id: generateObjectId(),
+      bikeId,
+      title: payload.title as string,
+      description: payload.description,
+      expiryDate: payload.expiryDate,
+    },
+  });
 
-  const document = await bikeDocumentModel.create(documentData);
-
-  return document;
+  return toApiShape(document);
 };
 
 const getBikeDocumentsFromDB = async (
@@ -30,52 +43,54 @@ const getBikeDocumentsFromDB = async (
 ) => {
   await findOwnedBikeOrThrow(bikeId, userId);
 
-  // ! strip client-controlled "bike"/"isDeleted" keys before they reach QueryBuilder.filter() —
-  // ! its .find(queryObj) call merges into the query and a later key wins, so an unsanitized
-  // ! `?bike=<otherBikeId>` would silently override the ownership-scoped filter below
+  // ! strip client-controlled "bike"/"isDeleted" keys before they reach the filter/query logic —
+  // ! an unsanitized `?bike=<otherBikeId>` would otherwise override the ownership-scoped filter below
   const sanitizedQuery = { ...query };
   delete sanitizedQuery.bike;
   delete sanitizedQuery.isDeleted;
 
+  const baseWhere = { bikeId, isDeleted: false };
+
+  // ! client-provided sort fully overrides the default expiry-first ordering below
+  if (sanitizedQuery.sort) {
+    const { where, orderBy, skip, take } = buildPrismaListQuery({
+      baseWhere,
+      query: sanitizedQuery,
+      defaultSort: "-createdAt", // unused when query.sort is present, kept for signature consistency
+    });
+
+    const [result, meta] = await Promise.all([
+      prisma.bikeDocument.findMany({ where, orderBy, skip, take }),
+      prisma.bikeDocument.count({ where }),
+    ]);
+
+    return { result: result.map(toApiShape), meta };
+  }
+
+  // ! no single Postgres sort can express "earliest expiry first, no-expiry documents last"
+  // ! (ascending sort treats NULL as less-than-any-value, i.e. first, not last) without a
+  // ! window function/aggregation — this codebase's house style avoids those (see
+  // ! bikeAccessory's getBikeAccessoriesFromDB, spec 13) in favor of one plain findMany() per
+  // ! group, concatenated in a fixed order, then paginated in memory
   const limit = Number(sanitizedQuery.limit) || 10;
   const page = Number(sanitizedQuery.page) || 1;
   const skip = (page - 1) * limit;
 
-  const baseFilter = { bike: bikeId, isDeleted: false };
-
-  // ! client-provided sort fully overrides the default expiry-first ordering below
-  if (sanitizedQuery.sort) {
-    const documentsQuery = new QueryBuilder(
-      bikeDocumentModel.find(baseFilter),
-      sanitizedQuery,
-    )
-      .filter()
-      .sort()
-      .pagination()
-      .field();
-
-    const result = await documentsQuery.queryModel;
-    const meta = await documentsQuery.countTotal();
-
-    return { result, meta };
-  }
-
-  // ! no single Mongo sort field can express "earliest expiry first, no-expiry documents
-  // ! last" (ascending sort treats a missing field as less-than-any-value, i.e. first, not
-  // ! last) without an aggregation pipeline — this codebase's house style avoids those (see
-  // ! bikeAccessory's getBikeAccessoriesFromDB, spec 13) in favor of one plain find() per
-  // ! group, concatenated in a fixed order, then paginated in memory
   const [withExpiry, withoutExpiry, meta] = await Promise.all([
-    bikeDocumentModel
-      .find({ ...baseFilter, expiryDate: { $ne: null } })
-      .sort("expiryDate"),
-    bikeDocumentModel
-      .find({ ...baseFilter, expiryDate: null })
-      .sort("-createdAt"),
-    bikeDocumentModel.countDocuments(baseFilter),
+    prisma.bikeDocument.findMany({
+      where: { ...baseWhere, expiryDate: { not: null } },
+      orderBy: { expiryDate: "asc" },
+    }),
+    prisma.bikeDocument.findMany({
+      where: { ...baseWhere, expiryDate: null },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.bikeDocument.count({ where: baseWhere }),
   ]);
 
-  const result = [...withExpiry, ...withoutExpiry].slice(skip, skip + limit);
+  const result = [...withExpiry, ...withoutExpiry]
+    .slice(skip, skip + limit)
+    .map(toApiShape);
 
   return { result, meta };
 };
@@ -87,17 +102,15 @@ const getBikeDocumentByIdFromDB = async (
 ) => {
   await findOwnedBikeOrThrow(bikeId, userId);
 
-  const document = await bikeDocumentModel.findOne({
-    _id: id,
-    bike: bikeId,
-    isDeleted: false,
+  const document = await prisma.bikeDocument.findFirst({
+    where: { id, bikeId, isDeleted: false },
   });
 
   if (!document) {
     throw new AppError(httpStatus.NOT_FOUND, "Bike document not found");
   }
 
-  return document;
+  return toApiShape(document);
 };
 
 const updateBikeDocumentIntoDB = async (
@@ -108,20 +121,20 @@ const updateBikeDocumentIntoDB = async (
 ) => {
   await findOwnedBikeOrThrow(bikeId, userId);
 
-  const document = await bikeDocumentModel.findOne({
-    _id: id,
-    bike: bikeId,
-    isDeleted: false,
+  const document = await prisma.bikeDocument.findFirst({
+    where: { id, bikeId, isDeleted: false },
   });
 
   if (!document) {
     throw new AppError(httpStatus.NOT_FOUND, "Bike document not found");
   }
 
-  Object.assign(document, payload);
-  await document.save();
+  const updated = await prisma.bikeDocument.update({
+    where: { id: document.id },
+    data: payload,
+  });
 
-  return document;
+  return toApiShape(updated);
 };
 
 const deleteBikeDocumentFromDB = async (
@@ -131,10 +144,8 @@ const deleteBikeDocumentFromDB = async (
 ) => {
   await findOwnedBikeOrThrow(bikeId, userId);
 
-  const document = await bikeDocumentModel.findOne({
-    _id: id,
-    bike: bikeId,
-    isDeleted: false,
+  const document = await prisma.bikeDocument.findFirst({
+    where: { id, bikeId, isDeleted: false },
   });
 
   if (!document) {
@@ -142,18 +153,19 @@ const deleteBikeDocumentFromDB = async (
   }
 
   // ! best-effort cleanup — a failed Cloudinary delete shouldn't block the user's own delete
-  if (document.files?.length) {
+  const files = getFiles(document);
+  if (files.length) {
     await Promise.all(
-      document.files.map((file) =>
-        deleteCloudinaryImage(file.publicId, file.resourceType),
-      ),
+      files.map((file) => deleteCloudinaryImage(file.publicId, file.resourceType)),
     );
   }
 
-  document.isDeleted = true;
-  await document.save();
+  const updated = await prisma.bikeDocument.update({
+    where: { id: document.id },
+    data: { isDeleted: true },
+  });
 
-  return document;
+  return toApiShape(updated);
 };
 
 const addBikeDocumentFilesIntoDB = async (
@@ -171,10 +183,8 @@ const addBikeDocumentFilesIntoDB = async (
     );
   }
 
-  const document = await bikeDocumentModel.findOne({
-    _id: id,
-    bike: bikeId,
-    isDeleted: false,
+  const document = await prisma.bikeDocument.findFirst({
+    where: { id, bikeId, isDeleted: false },
   });
 
   if (!document) {
@@ -183,7 +193,7 @@ const addBikeDocumentFilesIntoDB = async (
 
   // ! uploaded in parallel — this middleware uses memoryStorage (unlike bikeIssue's
   // ! CloudinaryStorage-backed upload.ts), so each buffer needs its own manual upload call
-  const uploadedFiles = await Promise.all(
+  const uploadedFiles: TBikeDocumentFile[] = await Promise.all(
     files.map(async (file) => {
       const { url, publicId, resourceType } = await uploadDocumentBuffer(
         file.buffer,
@@ -191,6 +201,7 @@ const addBikeDocumentFilesIntoDB = async (
         file.mimetype,
       );
       return {
+        _id: generateObjectId(),
         url,
         publicId,
         resourceType,
@@ -200,10 +211,12 @@ const addBikeDocumentFilesIntoDB = async (
     }),
   );
 
-  document.files = [...(document.files ?? []), ...uploadedFiles];
-  await document.save();
+  const updated = await prisma.bikeDocument.update({
+    where: { id: document.id },
+    data: { files: [...getFiles(document), ...uploadedFiles] },
+  });
 
-  return document;
+  return toApiShape(updated);
 };
 
 const deleteBikeDocumentFileFromDB = async (
@@ -214,19 +227,16 @@ const deleteBikeDocumentFileFromDB = async (
 ) => {
   await findOwnedBikeOrThrow(bikeId, userId);
 
-  const document = await bikeDocumentModel.findOne({
-    _id: id,
-    bike: bikeId,
-    isDeleted: false,
+  const document = await prisma.bikeDocument.findFirst({
+    where: { id, bikeId, isDeleted: false },
   });
 
   if (!document) {
     throw new AppError(httpStatus.NOT_FOUND, "Bike document not found");
   }
 
-  const targetFile = document.files?.find(
-    (file) => file._id?.toString() === fileId,
-  );
+  const existingFiles = getFiles(document);
+  const targetFile = existingFiles.find((file) => file._id === fileId);
 
   if (!targetFile) {
     throw new AppError(httpStatus.NOT_FOUND, "File not found");
@@ -234,12 +244,14 @@ const deleteBikeDocumentFileFromDB = async (
 
   await deleteCloudinaryImage(targetFile.publicId, targetFile.resourceType);
 
-  document.files = document.files?.filter(
-    (file) => file._id?.toString() !== fileId,
-  );
-  await document.save();
+  const remaining = existingFiles.filter((file) => file._id !== fileId);
 
-  return document;
+  const updated = await prisma.bikeDocument.update({
+    where: { id: document.id },
+    data: { files: remaining },
+  });
+
+  return toApiShape(updated);
 };
 
 export const bikeDocumentServices = {

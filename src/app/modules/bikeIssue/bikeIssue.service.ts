@@ -1,11 +1,21 @@
 import httpStatus from "http-status";
 import AppError from "../../Error/AppError";
-import QueryBuilder from "../../builder/Queryuilder";
+import { prisma } from "../../lib/prisma";
+import { generateObjectId } from "../../util/generateObjectId";
+import { buildPrismaListQuery } from "../../builder/buildPrismaListQuery";
 import { findOwnedBikeOrThrow } from "../bike/bike.utils";
 import { BikeIssueStatus, TBikeIssueStatus } from "./bikeIssue.constant";
-import { TBikeIssue } from "./bikeIssue.interface";
-import { bikeIssueModel } from "./bikeIssue.model";
+import { TBikeIssue, TBikeIssueImage } from "./bikeIssue.interface";
 import { deleteCloudinaryImage } from "../../util/cloudinary";
+
+const toApiShape = <T extends { id: string; bikeId: string }>(issue: T) => ({
+  ...issue,
+  _id: issue.id,
+  bike: issue.bikeId,
+});
+
+const getImages = (issue: { images: unknown }): TBikeIssueImage[] =>
+  (issue.images as TBikeIssueImage[] | null) ?? [];
 
 const createBikeIssueIntoDB = async (
   bikeId: string,
@@ -14,17 +24,18 @@ const createBikeIssueIntoDB = async (
 ) => {
   await findOwnedBikeOrThrow(bikeId, userId);
 
-  const issueData = {
-    ...payload,
-    bike: bikeId,
-    status: BikeIssueStatus.open,
+  const issue = await prisma.bikeIssue.create({
+    data: {
+      id: generateObjectId(),
+      bikeId,
+      title: payload.title as string,
+      description: payload.description,
+      dateReported: payload.dateReported ?? new Date(),
+      status: BikeIssueStatus.open,
+    },
+  });
 
-    dateReported: payload.dateReported ?? new Date(),
-  };
-
-  const issue = await bikeIssueModel.create(issueData);
-
-  return issue;
+  return toApiShape(issue);
 };
 
 const getBikeIssuesFromDB = async (
@@ -34,26 +45,25 @@ const getBikeIssuesFromDB = async (
 ) => {
   await findOwnedBikeOrThrow(bikeId, userId);
 
-  // ! strip client-controlled "bike"/"isDeleted" keys before they reach QueryBuilder.filter() —
-  // ! its .find(queryObj) call merges into the query and a later key wins, so an unsanitized
+  // ! strip client-controlled "bike"/"isDeleted" keys before they reach buildPrismaListQuery —
+  // ! it merges whatever's left in query as equality filters, and an unsanitized
   // ! `?bike=<otherBikeId>` would silently override the ownership-scoped filter below
   const sanitizedQuery = { ...query };
   delete sanitizedQuery.bike;
   delete sanitizedQuery.isDeleted;
 
-  const issuesQuery = new QueryBuilder(
-    bikeIssueModel.find({ bike: bikeId, isDeleted: false }),
-    sanitizedQuery,
-  )
-    .filter()
-    .sort("status -dateReported")
-    .pagination()
-    .field();
+  const { where, orderBy, skip, take } = buildPrismaListQuery({
+    baseWhere: { bikeId, isDeleted: false },
+    query: sanitizedQuery,
+    defaultSort: "status -dateReported",
+  });
 
-  const result = await issuesQuery.queryModel;
-  const meta = await issuesQuery.countTotal();
+  const [result, meta] = await Promise.all([
+    prisma.bikeIssue.findMany({ where, orderBy, skip, take }),
+    prisma.bikeIssue.count({ where }),
+  ]);
 
-  return { result, meta };
+  return { result: result.map(toApiShape), meta };
 };
 
 const getBikeIssueByIdFromDB = async (
@@ -63,17 +73,15 @@ const getBikeIssueByIdFromDB = async (
 ) => {
   await findOwnedBikeOrThrow(bikeId, userId);
 
-  const issue = await bikeIssueModel.findOne({
-    _id: id,
-    bike: bikeId,
-    isDeleted: false,
+  const issue = await prisma.bikeIssue.findFirst({
+    where: { id, bikeId, isDeleted: false },
   });
 
   if (!issue) {
     throw new AppError(httpStatus.NOT_FOUND, "Bike issue not found");
   }
 
-  return issue;
+  return toApiShape(issue);
 };
 
 const updateBikeIssueInDB = async (
@@ -84,23 +92,23 @@ const updateBikeIssueInDB = async (
 ) => {
   await findOwnedBikeOrThrow(bikeId, userId);
 
-  const issue = await bikeIssueModel.findOne({
-    _id: id,
-    bike: bikeId,
-    isDeleted: false,
+  const issue = await prisma.bikeIssue.findFirst({
+    where: { id, bikeId, isDeleted: false },
   });
 
   if (!issue) {
     throw new AppError(httpStatus.NOT_FOUND, "Bike issue not found");
   }
 
-  const updateData = { ...payload };
+  const updateData = { ...payload } as Record<string, unknown>;
   delete updateData.status;
 
-  Object.assign(issue, updateData);
-  await issue.save();
+  const updated = await prisma.bikeIssue.update({
+    where: { id: issue.id },
+    data: updateData,
+  });
 
-  return issue;
+  return toApiShape(updated);
 };
 
 const deleteBikeIssueFromDB = async (
@@ -110,20 +118,20 @@ const deleteBikeIssueFromDB = async (
 ) => {
   await findOwnedBikeOrThrow(bikeId, userId);
 
-  const issue = await bikeIssueModel.findOne({
-    _id: id,
-    bike: bikeId,
-    isDeleted: false,
+  const issue = await prisma.bikeIssue.findFirst({
+    where: { id, bikeId, isDeleted: false },
   });
 
   if (!issue) {
     throw new AppError(httpStatus.NOT_FOUND, "Bike issue not found");
   }
 
-  issue.isDeleted = true;
-  await issue.save();
+  const updated = await prisma.bikeIssue.update({
+    where: { id: issue.id },
+    data: { isDeleted: true },
+  });
 
-  return issue;
+  return toApiShape(updated);
 };
 
 // ! open -> resolved when fixed, resolved -> open again if the same problem recurs
@@ -135,10 +143,8 @@ const updateBikeIssueStatus = async (
 ) => {
   await findOwnedBikeOrThrow(bikeId, userId);
 
-  const issue = await bikeIssueModel.findOne({
-    _id: id,
-    bike: bikeId,
-    isDeleted: false,
+  const issue = await prisma.bikeIssue.findFirst({
+    where: { id, bikeId, isDeleted: false },
   });
 
   if (!issue) {
@@ -149,10 +155,12 @@ const updateBikeIssueStatus = async (
     throw new AppError(httpStatus.BAD_REQUEST, `Issue is already ${status}`);
   }
 
-  issue.status = status;
-  await issue.save();
+  const updated = await prisma.bikeIssue.update({
+    where: { id: issue.id },
+    data: { status },
+  });
 
-  return issue;
+  return toApiShape(updated);
 };
 
 const addBikeIssueImagesIntoDB = async (
@@ -170,25 +178,26 @@ const addBikeIssueImagesIntoDB = async (
     );
   }
 
-  const issue = await bikeIssueModel.findOne({
-    _id: id,
-    bike: bikeId,
-    isDeleted: false,
+  const issue = await prisma.bikeIssue.findFirst({
+    where: { id, bikeId, isDeleted: false },
   });
 
   if (!issue) {
     throw new AppError(httpStatus.NOT_FOUND, "Bike issue not found");
   }
 
-  const newImages = files.map((file) => ({
+  const newImages: TBikeIssueImage[] = files.map((file) => ({
+    _id: generateObjectId(),
     url: file.path,
     publicId: file.filename,
   }));
 
-  issue.images = [...(issue.images ?? []), ...newImages];
-  await issue.save();
+  const updated = await prisma.bikeIssue.update({
+    where: { id: issue.id },
+    data: { images: [...getImages(issue), ...newImages] },
+  });
 
-  return issue;
+  return toApiShape(updated);
 };
 
 const deleteBikeIssueImageFromDB = async (
@@ -199,19 +208,16 @@ const deleteBikeIssueImageFromDB = async (
 ) => {
   await findOwnedBikeOrThrow(bikeId, userId);
 
-  const issue = await bikeIssueModel.findOne({
-    _id: id,
-    bike: bikeId,
-    isDeleted: false,
+  const issue = await prisma.bikeIssue.findFirst({
+    where: { id, bikeId, isDeleted: false },
   });
 
   if (!issue) {
     throw new AppError(httpStatus.NOT_FOUND, "Bike issue not found");
   }
 
-  const targetImage = issue.images?.find(
-    (image) => image._id?.toString() === imageId,
-  );
+  const existingImages = getImages(issue);
+  const targetImage = existingImages.find((image) => image._id === imageId);
 
   if (!targetImage) {
     throw new AppError(httpStatus.NOT_FOUND, "Image not found");
@@ -219,12 +225,14 @@ const deleteBikeIssueImageFromDB = async (
 
   await deleteCloudinaryImage(targetImage.publicId);
 
-  issue.images = issue.images?.filter(
-    (image) => image._id?.toString() !== imageId,
-  );
-  await issue.save();
+  const remaining = existingImages.filter((image) => image._id !== imageId);
 
-  return issue;
+  const updated = await prisma.bikeIssue.update({
+    where: { id: issue.id },
+    data: { images: remaining },
+  });
+
+  return toApiShape(updated);
 };
 
 export const bikeIssueServices = {

@@ -15,11 +15,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.spendingServices = void 0;
 const http_status_1 = __importDefault(require("http-status"));
 const AppError_1 = __importDefault(require("../../Error/AppError"));
+const prisma_1 = require("../../lib/prisma");
 const bike_utils_1 = require("../bike/bike.utils");
 const bikeAccessory_constant_1 = require("../bikeAccessory/bikeAccessory.constant");
-const bikeAccessory_model_1 = require("../bikeAccessory/bikeAccessory.model");
-const fuelLog_model_1 = require("../fuelLog/fuelLog.model");
-const maintenanceLog_model_1 = require("../maintenanceLog/maintenanceLog.model");
 // ! shared by getSpendingSummaryFromDB and getSpendingDetailsFromDB so the two endpoints'
 // ! date-range math can never drift apart from each other
 const resolveSpendingDateRange = (period, targetMonth, targetYear) => {
@@ -54,32 +52,33 @@ const resolveSpendingDateRange = (period, targetMonth, targetYear) => {
     return {};
 };
 const computeSpendingForRange = (bikeId, startDate, endDate) => __awaiter(void 0, void 0, void 0, function* () {
-    const fuelLogsPromise = fuelLog_model_1.fuelLogModel
-        .find(Object.assign({ bike: bikeId, isDeleted: false }, (startDate && endDate ? { date: { $gte: startDate, $lte: endDate } } : {})))
-        .lean();
-    const maintenanceLogsPromise = maintenanceLog_model_1.maintenanceLogModel
-        .find(Object.assign({ bike: bikeId, isDeleted: false }, (startDate && endDate ? { serviceDate: { $gte: startDate, $lte: endDate } } : {})))
-        .populate("maintenanceType", "name")
-        .lean();
-    // ! only purchased accessories count as real spending — pending/cancelled wishlist
-    // ! entries are never included
-    const accessoriesPromise = bikeAccessory_model_1.bikeAccessoryModel
-        .find(Object.assign({ bike: bikeId, isDeleted: false, status: bikeAccessory_constant_1.AccessoryStatus.purchased }, (startDate && endDate ? { purchaseDate: { $gte: startDate, $lte: endDate } } : {})))
-        .lean();
     const [fuelLogs, maintenanceLogs, accessories] = yield Promise.all([
-        fuelLogsPromise,
-        maintenanceLogsPromise,
-        accessoriesPromise,
+        prisma_1.prisma.fuelLog.findMany({
+            where: Object.assign({ bikeId, isDeleted: false }, (startDate && endDate ? { date: { gte: startDate, lte: endDate } } : {})),
+        }),
+        prisma_1.prisma.maintenanceLog.findMany({
+            where: Object.assign({ bikeId, isDeleted: false }, (startDate && endDate ? { serviceDate: { gte: startDate, lte: endDate } } : {})),
+            // ! replaces Mongoose's .populate("maintenanceType", "name")
+            include: { maintenanceType: { select: { name: true } } },
+        }),
+        // ! only purchased accessories count as real spending — pending/cancelled wishlist
+        // ! entries are never included
+        prisma_1.prisma.bikeAccessory.findMany({
+            where: Object.assign({ bikeId, isDeleted: false, status: bikeAccessory_constant_1.AccessoryStatus.purchased }, (startDate && endDate ? { purchaseDate: { gte: startDate, lte: endDate } } : {})),
+        }),
     ]);
-    const fuelTotal = fuelLogs.reduce((sum, log) => sum + log.totalCost, 0);
+    // ! every Decimal(12,2) field read here MUST go through Number(...) before arithmetic —
+    // ! a Prisma Decimal instance doesn't do real arithmetic through JS's +/* operators
+    const fuelTotal = fuelLogs.reduce((sum, log) => sum + Number(log.totalCost), 0);
     const maintenanceByCategory = maintenanceLogs.reduce((acc, log) => {
-        var _a, _b;
-        const mt = log.maintenanceType;
-        const category = (_a = mt === null || mt === void 0 ? void 0 : mt.name) !== null && _a !== void 0 ? _a : "Unknown";
-        acc[category] = ((_b = acc[category]) !== null && _b !== void 0 ? _b : 0) + log.cost;
+        var _a, _b, _c;
+        // ! maintenanceType is a required FK, so null shouldn't actually occur — the "Unknown"
+        // ! fallback is defensive, matching pre-migration behavior rather than tightening it
+        const category = (_b = (_a = log.maintenanceType) === null || _a === void 0 ? void 0 : _a.name) !== null && _b !== void 0 ? _b : "Unknown";
+        acc[category] = ((_c = acc[category]) !== null && _c !== void 0 ? _c : 0) + Number(log.cost);
         return acc;
     }, {});
-    const accessoryTotal = accessories.reduce((sum, a) => { var _a; return sum + ((_a = a.price) !== null && _a !== void 0 ? _a : 0); }, 0);
+    const accessoryTotal = accessories.reduce((sum, a) => sum + (a.price ? Number(a.price) : 0), 0);
     const categoryBreakdown = [
         { category: "Fuel", total: fuelTotal },
         ...Object.entries(maintenanceByCategory).map(([category, total]) => ({
@@ -89,31 +88,30 @@ const computeSpendingForRange = (bikeId, startDate, endDate) => __awaiter(void 0
         ...(accessoryTotal > 0 ? [{ category: "Accessories", total: accessoryTotal }] : []),
     ];
     categoryBreakdown.sort((a, b) => b.total - a.total);
-    const maintenanceTotal = maintenanceLogs.reduce((sum, log) => sum + log.cost, 0);
+    const maintenanceTotal = maintenanceLogs.reduce((sum, log) => sum + Number(log.cost), 0);
     const totalSpending = fuelTotal + maintenanceTotal + accessoryTotal;
     const fuelRecords = fuelLogs.map((log) => {
         var _a, _b;
         return ({
             date: log.date,
             category: "Fuel",
-            description: `${log.litersAdded}L${log.isFullTank ? " (Full Tank)" : ""} @ ৳${log.pricePerLiter}/L`,
-            amount: log.totalCost,
+            description: `${log.litersAdded}L${log.isFullTank ? " (Full Tank)" : ""} @ ৳${Number(log.pricePerLiter)}/L`,
+            amount: Number(log.totalCost),
             vendor: (_a = log.fuelStation) !== null && _a !== void 0 ? _a : null,
             remarks: (_b = log.notes) !== null && _b !== void 0 ? _b : null,
             source: "fuel",
         });
     });
     const maintenanceRecords = maintenanceLogs.map((log) => {
-        var _a, _b, _c, _d;
-        const mt = log.maintenanceType;
-        const category = (_a = mt === null || mt === void 0 ? void 0 : mt.name) !== null && _a !== void 0 ? _a : "Unknown";
+        var _a, _b, _c, _d, _e;
+        const category = (_b = (_a = log.maintenanceType) === null || _a === void 0 ? void 0 : _a.name) !== null && _b !== void 0 ? _b : "Unknown";
         return {
             date: log.serviceDate,
             category,
-            description: ((_b = log.partsReplaced) === null || _b === void 0 ? void 0 : _b.length) ? log.partsReplaced.join(", ") : category,
-            amount: log.cost,
-            vendor: (_c = log.serviceCenter) !== null && _c !== void 0 ? _c : null,
-            remarks: (_d = log.notes) !== null && _d !== void 0 ? _d : null,
+            description: ((_c = log.partsReplaced) === null || _c === void 0 ? void 0 : _c.length) ? log.partsReplaced.join(", ") : category,
+            amount: Number(log.cost),
+            vendor: (_d = log.serviceCenter) !== null && _d !== void 0 ? _d : null,
+            remarks: (_e = log.notes) !== null && _e !== void 0 ? _e : null,
             source: "maintenance",
         };
     });
@@ -121,7 +119,7 @@ const computeSpendingForRange = (bikeId, startDate, endDate) => __awaiter(void 0
         date: a.purchaseDate,
         category: "Accessories",
         description: a.name,
-        amount: a.price,
+        amount: a.price !== null ? Number(a.price) : 0,
         vendor: null,
         remarks: null,
         source: "accessory",

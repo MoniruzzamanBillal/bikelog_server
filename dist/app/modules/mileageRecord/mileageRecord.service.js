@@ -13,33 +13,24 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.mileageRecordServices = void 0;
-const fuelLog_model_1 = require("../fuelLog/fuelLog.model");
-const mileageRecord_model_1 = require("./mileageRecord.model");
-const bike_model_1 = require("../bike/bike.model");
 const http_status_1 = __importDefault(require("http-status"));
 const AppError_1 = __importDefault(require("../../Error/AppError"));
+const prisma_1 = require("../../lib/prisma");
+const toApiShape = (record) => (Object.assign(Object.assign({}, record), { _id: record.id, bike: record.bikeId }));
 const computeMileageForRange = (bikeId, startDate, endDate) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
-    const fuelLogsInRange = yield fuelLog_model_1.fuelLogModel
-        .find({
-        bike: bikeId,
-        date: { $gte: startDate, $lte: endDate },
-        isDeleted: false,
-    })
-        .sort({ date: 1 })
-        .lean();
+    const fuelLogsInRange = yield prisma_1.prisma.fuelLog.findMany({
+        where: { bikeId, date: { gte: startDate, lte: endDate }, isDeleted: false },
+        orderBy: { date: "asc" },
+    });
     if (fuelLogsInRange.length === 0) {
         return { totalDistanceKm: 0, totalLitersConsumed: 0, fuelLogCount: 0 };
     }
     const lastLogInRange = fuelLogsInRange[fuelLogsInRange.length - 1];
-    const previousLog = yield fuelLog_model_1.fuelLogModel
-        .findOne({
-        bike: bikeId,
-        date: { $lt: startDate },
-        isDeleted: false,
-    })
-        .sort({ date: -1 })
-        .lean();
+    const previousLog = yield prisma_1.prisma.fuelLog.findFirst({
+        where: { bikeId, date: { lt: startDate }, isDeleted: false },
+        orderBy: { date: "desc" },
+    });
     let startOdometer;
     if (previousLog) {
         startOdometer = previousLog.odometerReading;
@@ -48,7 +39,7 @@ const computeMileageForRange = (bikeId, startDate, endDate) => __awaiter(void 0,
         // ! no earlier fuel log — anchor on the bike's immutable initialOdometer, not
         // ! currentOdometer (which reflects TODAY's reading, not the reading as of this
         // ! historical range's start, once any later fuel/maintenance log has bumped it)
-        const bike = yield bike_model_1.bikeModel.findById(bikeId).lean();
+        const bike = yield prisma_1.prisma.bike.findUnique({ where: { id: bikeId } });
         startOdometer = (_a = bike === null || bike === void 0 ? void 0 : bike.initialOdometer) !== null && _a !== void 0 ? _a : 0;
     }
     const totalDistanceKm = lastLogInRange.odometerReading - startOdometer;
@@ -61,15 +52,15 @@ const computeMileageForRange = (bikeId, startDate, endDate) => __awaiter(void 0,
 // ! otherwise a user who never does a full-tank fill would never get any mileage figure at all
 const ROLLING_AVERAGE_WINDOW = 10;
 const getMileageRecordsFromDB = (bikeId) => __awaiter(void 0, void 0, void 0, function* () {
-    const exactRecords = yield mileageRecord_model_1.mileageRecordModel
-        .find({ bike: bikeId })
-        .sort({ periodEndDate: -1 })
-        .lean();
-    const recentFuelLogs = yield fuelLog_model_1.fuelLogModel
-        .find({ bike: bikeId, isDeleted: false })
-        .sort({ date: -1 })
-        .limit(ROLLING_AVERAGE_WINDOW)
-        .lean();
+    const exactRecords = yield prisma_1.prisma.mileageRecord.findMany({
+        where: { bikeId },
+        orderBy: { periodEndDate: "desc" },
+    });
+    const recentFuelLogs = yield prisma_1.prisma.fuelLog.findMany({
+        where: { bikeId, isDeleted: false },
+        orderBy: { date: "desc" },
+        take: ROLLING_AVERAGE_WINDOW,
+    });
     let approximate = null;
     if (recentFuelLogs.length >= 2) {
         const chronological = [...recentFuelLogs].sort((a, b) => a.date.getTime() - b.date.getTime());
@@ -84,7 +75,7 @@ const getMileageRecordsFromDB = (bikeId) => __awaiter(void 0, void 0, void 0, fu
             };
         }
     }
-    return { exactRecords, approximate };
+    return { exactRecords: exactRecords.map(toApiShape), approximate };
 });
 const getMonthlyMileageFromDB = (bikeId, targetMonth) => __awaiter(void 0, void 0, void 0, function* () {
     const [yearStr, monthStr] = targetMonth.split("-");
@@ -120,14 +111,14 @@ const getYearlyMileageFromDB = (bikeId, targetYear) => __awaiter(void 0, void 0,
     return { targetYear, monthlySummary };
 });
 const getLifetimeMileageFromDB = (bikeId) => __awaiter(void 0, void 0, void 0, function* () {
-    const bike = yield bike_model_1.bikeModel.findById(bikeId).lean();
+    const bike = yield prisma_1.prisma.bike.findUnique({ where: { id: bikeId } });
     if (!bike) {
         throw new AppError_1.default(http_status_1.default.NOT_FOUND, "Bike not found");
     }
-    const latestFuelLog = yield fuelLog_model_1.fuelLogModel
-        .findOne({ bike: bikeId, isDeleted: false })
-        .sort({ date: -1 })
-        .lean();
+    const latestFuelLog = yield prisma_1.prisma.fuelLog.findFirst({
+        where: { bikeId, isDeleted: false },
+        orderBy: { date: "desc" },
+    });
     if (!latestFuelLog) {
         return { totalDistanceKm: 0, totalLitersConsumed: 0, fuelLogCount: 0 };
     }
@@ -135,10 +126,10 @@ const getLifetimeMileageFromDB = (bikeId) => __awaiter(void 0, void 0, void 0, f
     // ! not the first fuel log's reading — the plan doc's "lifetime" figure is meant to cover
     // ! since-purchase distance, including any km ridden before the first fuel log was ever entered
     const endOdometer = latestFuelLog.odometerReading;
-    const allLogs = yield fuelLog_model_1.fuelLogModel
-        .find({ bike: bikeId, isDeleted: false })
-        .sort({ date: 1 })
-        .lean();
+    const allLogs = yield prisma_1.prisma.fuelLog.findMany({
+        where: { bikeId, isDeleted: false },
+        orderBy: { date: "asc" },
+    });
     const totalDistanceKm = endOdometer - bike.initialOdometer;
     const totalLitersConsumed = allLogs.reduce((sum, log) => sum + log.litersAdded, 0);
     const fuelLogCount = allLogs.length;

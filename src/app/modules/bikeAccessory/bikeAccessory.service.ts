@@ -1,10 +1,23 @@
+import { Prisma } from "@prisma/client";
 import httpStatus from "http-status";
 import AppError from "../../Error/AppError";
+import { prisma } from "../../lib/prisma";
+import { generateObjectId } from "../../util/generateObjectId";
 import { findOwnedBikeOrThrow } from "../bike/bike.utils";
 import { AccessoryStatus, TAccessoryStatus } from "./bikeAccessory.constant";
-import { bikeAccessoryModel } from "./bikeAccessory.model";
 import { TBikeAccessory } from "./bikeAccessory.interface";
 import { deleteCloudinaryImage } from "../../util/cloudinary";
+
+const toApiShape = <
+  T extends { id: string; bikeId: string; price: unknown },
+>(
+  accessory: T,
+) => ({
+  ...accessory,
+  _id: accessory.id,
+  bike: accessory.bikeId,
+  price: accessory.price !== null ? Number(accessory.price) : null,
+});
 
 const createBikeAccessoryIntoDB = async (
   bikeId: string,
@@ -20,17 +33,21 @@ const createBikeAccessoryIntoDB = async (
     );
   }
 
-  const accessoryData = {
-    ...payload,
-    bike: bikeId,
-    ...(payload.status === AccessoryStatus.purchased
-      ? { purchaseDate: new Date() }
-      : {}),
-  };
+  const accessory = await prisma.bikeAccessory.create({
+    data: {
+      id: generateObjectId(),
+      bikeId,
+      name: payload.name as string,
+      urgency: payload.urgency as TBikeAccessory["urgency"],
+      status: payload.status,
+      price: payload.price,
+      ...(payload.status === AccessoryStatus.purchased
+        ? { purchaseDate: new Date() }
+        : {}),
+    },
+  });
 
-  const accessory = await bikeAccessoryModel.create(accessoryData);
-
-  return { accessory, bikeNickname: bike.nickname };
+  return { accessory: toApiShape(accessory), bikeNickname: bike.nickname };
 };
 
 const getBikeAccessoriesFromDB = async (
@@ -54,8 +71,10 @@ const getBikeAccessoriesFromDB = async (
   delete filterQuery.fields;
 
   // ! grouping is done by running one query per status (in the enum's declared order) and
-  // ! merging the results, rather than a persisted/derived rank field — this sorts correctly
-  // ! on documents that already existed before this change, with no migration step required
+  // ! merging the results, rather than relying on Postgres enum ordering (not guaranteed to
+  // ! match declaration order) or a $group-style aggregation (avoided per house style, see
+  // ! context/architecture.md) — same strategy spec 13 chose, ported exactly, not "simplified"
+  // ! into a single orderBy: [{status: ...}, ...] query
   const statusOrder = Object.values(AccessoryStatus);
   const requestedStatuses: TAccessoryStatus[] =
     typeof filterQuery.status === "string" &&
@@ -64,36 +83,40 @@ const getBikeAccessoriesFromDB = async (
       : statusOrder;
   delete filterQuery.status;
 
-  const sortBy =
-    (typeof sanitizedQuery.sort === "string" ? sanitizedQuery.sort : "")
-      .split(",")
-      .join(" ") || "-createdAt";
-
-  const fields =
-    (typeof sanitizedQuery.fields === "string" ? sanitizedQuery.fields : "")
-      .split(",")
-      .join(" ") || "-__v";
+  const sortStr =
+    (typeof sanitizedQuery.sort === "string" ? sanitizedQuery.sort : "") ||
+    "-createdAt";
+  const orderBy = sortStr
+    .trim()
+    .split(/[\s,]+/)
+    .map((field) =>
+      field.startsWith("-")
+        ? { [field.slice(1)]: "desc" as const }
+        : { [field]: "asc" as const },
+    );
 
   const limit = Number(sanitizedQuery.limit) || 10;
   const page = Number(sanitizedQuery.page) || 1;
   const skip = (page - 1) * limit;
 
-  const baseFilter = { bike: bikeId, isDeleted: false, ...filterQuery };
+  const baseWhere = { bikeId, isDeleted: false, ...filterQuery };
 
   const resultsByStatus = await Promise.all(
     requestedStatuses.map((status) =>
-      bikeAccessoryModel
-        .find({ ...baseFilter, status })
-        .sort(sortBy)
-        .select(fields),
+      prisma.bikeAccessory.findMany({
+        where: { ...baseWhere, status },
+        orderBy,
+      }),
     ),
   );
 
-  const result = resultsByStatus.flat().slice(skip, skip + limit);
+  const result = resultsByStatus
+    .flat()
+    .slice(skip, skip + limit)
+    .map(toApiShape);
 
-  const meta = await bikeAccessoryModel.countDocuments({
-    ...baseFilter,
-    status: { $in: requestedStatuses },
+  const meta = await prisma.bikeAccessory.count({
+    where: { ...baseWhere, status: { in: requestedStatuses } },
   });
 
   return { result, meta };
@@ -106,17 +129,15 @@ const getBikeAccessoryByIdFromDB = async (
 ) => {
   await findOwnedBikeOrThrow(bikeId, userId);
 
-  const accessory = await bikeAccessoryModel.findOne({
-    _id: id,
-    bike: bikeId,
-    isDeleted: false,
+  const accessory = await prisma.bikeAccessory.findFirst({
+    where: { id, bikeId, isDeleted: false },
   });
 
   if (!accessory) {
     throw new AppError(httpStatus.NOT_FOUND, "Bike accessory not found");
   }
 
-  return accessory;
+  return toApiShape(accessory);
 };
 
 const updateBikeAccessoryInDB = async (
@@ -127,10 +148,8 @@ const updateBikeAccessoryInDB = async (
 ) => {
   const bike = await findOwnedBikeOrThrow(bikeId, userId);
 
-  const accessory = await bikeAccessoryModel.findOne({
-    _id: id,
-    bike: bikeId,
-    isDeleted: false,
+  const accessory = await prisma.bikeAccessory.findFirst({
+    where: { id, bikeId, isDeleted: false },
   });
 
   if (!accessory) {
@@ -149,8 +168,10 @@ const updateBikeAccessoryInDB = async (
     );
   }
 
+  const existingPrice =
+    accessory.price !== null ? Number(accessory.price) : undefined;
   const resultingStatus = payload.status ?? accessory.status;
-  const resultingPrice = payload.price ?? accessory.price;
+  const resultingPrice = payload.price ?? existingPrice;
 
   if (resultingStatus === AccessoryStatus.purchased && !resultingPrice) {
     throw new AppError(
@@ -159,7 +180,7 @@ const updateBikeAccessoryInDB = async (
     );
   }
 
-  const updateData = { ...payload };
+  const updateData: Record<string, unknown> = { ...payload };
 
   // ! stamp purchaseDate exactly once, at the moment status actually transitions into
   // ! purchased — never re-stamped afterward, since the lock above guarantees this only
@@ -172,10 +193,16 @@ const updateBikeAccessoryInDB = async (
     updateData.purchaseDate = new Date();
   }
 
-  Object.assign(accessory, updateData);
-  await accessory.save();
+  const updated = await prisma.bikeAccessory.update({
+    where: { id: accessory.id },
+    data: updateData,
+  });
 
-  return { accessory, justPurchased, bikeNickname: bike.nickname };
+  return {
+    accessory: toApiShape(updated),
+    justPurchased,
+    bikeNickname: bike.nickname,
+  };
 };
 
 const deleteBikeAccessoryFromDB = async (
@@ -185,20 +212,20 @@ const deleteBikeAccessoryFromDB = async (
 ) => {
   await findOwnedBikeOrThrow(bikeId, userId);
 
-  const accessory = await bikeAccessoryModel.findOne({
-    _id: id,
-    bike: bikeId,
-    isDeleted: false,
+  const accessory = await prisma.bikeAccessory.findFirst({
+    where: { id, bikeId, isDeleted: false },
   });
 
   if (!accessory) {
     throw new AppError(httpStatus.NOT_FOUND, "Bike accessory not found");
   }
 
-  accessory.isDeleted = true;
-  await accessory.save();
+  const updated = await prisma.bikeAccessory.update({
+    where: { id: accessory.id },
+    data: { isDeleted: true },
+  });
 
-  return accessory;
+  return toApiShape(updated);
 };
 
 const uploadBikeAccessoryImageIntoDB = async (
@@ -213,24 +240,29 @@ const uploadBikeAccessoryImageIntoDB = async (
     throw new AppError(httpStatus.BAD_REQUEST, "Image file is required");
   }
 
-  const accessory = await bikeAccessoryModel.findOne({
-    _id: id,
-    bike: bikeId,
-    isDeleted: false,
+  const accessory = await prisma.bikeAccessory.findFirst({
+    where: { id, bikeId, isDeleted: false },
   });
 
   if (!accessory) {
     throw new AppError(httpStatus.NOT_FOUND, "Bike accessory not found");
   }
 
-  if (accessory.productImage) {
-    await deleteCloudinaryImage(accessory.productImage.publicId);
+  const existingProductImage = accessory.productImage as {
+    url: string;
+    publicId: string;
+  } | null;
+
+  if (existingProductImage) {
+    await deleteCloudinaryImage(existingProductImage.publicId);
   }
 
-  accessory.productImage = { url: file.path, publicId: file.filename };
-  await accessory.save();
+  const updated = await prisma.bikeAccessory.update({
+    where: { id: accessory.id },
+    data: { productImage: { url: file.path, publicId: file.filename } },
+  });
 
-  return accessory;
+  return toApiShape(updated);
 };
 
 const deleteBikeAccessoryImageFromDB = async (
@@ -240,26 +272,31 @@ const deleteBikeAccessoryImageFromDB = async (
 ) => {
   await findOwnedBikeOrThrow(bikeId, userId);
 
-  const accessory = await bikeAccessoryModel.findOne({
-    _id: id,
-    bike: bikeId,
-    isDeleted: false,
+  const accessory = await prisma.bikeAccessory.findFirst({
+    where: { id, bikeId, isDeleted: false },
   });
 
   if (!accessory) {
     throw new AppError(httpStatus.NOT_FOUND, "Bike accessory not found");
   }
 
-  if (!accessory.productImage) {
+  const existingProductImage = accessory.productImage as {
+    url: string;
+    publicId: string;
+  } | null;
+
+  if (!existingProductImage) {
     throw new AppError(httpStatus.NOT_FOUND, "Product image not found");
   }
 
-  await deleteCloudinaryImage(accessory.productImage.publicId);
+  await deleteCloudinaryImage(existingProductImage.publicId);
 
-  accessory.productImage = undefined;
-  await accessory.save();
+  const updated = await prisma.bikeAccessory.update({
+    where: { id: accessory.id },
+    data: { productImage: Prisma.JsonNull },
+  });
 
-  return accessory;
+  return toApiShape(updated);
 };
 
 export const bikeAccessoryServices = {

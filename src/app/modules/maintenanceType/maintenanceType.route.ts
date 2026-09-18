@@ -17,5 +17,13 @@ router.post(
 // ! for getting all maintenance types
 router.get("/", authCheck, maintenanceTypeController.getMaintenanceTypes);
 
+// ! for updating a maintenance type
+router.patch(
+  "/:id",
+  authCheck,
+  validateRequest(maintenanceTypeValidations.updateMaintenanceTypeSchema),
+  maintenanceTypeController.updateMaintenanceType,
+);
+
 //
 export const maintenanceTypeRouter = router;

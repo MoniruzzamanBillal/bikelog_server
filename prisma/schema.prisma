@@ -1,0 +1,257 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  admin
+  user
+}
+
+enum AccessoryUrgency {
+  immediate
+  medium
+  low
+}
+
+enum AccessoryStatus {
+  pending
+  purchased
+  cancelled
+}
+
+enum BikeIssueStatus {
+  open
+  resolved
+}
+
+model User {
+  id            String   @id
+  name          String
+  email         String   @unique
+  password      String
+  isDeleted     Boolean  @default(false)
+  userRole      Role     @default(user)
+  expoPushToken String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  bikes Bike[]
+
+  @@map("users")
+}
+
+model Bike {
+  id                           String    @id
+  ownerId                      String
+  nickname                     String
+  brand                        String
+  model                        String
+  registrationNumber           String
+  purchaseDate                 DateTime
+  fuelTankCapacityLiters       Float
+  currentOdometer              Float     @default(0)
+  initialOdometer              Float     @default(0)
+  isDeleted                    Boolean   @default(false)
+  aiSpendingInsight            String?
+  aiSpendingInsightLogCount    Int?
+  aiMileageInsight             String?
+  aiMileageInsightFuelLogCount Int?
+  manual                       Json?
+  createdAt                    DateTime  @default(now())
+  updatedAt                    DateTime  @updatedAt
+
+  owner           User              @relation(fields: [ownerId], references: [id])
+  fuelLogs        FuelLog[]
+  maintenanceLogs MaintenanceLog[]
+  mileageRecords  MileageRecord[]
+  issues          BikeIssue[]
+  accessories     BikeAccessory[]
+  documents       BikeDocument[]
+  manualChunks    BikeManualChunk[]
+
+  @@index([ownerId])
+  @@map("bikes")
+}
+
+model MaintenanceType {
+  id                  String   @id
+  name                String   @unique
+  defaultIntervalKm   Int?
+  defaultIntervalDays Int?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  maintenanceLogs MaintenanceLog[]
+
+  @@map("maintenance_types")
+}
+
+model EngineOilType {
+  id                  String   @id
+  name                String   @unique
+  suggestedIntervalKm Float
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  maintenanceLogs MaintenanceLog[]
+
+  @@map("engine_oil_types")
+}
+
+model FuelLog {
+  id              String   @id
+  bikeId          String
+  odometerReading Float
+  litersAdded     Float
+  isFullTank      Boolean
+  pricePerLiter   Decimal  @db.Decimal(12, 2)
+  totalCost       Decimal  @db.Decimal(12, 2)
+  fuelStation     String?
+  date            DateTime
+  notes           String?
+  receiptImage    Json?
+  isDeleted       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  bike Bike @relation(fields: [bikeId], references: [id])
+
+  @@index([bikeId])
+  @@map("fuel_logs")
+}
+
+model MaintenanceLog {
+  id                String    @id
+  bikeId            String
+  maintenanceTypeId String
+  oilTypeId         String?
+  odometerReading   Float
+  intervalKmUsed    Float?
+  nextDueOdometer   Float?
+  nextDueDate       DateTime?
+  cost              Decimal   @db.Decimal(12, 2)
+  serviceDate       DateTime
+  serviceCenter     String?
+  partsReplaced     String[]
+  notes             String?
+  serviceImage      Json?
+  isDeleted         Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  bike            Bike            @relation(fields: [bikeId], references: [id])
+  maintenanceType MaintenanceType @relation(fields: [maintenanceTypeId], references: [id])
+  oilType         EngineOilType?  @relation(fields: [oilTypeId], references: [id])
+
+  @@index([bikeId])
+  @@map("maintenance_logs")
+}
+
+model MileageRecord {
+  id                String   @id
+  bikeId            String
+  startOdometer     Float
+  endOdometer       Float
+  distanceKm        Float
+  litersConsumed    Float
+  mileageKmPerLiter Float
+  periodStartDate   DateTime
+  periodEndDate     DateTime
+  fuelLogIds        String[]
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  bike Bike @relation(fields: [bikeId], references: [id])
+
+  @@index([bikeId])
+  @@map("mileage_records")
+}
+
+model BikeIssue {
+  id           String          @id
+  bikeId       String
+  title        String
+  description  String?
+  dateReported DateTime
+  status       BikeIssueStatus @default(open)
+  images       Json?
+  isDeleted    Boolean         @default(false)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  bike Bike @relation(fields: [bikeId], references: [id])
+
+  @@index([bikeId])
+  @@map("bike_issues")
+}
+
+model BikeAccessory {
+  id           String           @id
+  bikeId       String
+  name         String
+  urgency      AccessoryUrgency
+  status       AccessoryStatus  @default(pending)
+  price        Decimal?         @db.Decimal(12, 2)
+  purchaseDate DateTime?
+  productImage Json?
+  isDeleted    Boolean          @default(false)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  bike Bike @relation(fields: [bikeId], references: [id])
+
+  @@index([bikeId])
+  @@map("bike_accessories")
+}
+
+model BikeDocument {
+  id          String    @id
+  bikeId      String
+  title       String
+  description String?
+  expiryDate  DateTime?
+  files       Json?
+  isDeleted   Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  bike Bike @relation(fields: [bikeId], references: [id])
+
+  @@index([bikeId])
+  @@map("bike_documents")
+}
+
+model BikeManualChunk {
+  id         String   @id
+  bikeId     String
+  chunkIndex Int
+  chunkText  String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  bike Bike @relation(fields: [bikeId], references: [id])
+
+  @@index([bikeId])
+  @@map("bike_manual_chunks")
+}
+
+model ErrorLog {
+  id           String   @id
+  status       Int
+  message      String
+  errorName    String?
+  errorSources Json?
+  stack        String?
+  method       String
+  path         String
+  userId       String?
+  userEmail    String?
+  createdAt    DateTime @default(now())
+
+  @@index([status, createdAt])
+  @@map("error_logs")
+}

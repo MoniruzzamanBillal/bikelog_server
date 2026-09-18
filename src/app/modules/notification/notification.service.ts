@@ -1,6 +1,5 @@
 import { Expo, ExpoPushMessage, ExpoPushTicket } from "expo-server-sdk";
-import { bikeModel } from "../bike/bike.model";
-import { userModel } from "../user/user.model";
+import { prisma } from "../../lib/prisma";
 import { mileageRecordServices } from "../mileageRecord/mileageRecord.service";
 import { spendingServices } from "../spending/spending.service";
 import { getCurrentWeekRange } from "./notification.utils";
@@ -20,9 +19,9 @@ type TWeeklySummaryResult = {
 // ! skipped (nothing meaningful to summarize) rather than sent an empty digest — see
 // ! notification.utils.ts / spec 21 for the exact week-boundary logic.
 const sendWeeklySummaries = async (): Promise<TWeeklySummaryResult> => {
-  const users = await userModel
-    .find({ expoPushToken: { $ne: null }, isDeleted: false })
-    .lean();
+  const users = await prisma.user.findMany({
+    where: { expoPushToken: { not: null }, isDeleted: false },
+  });
 
   const { startDate, endDate } = getCurrentWeekRange(new Date());
 
@@ -33,18 +32,18 @@ const sendWeeklySummaries = async (): Promise<TWeeklySummaryResult> => {
   for (const user of users) {
     if (!user.expoPushToken || !Expo.isExpoPushToken(user.expoPushToken)) {
       console.error(
-        `[weekly-summary] skipping user ${user._id}: invalid/missing expoPushToken`,
+        `[weekly-summary] skipping user ${user.id}: invalid/missing expoPushToken`,
       );
       notificationsFailed += 1;
       continue;
     }
 
-    const bikes = await bikeModel
-      .find({ owner: user._id, isDeleted: false })
-      .lean();
+    const bikes = await prisma.bike.findMany({
+      where: { ownerId: user.id, isDeleted: false },
+    });
 
     for (const bike of bikes) {
-      const bikeId = bike._id.toString();
+      const bikeId = bike.id;
 
       const [mileage, spending] = await Promise.all([
         mileageRecordServices.computeMileageForRange(bikeId, startDate, endDate),

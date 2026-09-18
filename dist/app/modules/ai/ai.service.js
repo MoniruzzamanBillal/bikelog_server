@@ -11,11 +11,9 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.aiServices = void 0;
 const openRouterClient_1 = require("../../util/openRouterClient");
-const bike_model_1 = require("../bike/bike.model");
+const prisma_1 = require("../../lib/prisma");
 const bike_utils_1 = require("../bike/bike.utils");
 const bikeManual_service_1 = require("../bikeManual/bikeManual.service");
-const fuelLog_model_1 = require("../fuelLog/fuelLog.model");
-const maintenanceLog_model_1 = require("../maintenanceLog/maintenanceLog.model");
 const mileageRecord_service_1 = require("../mileageRecord/mileageRecord.service");
 const spending_service_1 = require("../spending/spending.service");
 const NO_DATA_SPENDING_MESSAGE = "No spending data yet for this bike — log a fuel-up or maintenance entry to get an AI-generated spending insight.";
@@ -29,8 +27,8 @@ const MANUAL_CHUNK_TOP_K = 4;
 const getSpendingInsightFromDB = (bikeId, userId) => __awaiter(void 0, void 0, void 0, function* () {
     const bike = yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
     const [fuelLogCount, maintenanceLogCount] = yield Promise.all([
-        fuelLog_model_1.fuelLogModel.countDocuments({ bike: bikeId, isDeleted: false }),
-        maintenanceLog_model_1.maintenanceLogModel.countDocuments({ bike: bikeId, isDeleted: false }),
+        prisma_1.prisma.fuelLog.count({ where: { bikeId, isDeleted: false } }),
+        prisma_1.prisma.maintenanceLog.count({ where: { bikeId, isDeleted: false } }),
     ]);
     const currentLogCount = fuelLogCount + maintenanceLogCount;
     if (currentLogCount === 0) {
@@ -55,17 +53,19 @@ const getSpendingInsightFromDB = (bikeId, userId) => __awaiter(void 0, void 0, v
             `Format the reply in markdown — short paragraphs, **bold** for key numbers, and a bullet list if you mention more than one figure; skip headings.`,
     };
     const insight = yield (0, openRouterClient_1.askOpenRouter)([systemMessage]);
-    yield bike_model_1.bikeModel.findByIdAndUpdate(bikeId, {
-        aiSpendingInsight: insight,
-        aiSpendingInsightLogCount: currentLogCount,
+    yield prisma_1.prisma.bike.update({
+        where: { id: bikeId },
+        data: {
+            aiSpendingInsight: insight,
+            aiSpendingInsightLogCount: currentLogCount,
+        },
     });
     return { insight, generated: true, cached: false };
 });
 const getMileageInsightFromDB = (bikeId, userId) => __awaiter(void 0, void 0, void 0, function* () {
     const bike = yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
-    const currentFuelLogCount = yield fuelLog_model_1.fuelLogModel.countDocuments({
-        bike: bikeId,
-        isDeleted: false,
+    const currentFuelLogCount = yield prisma_1.prisma.fuelLog.count({
+        where: { bikeId, isDeleted: false },
     });
     if (currentFuelLogCount === 0) {
         return {
@@ -92,37 +92,48 @@ const getMileageInsightFromDB = (bikeId, userId) => __awaiter(void 0, void 0, vo
             `Format the reply in markdown — short paragraphs, **bold** for key numbers, and a bullet list if you mention more than one figure; skip headings.`,
     };
     const insight = yield (0, openRouterClient_1.askOpenRouter)([systemMessage]);
-    yield bike_model_1.bikeModel.findByIdAndUpdate(bikeId, {
-        aiMileageInsight: insight,
-        aiMileageInsightFuelLogCount: currentFuelLogCount,
+    yield prisma_1.prisma.bike.update({
+        where: { id: bikeId },
+        data: {
+            aiMileageInsight: insight,
+            aiMileageInsightFuelLogCount: currentFuelLogCount,
+        },
     });
     return { insight, generated: true, cached: false };
 });
 const getBikeChatReply = (bikeId, userId, messages) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b, _c;
+    var _a, _b;
     const bike = yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
+    // ! bike.manual is a Prisma Json? column, deserialized as an untyped JsonValue —
+    // ! cast to the known shape (same pattern as bikeManual.service.ts)
+    const manual = bike.manual;
     const latestUserQuestion = (_b = (_a = [...messages].reverse().find((m) => m.role === "user")) === null || _a === void 0 ? void 0 : _a.content) !== null && _b !== void 0 ? _b : "";
-    const [recentFuelLogs, recentMaintenanceLogs, lifetimeSpending, relevantManualChunks,] = yield Promise.all([
-        fuelLog_model_1.fuelLogModel
-            .find({ bike: bikeId, isDeleted: false })
-            .sort({ date: -1 })
-            .limit(CHAT_LOG_LIMIT)
-            .lean(),
-        maintenanceLog_model_1.maintenanceLogModel
-            .find({ bike: bikeId, isDeleted: false })
-            .sort({ date: -1 })
-            .limit(CHAT_LOG_LIMIT)
-            .populate("maintenanceType", "name")
-            .lean(),
+    const [rawRecentFuelLogs, rawRecentMaintenanceLogs, lifetimeSpending, relevantManualChunks,] = yield Promise.all([
+        prisma_1.prisma.fuelLog.findMany({
+            where: { bikeId, isDeleted: false },
+            orderBy: { date: "desc" },
+            take: CHAT_LOG_LIMIT,
+        }),
+        prisma_1.prisma.maintenanceLog.findMany({
+            where: { bikeId, isDeleted: false },
+            orderBy: { serviceDate: "desc" },
+            take: CHAT_LOG_LIMIT,
+            include: { maintenanceType: { select: { name: true } } },
+        }),
         spending_service_1.spendingServices.getSpendingSummaryFromDB(bikeId, userId, "lifetime"),
-        bike.manual
+        manual
             ? bikeManual_service_1.bikeManualServices.getRelevantManualChunksForChat(bikeId, latestUserQuestion, MANUAL_CHUNK_TOP_K)
             : Promise.resolve([]),
     ]);
+    // ! JSON.stringify on a raw Prisma Decimal instance produces a STRING in the resulting
+    // ! JSON text (e.g. "totalCost":"450.00"), not a bare number — silently changes what the
+    // ! model sees. Convert before stringifying, same as the list/get endpoints' toApiShape.
+    const recentFuelLogs = rawRecentFuelLogs.map((log) => (Object.assign(Object.assign({}, log), { pricePerLiter: Number(log.pricePerLiter), totalCost: Number(log.totalCost) })));
+    const recentMaintenanceLogs = rawRecentMaintenanceLogs.map((log) => (Object.assign(Object.assign({}, log), { cost: Number(log.cost) })));
     // ! only non-empty when relevant chunks were actually found — otherwise the section
     // ! is omitted entirely rather than injecting an empty/misleading heading
     const manualSection = relevantManualChunks.length > 0
-        ? `Relevant excerpts from the owner's manual ("${(_c = bike.manual) === null || _c === void 0 ? void 0 : _c.originalName}"):\n` +
+        ? `Relevant excerpts from the owner's manual ("${manual === null || manual === void 0 ? void 0 : manual.originalName}"):\n` +
             relevantManualChunks.map((chunk) => chunk.chunkText).join("\n---\n") +
             `\n\n`
         : "";

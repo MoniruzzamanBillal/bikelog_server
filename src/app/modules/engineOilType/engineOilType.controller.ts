@@ -23,7 +23,21 @@ const getEngineOilTypes = catchAsync(async (req, res) => {
   });
 });
 
+const updateEngineOilType = catchAsync(async (req, res) => {
+  const result = await engineOilTypeServices.updateEngineOilTypeInDB(
+    req.params.id,
+    req.body,
+  );
+  sendResponse(res, {
+    status: httpStatus.OK,
+    success: true,
+    message: "Engine oil type updated successfully",
+    data: result,
+  });
+});
+
 export const engineOilTypeController = {
   createEngineOilType,
   getEngineOilTypes,
+  updateEngineOilType,
 };

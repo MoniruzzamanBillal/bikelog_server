@@ -1,8 +1,6 @@
-import { fuelLogModel } from "../fuelLog/fuelLog.model";
-import { mileageRecordModel } from "./mileageRecord.model";
-import { bikeModel } from "../bike/bike.model";
 import httpStatus from "http-status";
 import AppError from "../../Error/AppError";
+import { prisma } from "../../lib/prisma";
 
 interface MileageSummary {
   totalDistanceKm: number;
@@ -26,19 +24,21 @@ interface TrendMileageResult {
   monthlySummary: MonthlyMileageResult[];
 }
 
+const toApiShape = <T extends { id: string; bikeId: string }>(record: T) => ({
+  ...record,
+  _id: record.id,
+  bike: record.bikeId,
+});
+
 const computeMileageForRange = async (
   bikeId: string,
   startDate: Date,
   endDate: Date,
 ): Promise<MileageSummary> => {
-  const fuelLogsInRange = await fuelLogModel
-    .find({
-      bike: bikeId,
-      date: { $gte: startDate, $lte: endDate },
-      isDeleted: false,
-    })
-    .sort({ date: 1 })
-    .lean();
+  const fuelLogsInRange = await prisma.fuelLog.findMany({
+    where: { bikeId, date: { gte: startDate, lte: endDate }, isDeleted: false },
+    orderBy: { date: "asc" },
+  });
 
   if (fuelLogsInRange.length === 0) {
     return { totalDistanceKm: 0, totalLitersConsumed: 0, fuelLogCount: 0 };
@@ -46,14 +46,10 @@ const computeMileageForRange = async (
 
   const lastLogInRange = fuelLogsInRange[fuelLogsInRange.length - 1];
 
-  const previousLog = await fuelLogModel
-    .findOne({
-      bike: bikeId,
-      date: { $lt: startDate },
-      isDeleted: false,
-    })
-    .sort({ date: -1 })
-    .lean();
+  const previousLog = await prisma.fuelLog.findFirst({
+    where: { bikeId, date: { lt: startDate }, isDeleted: false },
+    orderBy: { date: "desc" },
+  });
 
   let startOdometer: number;
   if (previousLog) {
@@ -62,7 +58,7 @@ const computeMileageForRange = async (
     // ! no earlier fuel log — anchor on the bike's immutable initialOdometer, not
     // ! currentOdometer (which reflects TODAY's reading, not the reading as of this
     // ! historical range's start, once any later fuel/maintenance log has bumped it)
-    const bike = await bikeModel.findById(bikeId).lean();
+    const bike = await prisma.bike.findUnique({ where: { id: bikeId } });
     startOdometer = bike?.initialOdometer ?? 0;
   }
 
@@ -82,16 +78,16 @@ const computeMileageForRange = async (
 const ROLLING_AVERAGE_WINDOW = 10;
 
 const getMileageRecordsFromDB = async (bikeId: string) => {
-  const exactRecords = await mileageRecordModel
-    .find({ bike: bikeId })
-    .sort({ periodEndDate: -1 })
-    .lean();
+  const exactRecords = await prisma.mileageRecord.findMany({
+    where: { bikeId },
+    orderBy: { periodEndDate: "desc" },
+  });
 
-  const recentFuelLogs = await fuelLogModel
-    .find({ bike: bikeId, isDeleted: false })
-    .sort({ date: -1 })
-    .limit(ROLLING_AVERAGE_WINDOW)
-    .lean();
+  const recentFuelLogs = await prisma.fuelLog.findMany({
+    where: { bikeId, isDeleted: false },
+    orderBy: { date: "desc" },
+    take: ROLLING_AVERAGE_WINDOW,
+  });
 
   let approximate: {
     mileageKmPerLiter: number;
@@ -119,7 +115,7 @@ const getMileageRecordsFromDB = async (bikeId: string) => {
     }
   }
 
-  return { exactRecords, approximate };
+  return { exactRecords: exactRecords.map(toApiShape), approximate };
 };
 
 const getMonthlyMileageFromDB = async (
@@ -185,15 +181,15 @@ const getYearlyMileageFromDB = async (
 const getLifetimeMileageFromDB = async (
   bikeId: string,
 ): Promise<LifetimeMileageResult> => {
-  const bike = await bikeModel.findById(bikeId).lean();
+  const bike = await prisma.bike.findUnique({ where: { id: bikeId } });
   if (!bike) {
     throw new AppError(httpStatus.NOT_FOUND, "Bike not found");
   }
 
-  const latestFuelLog = await fuelLogModel
-    .findOne({ bike: bikeId, isDeleted: false })
-    .sort({ date: -1 })
-    .lean();
+  const latestFuelLog = await prisma.fuelLog.findFirst({
+    where: { bikeId, isDeleted: false },
+    orderBy: { date: "desc" },
+  });
 
   if (!latestFuelLog) {
     return { totalDistanceKm: 0, totalLitersConsumed: 0, fuelLogCount: 0 };
@@ -204,10 +200,10 @@ const getLifetimeMileageFromDB = async (
   // ! since-purchase distance, including any km ridden before the first fuel log was ever entered
   const endOdometer = latestFuelLog.odometerReading;
 
-  const allLogs = await fuelLogModel
-    .find({ bike: bikeId, isDeleted: false })
-    .sort({ date: 1 })
-    .lean();
+  const allLogs = await prisma.fuelLog.findMany({
+    where: { bikeId, isDeleted: false },
+    orderBy: { date: "asc" },
+  });
 
   const totalDistanceKm = endOdometer - bike.initialOdometer;
   const totalLitersConsumed = allLogs.reduce((sum, log) => sum + log.litersAdded, 0);

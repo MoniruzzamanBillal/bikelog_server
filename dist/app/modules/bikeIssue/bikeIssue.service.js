@@ -15,84 +15,93 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.bikeIssueServices = void 0;
 const http_status_1 = __importDefault(require("http-status"));
 const AppError_1 = __importDefault(require("../../Error/AppError"));
-const Queryuilder_1 = __importDefault(require("../../builder/Queryuilder"));
+const prisma_1 = require("../../lib/prisma");
+const generateObjectId_1 = require("../../util/generateObjectId");
+const buildPrismaListQuery_1 = require("../../builder/buildPrismaListQuery");
 const bike_utils_1 = require("../bike/bike.utils");
 const bikeIssue_constant_1 = require("./bikeIssue.constant");
-const bikeIssue_model_1 = require("./bikeIssue.model");
 const cloudinary_1 = require("../../util/cloudinary");
+const toApiShape = (issue) => (Object.assign(Object.assign({}, issue), { _id: issue.id, bike: issue.bikeId }));
+const getImages = (issue) => { var _a; return (_a = issue.images) !== null && _a !== void 0 ? _a : []; };
 const createBikeIssueIntoDB = (bikeId, userId, payload) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
-    const issueData = Object.assign(Object.assign({}, payload), { bike: bikeId, status: bikeIssue_constant_1.BikeIssueStatus.open, dateReported: (_a = payload.dateReported) !== null && _a !== void 0 ? _a : new Date() });
-    const issue = yield bikeIssue_model_1.bikeIssueModel.create(issueData);
-    return issue;
+    const issue = yield prisma_1.prisma.bikeIssue.create({
+        data: {
+            id: (0, generateObjectId_1.generateObjectId)(),
+            bikeId,
+            title: payload.title,
+            description: payload.description,
+            dateReported: (_a = payload.dateReported) !== null && _a !== void 0 ? _a : new Date(),
+            status: bikeIssue_constant_1.BikeIssueStatus.open,
+        },
+    });
+    return toApiShape(issue);
 });
 const getBikeIssuesFromDB = (bikeId, userId, query) => __awaiter(void 0, void 0, void 0, function* () {
     yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
-    // ! strip client-controlled "bike"/"isDeleted" keys before they reach QueryBuilder.filter() —
-    // ! its .find(queryObj) call merges into the query and a later key wins, so an unsanitized
+    // ! strip client-controlled "bike"/"isDeleted" keys before they reach buildPrismaListQuery —
+    // ! it merges whatever's left in query as equality filters, and an unsanitized
     // ! `?bike=<otherBikeId>` would silently override the ownership-scoped filter below
     const sanitizedQuery = Object.assign({}, query);
     delete sanitizedQuery.bike;
     delete sanitizedQuery.isDeleted;
-    const issuesQuery = new Queryuilder_1.default(bikeIssue_model_1.bikeIssueModel.find({ bike: bikeId, isDeleted: false }), sanitizedQuery)
-        .filter()
-        .sort("status -dateReported")
-        .pagination()
-        .field();
-    const result = yield issuesQuery.queryModel;
-    const meta = yield issuesQuery.countTotal();
-    return { result, meta };
+    const { where, orderBy, skip, take } = (0, buildPrismaListQuery_1.buildPrismaListQuery)({
+        baseWhere: { bikeId, isDeleted: false },
+        query: sanitizedQuery,
+        defaultSort: "status -dateReported",
+    });
+    const [result, meta] = yield Promise.all([
+        prisma_1.prisma.bikeIssue.findMany({ where, orderBy, skip, take }),
+        prisma_1.prisma.bikeIssue.count({ where }),
+    ]);
+    return { result: result.map(toApiShape), meta };
 });
 const getBikeIssueByIdFromDB = (bikeId, userId, id) => __awaiter(void 0, void 0, void 0, function* () {
     yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
-    const issue = yield bikeIssue_model_1.bikeIssueModel.findOne({
-        _id: id,
-        bike: bikeId,
-        isDeleted: false,
+    const issue = yield prisma_1.prisma.bikeIssue.findFirst({
+        where: { id, bikeId, isDeleted: false },
     });
     if (!issue) {
         throw new AppError_1.default(http_status_1.default.NOT_FOUND, "Bike issue not found");
     }
-    return issue;
+    return toApiShape(issue);
 });
 const updateBikeIssueInDB = (bikeId, userId, id, payload) => __awaiter(void 0, void 0, void 0, function* () {
     yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
-    const issue = yield bikeIssue_model_1.bikeIssueModel.findOne({
-        _id: id,
-        bike: bikeId,
-        isDeleted: false,
+    const issue = yield prisma_1.prisma.bikeIssue.findFirst({
+        where: { id, bikeId, isDeleted: false },
     });
     if (!issue) {
         throw new AppError_1.default(http_status_1.default.NOT_FOUND, "Bike issue not found");
     }
     const updateData = Object.assign({}, payload);
     delete updateData.status;
-    Object.assign(issue, updateData);
-    yield issue.save();
-    return issue;
+    const updated = yield prisma_1.prisma.bikeIssue.update({
+        where: { id: issue.id },
+        data: updateData,
+    });
+    return toApiShape(updated);
 });
 const deleteBikeIssueFromDB = (bikeId, userId, id) => __awaiter(void 0, void 0, void 0, function* () {
     yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
-    const issue = yield bikeIssue_model_1.bikeIssueModel.findOne({
-        _id: id,
-        bike: bikeId,
-        isDeleted: false,
+    const issue = yield prisma_1.prisma.bikeIssue.findFirst({
+        where: { id, bikeId, isDeleted: false },
     });
     if (!issue) {
         throw new AppError_1.default(http_status_1.default.NOT_FOUND, "Bike issue not found");
     }
-    issue.isDeleted = true;
-    yield issue.save();
-    return issue;
+    const updated = yield prisma_1.prisma.bikeIssue.update({
+        where: { id: issue.id },
+        data: { isDeleted: true },
+    });
+    return toApiShape(updated);
 });
 // ! open -> resolved when fixed, resolved -> open again if the same problem recurs
 const updateBikeIssueStatus = (bikeId, userId, id, status) => __awaiter(void 0, void 0, void 0, function* () {
     yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
-    const issue = yield bikeIssue_model_1.bikeIssueModel.findOne({
-        _id: id,
-        bike: bikeId,
-        isDeleted: false,
+    const issue = yield prisma_1.prisma.bikeIssue.findFirst({
+        where: { id, bikeId, isDeleted: false },
     });
     if (!issue) {
         throw new AppError_1.default(http_status_1.default.NOT_FOUND, "Bike issue not found");
@@ -100,51 +109,54 @@ const updateBikeIssueStatus = (bikeId, userId, id, status) => __awaiter(void 0, 
     if (issue.status === status) {
         throw new AppError_1.default(http_status_1.default.BAD_REQUEST, `Issue is already ${status}`);
     }
-    issue.status = status;
-    yield issue.save();
-    return issue;
+    const updated = yield prisma_1.prisma.bikeIssue.update({
+        where: { id: issue.id },
+        data: { status },
+    });
+    return toApiShape(updated);
 });
 const addBikeIssueImagesIntoDB = (bikeId, userId, id, files) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
     yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
     if (!files || files.length === 0) {
         throw new AppError_1.default(http_status_1.default.BAD_REQUEST, "At least one image file is required");
     }
-    const issue = yield bikeIssue_model_1.bikeIssueModel.findOne({
-        _id: id,
-        bike: bikeId,
-        isDeleted: false,
+    const issue = yield prisma_1.prisma.bikeIssue.findFirst({
+        where: { id, bikeId, isDeleted: false },
     });
     if (!issue) {
         throw new AppError_1.default(http_status_1.default.NOT_FOUND, "Bike issue not found");
     }
     const newImages = files.map((file) => ({
+        _id: (0, generateObjectId_1.generateObjectId)(),
         url: file.path,
         publicId: file.filename,
     }));
-    issue.images = [...((_a = issue.images) !== null && _a !== void 0 ? _a : []), ...newImages];
-    yield issue.save();
-    return issue;
+    const updated = yield prisma_1.prisma.bikeIssue.update({
+        where: { id: issue.id },
+        data: { images: [...getImages(issue), ...newImages] },
+    });
+    return toApiShape(updated);
 });
 const deleteBikeIssueImageFromDB = (bikeId, userId, id, imageId) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b;
     yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
-    const issue = yield bikeIssue_model_1.bikeIssueModel.findOne({
-        _id: id,
-        bike: bikeId,
-        isDeleted: false,
+    const issue = yield prisma_1.prisma.bikeIssue.findFirst({
+        where: { id, bikeId, isDeleted: false },
     });
     if (!issue) {
         throw new AppError_1.default(http_status_1.default.NOT_FOUND, "Bike issue not found");
     }
-    const targetImage = (_a = issue.images) === null || _a === void 0 ? void 0 : _a.find((image) => { var _a; return ((_a = image._id) === null || _a === void 0 ? void 0 : _a.toString()) === imageId; });
+    const existingImages = getImages(issue);
+    const targetImage = existingImages.find((image) => image._id === imageId);
     if (!targetImage) {
         throw new AppError_1.default(http_status_1.default.NOT_FOUND, "Image not found");
     }
     yield (0, cloudinary_1.deleteCloudinaryImage)(targetImage.publicId);
-    issue.images = (_b = issue.images) === null || _b === void 0 ? void 0 : _b.filter((image) => { var _a; return ((_a = image._id) === null || _a === void 0 ? void 0 : _a.toString()) !== imageId; });
-    yield issue.save();
-    return issue;
+    const remaining = existingImages.filter((image) => image._id !== imageId);
+    const updated = yield prisma_1.prisma.bikeIssue.update({
+        where: { id: issue.id },
+        data: { images: remaining },
+    });
+    return toApiShape(updated);
 });
 exports.bikeIssueServices = {
     createBikeIssueIntoDB,

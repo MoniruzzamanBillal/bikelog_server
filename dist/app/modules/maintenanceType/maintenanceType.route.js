@@ -14,5 +14,7 @@ const router = (0, express_1.Router)();
 router.post("/", authCheck_1.default, (0, validateRequest_1.default)(maintenanceType_validation_1.maintenanceTypeValidations.createMaintenanceTypeSchema), maintenanceType_controller_1.maintenanceTypeController.createMaintenanceType);
 // ! for getting all maintenance types
 router.get("/", authCheck_1.default, maintenanceType_controller_1.maintenanceTypeController.getMaintenanceTypes);
+// ! for updating a maintenance type
+router.patch("/:id", authCheck_1.default, (0, validateRequest_1.default)(maintenanceType_validation_1.maintenanceTypeValidations.updateMaintenanceTypeSchema), maintenanceType_controller_1.maintenanceTypeController.updateMaintenanceType);
 //
 exports.maintenanceTypeRouter = router;
