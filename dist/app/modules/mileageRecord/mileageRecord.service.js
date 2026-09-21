@@ -51,6 +51,25 @@ const computeMileageForRange = (bikeId, startDate, endDate) => __awaiter(void 0,
 // ! computed from raw FuelLogs regardless of isFullTank, not from existing MileageRecords,
 // ! otherwise a user who never does a full-tank fill would never get any mileage figure at all
 const ROLLING_AVERAGE_WINDOW = 10;
+// spec 39: fuel-efficiency anomaly flag
+const MIN_PRIOR_PERIODS_FOR_ALERT = 3; // need at least 3 prior periods before ever flagging — 1-2 samples have no real baseline
+const ROLLING_WINDOW_FOR_ALERT = 5; // average of the prior 5 periods, floored to whatever's available down to the minimum
+const ANOMALY_DROP_THRESHOLD = 0.85; // latest < average * 0.85 == a >15% drop (strict <, the boundary itself does not flag)
+const computeEfficiencyAlert = (exactRecords) => {
+    if (exactRecords.length < MIN_PRIOR_PERIODS_FOR_ALERT + 1)
+        return null;
+    const [latest, ...prior] = exactRecords;
+    const windowed = prior.slice(0, ROLLING_WINDOW_FOR_ALERT);
+    const rollingAverageKmPerLiter = windowed.reduce((sum, r) => sum + r.mileageKmPerLiter, 0) / windowed.length;
+    const percentChange = (latest.mileageKmPerLiter - rollingAverageKmPerLiter) / rollingAverageKmPerLiter;
+    return {
+        isAnomaly: latest.mileageKmPerLiter < rollingAverageKmPerLiter * ANOMALY_DROP_THRESHOLD,
+        latestKmPerLiter: latest.mileageKmPerLiter,
+        rollingAverageKmPerLiter,
+        percentChange,
+        periodsUsed: windowed.length,
+    };
+};
 const getMileageRecordsFromDB = (bikeId) => __awaiter(void 0, void 0, void 0, function* () {
     const exactRecords = yield prisma_1.prisma.mileageRecord.findMany({
         where: { bikeId },
@@ -75,7 +94,11 @@ const getMileageRecordsFromDB = (bikeId) => __awaiter(void 0, void 0, void 0, fu
             };
         }
     }
-    return { exactRecords: exactRecords.map(toApiShape), approximate };
+    return {
+        exactRecords: exactRecords.map(toApiShape),
+        approximate,
+        efficiencyAlert: computeEfficiencyAlert(exactRecords),
+    };
 });
 const getMonthlyMileageFromDB = (bikeId, targetMonth) => __awaiter(void 0, void 0, void 0, function* () {
     const [yearStr, monthStr] = targetMonth.split("-");
