@@ -1,6 +1,7 @@
 import httpStatus from "http-status";
 import AppError from "../../Error/AppError";
 import { prisma } from "../../lib/prisma";
+import { TEfficiencyAlert } from "./mileageRecord.interface";
 
 interface MileageSummary {
   totalDistanceKm: number;
@@ -77,6 +78,33 @@ const computeMileageForRange = async (
 // ! otherwise a user who never does a full-tank fill would never get any mileage figure at all
 const ROLLING_AVERAGE_WINDOW = 10;
 
+// spec 39: fuel-efficiency anomaly flag
+const MIN_PRIOR_PERIODS_FOR_ALERT = 3; // need at least 3 prior periods before ever flagging — 1-2 samples have no real baseline
+const ROLLING_WINDOW_FOR_ALERT = 5; // average of the prior 5 periods, floored to whatever's available down to the minimum
+const ANOMALY_DROP_THRESHOLD = 0.85; // latest < average * 0.85 == a >15% drop (strict <, the boundary itself does not flag)
+
+const computeEfficiencyAlert = (
+  exactRecords: { mileageKmPerLiter: number }[], // already sorted periodEndDate desc
+): TEfficiencyAlert | null => {
+  if (exactRecords.length < MIN_PRIOR_PERIODS_FOR_ALERT + 1) return null;
+
+  const [latest, ...prior] = exactRecords;
+  const windowed = prior.slice(0, ROLLING_WINDOW_FOR_ALERT);
+  const rollingAverageKmPerLiter =
+    windowed.reduce((sum, r) => sum + r.mileageKmPerLiter, 0) / windowed.length;
+  const percentChange =
+    (latest.mileageKmPerLiter - rollingAverageKmPerLiter) / rollingAverageKmPerLiter;
+
+  return {
+    isAnomaly:
+      latest.mileageKmPerLiter < rollingAverageKmPerLiter * ANOMALY_DROP_THRESHOLD,
+    latestKmPerLiter: latest.mileageKmPerLiter,
+    rollingAverageKmPerLiter,
+    percentChange,
+    periodsUsed: windowed.length,
+  };
+};
+
 const getMileageRecordsFromDB = async (bikeId: string) => {
   const exactRecords = await prisma.mileageRecord.findMany({
     where: { bikeId },
@@ -115,7 +143,11 @@ const getMileageRecordsFromDB = async (bikeId: string) => {
     }
   }
 
-  return { exactRecords: exactRecords.map(toApiShape), approximate };
+  return {
+    exactRecords: exactRecords.map(toApiShape),
+    approximate,
+    efficiencyAlert: computeEfficiencyAlert(exactRecords),
+  };
 };
 
 const getMonthlyMileageFromDB = async (

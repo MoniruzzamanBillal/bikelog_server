@@ -9,3 +9,11 @@ export type TMileageRecord = {
   periodEndDate: Date;
   fuelLogIds: string[];
 };
+
+export type TEfficiencyAlert = {
+  isAnomaly: boolean;
+  latestKmPerLiter: number;
+  rollingAverageKmPerLiter: number;
+  percentChange: number;
+  periodsUsed: number;
+};
