@@ -36,8 +36,21 @@ const updateMaintenanceType = catchAsync(async (req, res) => {
   });
 });
 
+const deleteMaintenanceType = catchAsync(async (req, res) => {
+  const result = await maintenanceTypeServices.deleteMaintenanceTypeFromDB(
+    req.params.id,
+  );
+  sendResponse(res, {
+    status: httpStatus.OK,
+    success: true,
+    message: "Maintenance type deleted successfully",
+    data: result,
+  });
+});
+
 export const maintenanceTypeController = {
   createMaintenanceType,
   getMaintenanceTypes,
   updateMaintenanceType,
+  deleteMaintenanceType,
 };

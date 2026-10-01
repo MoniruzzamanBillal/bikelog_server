@@ -25,5 +25,12 @@ router.patch(
   maintenanceTypeController.updateMaintenanceType,
 );
 
+// ! for soft-deleting a maintenance type (no validateRequest — there is no body)
+router.delete(
+  "/:id",
+  authCheck,
+  maintenanceTypeController.deleteMaintenanceType,
+);
+
 //
 export const maintenanceTypeRouter = router;

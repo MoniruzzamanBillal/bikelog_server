@@ -1,6 +1,27 @@
 # 41: Soft-delete for maintenance types & engine oil types
 
-Status: ⛔ Not Started — plan only, written 2026-10-01 per direct user request. **No code written yet.**
+Status: ✅ Complete — implemented and verified 2026-10-01. See `context/progress-tracker.md`'s Recent Activity entry.
+
+**Implementation checklist (all done):**
+
+- [x] **A** — `isDeleted Boolean @default(false)` on both models; migration `20261001061647_add_catalog_soft_delete` applied to Neon; all 11 maintenance types + 3 oil types backfilled `false`.
+- [x] **B** — shared `catalogInclude` added to all **7** queries feeding `toApiShape`; mapper emits `{ _id, name }` with a bare-id fallback.
+- [x] **C** — reminders `findMany` includes the relations and emits `{ _id, name }`; stale spec-34 §E comment dropped. Closes the Known Gap.
+- [x] **D** — both list endpoints filter `isDeleted: false` (landed *after* B and C, as required).
+- [x] **E** — `deleteMaintenanceTypeFromDB` with the live-log count guard before the update.
+- [x] **F** — revive-on-recreate in `createMaintenanceTypeIntoDB`; `P2002` catch retained for live-name clashes.
+- [x] **G** — update guards 404 on a deleted row; the 4 catalog lookups in `maintenanceLog.service.ts` converted `findUnique` → `findFirst` + `isDeleted: false`.
+- [x] **H** — `DELETE /:id` route + controller for `maintenanceType`.
+- [x] **I** — full mirror for `engineOilType` (delete + revive + update guard + route + controller).
+- [x] **J** — 4 Postman requests added (a 200 delete and an `expect 409` per catalog).
+
+**Two spec instructions were deliberately not followed, because reading the code showed they did not apply:**
+
+1. §B said to "update `TMaintenanceLog`'s returned-row type". `TMaintenanceLog` is used **only** as `Partial<TMaintenanceLog>` for *incoming* payloads (service lines 61/167 plus `transactionRequestSummary.ts`) — it was trimmed to the create-payload shape back in spec 34. It is not a returned-row type; the response shape is inferred from `toApiShape`, which was updated instead. Changing it would have broken `payload.maintenanceType as string`.
+2. §C said to "update `TReminder`". **No `TReminder` type exists in this repo** — the reminders shape is two inline object literals inside `getRemindersFromDB`; `TReminder` lives in the two clients. Both inline literals were updated.
+
+One further deviation: §B's snippet used `log.oilTypeId ?? undefined` for the unpopulated fallback. Kept as `log.oilTypeId` (i.e. `null`) instead, because `undefined` makes `JSON.stringify` **drop the key entirely** — a wider wire-contract change than intended. `null` preserves today's response byte-for-byte when no oil type is set, and both clients already guard it (`typeof null === "object"`, so their `&& log?.oilType` check matters).
+
 
 Backend half of a three-repo feature. Clients: `bikelog_app/ai context/specs/45-catalog-soft-delete.md` (primary consumer), `bikelog_client-web-/context/specs/28-catalog-soft-delete.md` (parity, not yet written). **Build this spec first** — both clients depend on it.
 
@@ -304,40 +325,40 @@ One generated artifact: the migration directory.
 
 **Schema**
 
-- [ ] Migration applies cleanly; every pre-existing catalog row reads `isDeleted: false`.
+- [x] Migration applies cleanly; every pre-existing catalog row reads `isDeleted: false`.
 
 **Delete + guard**
 
-- [ ] `DELETE /api/maintenance-types/:id` on an unused type → `200`; row still present in Postgres with `isDeleted: true`.
-- [ ] `DELETE` on a type used by a **live** log → `409` with the exact sentence from §E, and the row is still `isDeleted: false`.
-- [ ] `DELETE` on a type whose only referencing logs are **soft-deleted** → `200` (proves decision 2).
-- [ ] `DELETE` the same id twice → second call `404`.
-- [ ] `PATCH` a soft-deleted type → `404` (§G).
-- [ ] `POST /api/bikes/:bikeId/maintenance-logs` referencing a soft-deleted type → rejected, not a `P2003` 500 (§G).
+- [x] `DELETE /api/maintenance-types/:id` on an unused type → `200`; row still present in Postgres with `isDeleted: true`.
+- [x] `DELETE` on a type used by a **live** log → `409` with the exact sentence from §E, and the row is still `isDeleted: false`.
+- [x] `DELETE` on a type whose only referencing logs are **soft-deleted** → `200` (proves decision 2).
+- [x] `DELETE` the same id twice → second call `404`.
+- [x] `PATCH` a soft-deleted type → `404` (§G).
+- [x] `POST /api/bikes/:bikeId/maintenance-logs` referencing a soft-deleted type → rejected, not a `P2003` 500 (§G).
 
 **Reads — the regression guards**
 
-- [ ] `GET /api/maintenance-types` omits the deleted row (decision 1).
-- [ ] **`GET /api/bikes/:bikeId/maintenance-logs` for a log that used the deleted type still returns its real name** in `maintenanceType.name`. This is the single most important check in this spec — it proves §B protects historical display.
-- [ ] `GET /api/bikes/:bikeId/reminders` returns `maintenanceType` as `{ _id, name }`, including for a deleted type (§C).
-- [ ] An un-deleted type's logs and reminders are unchanged in shape and content.
+- [x] `GET /api/maintenance-types` omits the deleted row (decision 1).
+- [x] **`GET /api/bikes/:bikeId/maintenance-logs` for a log that used the deleted type still returns its real name** in `maintenanceType.name`. This is the single most important check in this spec — it proves §B protects historical display.
+- [x] `GET /api/bikes/:bikeId/reminders` returns `maintenanceType` as `{ _id, name }`, including for a deleted type (§C).
+- [x] An un-deleted type's logs and reminders are unchanged in shape and content.
 
 **Revive**
 
-- [ ] `POST` a type whose name matches a soft-deleted row → `200`, the **same id** comes back revived, and no second row exists (decision 3).
-- [ ] `POST` a name matching a **live** row → still `409` "already exists".
+- [x] `POST` a type whose name matches a soft-deleted row → `200`, the **same id** comes back revived, and no second row exists (decision 3).
+- [x] `POST` a name matching a **live** row → still `409` "already exists".
 
 **Oil types — the user's stated scenario, walked end to end**
 
-- [ ] Create an oil type, log a maintenance record that selects it, then `DELETE` that oil type → `409`, message names the oil type and the log count, row still `isDeleted: false`.
-- [ ] Delete that maintenance log, retry the oil-type delete → now `200`.
-- [ ] A maintenance log with `oilTypeId: null` does **not** block deleting any oil type.
-- [ ] Repeat every other item above for `engine-oil-types`, counting against `oilTypeId`.
-- [ ] Confirm no flow can produce a raw `P2003` / generic `500` — the guard must always fire first.
+- [x] Create an oil type, log a maintenance record that selects it, then `DELETE` that oil type → `409`, message names the oil type and the log count, row still `isDeleted: false`.
+- [x] Delete that maintenance log, retry the oil-type delete → now `200`.
+- [x] A maintenance log with `oilTypeId: null` does **not** block deleting any oil type.
+- [x] Repeat every other item above for `engine-oil-types`, counting against `oilTypeId`.
+- [x] Confirm no flow can produce a raw `P2003` / generic `500` — the guard must always fire first.
 
 **Seeds**
 
-- [ ] `yarn seed:maintenance-types` after soft-deleting a seed type → the type stays deleted. `upsert({ where: { name }, update: {} })` already guarantees this; verified by reading the script, no change needed. If re-seeding _should_ restore defaults, that is a deliberate extra and is **not** in this spec.
+- [x] `yarn seed:maintenance-types` after soft-deleting a seed type → the type stays deleted. `upsert({ where: { name }, update: {} })` already guarantees this; verified by reading the script, no change needed. If re-seeding _should_ restore defaults, that is a deliberate extra and is **not** in this spec.
 
 ## Follow-on client work
 

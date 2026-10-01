@@ -26,4 +26,7 @@ router.patch(
 );
 
 //
+// ! for soft-deleting an engine oil type (no validateRequest — there is no body)
+router.delete("/:id", authCheck, engineOilTypeController.deleteEngineOilType);
+
 export const engineOilTypeRouter = router;

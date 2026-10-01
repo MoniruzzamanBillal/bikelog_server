@@ -16,5 +16,7 @@ router.post("/", authCheck_1.default, (0, validateRequest_1.default)(maintenance
 router.get("/", authCheck_1.default, maintenanceType_controller_1.maintenanceTypeController.getMaintenanceTypes);
 // ! for updating a maintenance type
 router.patch("/:id", authCheck_1.default, (0, validateRequest_1.default)(maintenanceType_validation_1.maintenanceTypeValidations.updateMaintenanceTypeSchema), maintenanceType_controller_1.maintenanceTypeController.updateMaintenanceType);
+// ! for soft-deleting a maintenance type (no validateRequest — there is no body)
+router.delete("/:id", authCheck_1.default, maintenanceType_controller_1.maintenanceTypeController.deleteMaintenanceType);
 //
 exports.maintenanceTypeRouter = router;
