@@ -4,6 +4,8 @@ Update this file after every meaningful implementation change.
 
 ## Current Phase
 
+**Spec 42 (2026-10-02) removed the two catalog seed scripts** at the user's direct instruction — both catalogs are now populated entirely from the app and web clients, which have full create/edit/delete UI. Tooling-only: no data was deleted, no runtime/API/schema path touched. See Recent Activity.
+
 **Spec 41 (2026-10-01) added soft delete to the two shared catalogs** — `isDeleted` on `MaintenanceType`/`EngineOilType`, a `DELETE /:id` on each that flips it, and a referential guard that refuses with `409` when a **live** maintenance log still references the entry. Also populates catalog names onto maintenance-log and reminder reads, which is what lets the list endpoints hide deleted rows without historical logs silently relabelling to "Maintenance" — and which closes the long-standing `TReminder.maintenanceType` shape gap. First backend spec since the catalogs gained any delete capability at all. See Recent Activity.
 
 **Spec 39 (2026-09-21) added a fuel-efficiency anomaly flag** (`efficiencyAlert` on `GET /bikes/:bikeId/mileage`) — flags a >15% km/L drop vs. the rolling average of the prior 5 full-tank periods. Server-only; the `bikelog_app` client banner is a separate spec. See Recent Activity for details.
@@ -62,6 +64,7 @@ Tracks work items defined in `context/specs/`. Update the moment implementation 
 | [`39-fuel-efficiency-anomaly-flag.md`](specs/39-fuel-efficiency-anomaly-flag.md)                                                                   | Complete    |
 | [`40-list-endpoint-tie-break-order.md`](specs/40-list-endpoint-tie-break-order.md)                                                                 | Complete    |
 | [`41-catalog-soft-delete.md`](specs/41-catalog-soft-delete.md)                                                                                     | Complete    |
+| [`42-remove-catalog-seed-scripts.md`](specs/42-remove-catalog-seed-scripts.md)                                                                     | Complete    |
 
 ## Completed
 
@@ -78,6 +81,13 @@ Tracks work items defined in `context/specs/`. Update the moment implementation 
 - **Spec 08 — maintenance log + reminders**: Implemented all 6 service functions in `maintenanceLog.service.ts` — `createMaintenanceLogIntoDB` (ownership + referential checks on `maintenanceType`/`oilType`, server-computed `nextDueOdometer`, odometer bump), `getMaintenanceLogsFromDB` (QueryBuilder with `-serviceDate` sort + optional `maintenanceType` filter), `getMaintenanceLogByIdFromDB`, `updateMaintenanceLogInDB` (recomputes `nextDueOdometer` if `odometerReading` or `intervalKmUsed` changes, referential checks on update, strips client-supplied `nextDueOdometer`), `deleteMaintenanceLogFromDB` (soft delete), `getRemindersFromDB` (groups by `maintenanceType` → most recent log, km-based status with 50km buffer, date-based status with 14-day buffer, omits entries that are neither due nor upcoming). Wired all 6 controller handlers in `maintenanceLog.controller.ts` with `sendResponse`. No validation/route/model changes needed. `yarn build` clean, `yarn lint` clean (no new errors).
 
 ## Recent Activity
+
+- **2026-10-02 — Spec 42: removed the two catalog seed scripts.** Direct user instruction: _"remove the seed script . i will add data from the app and web ."_
+  - Deleted `src/scripts/seedMaintenanceTypes.ts` and `src/scripts/seedEngineOilTypes.ts`, their compiled `dist/scripts/*.js` counterparts, and the two `package.json` aliases. `dist/` is committed and is what Vercel actually serves (`vercel.json` builds `dist/server.js`), so leaving the compiled copies would have shipped dead code, not merely untidy files.
+  - **No data was removed.** The 8 maintenance types and 3 engine oil types already in the database are untouched — verified by querying the catalog before and after. This was a tooling change with zero runtime, API or schema effect.
+  - **Why they were safe to drop**: both scripts used `upsert({ where: { name }, update: {} })` — an *empty* update — so they could only ever insert rows missing by name. They could not repair drift (live data had already diverged: `Mineral` 800 km vs the script's 1000, `Semi-Synthetic` 1600 vs 1500) and, after spec 41, could not revive a soft-deleted row either, since `update: {}` never clears `isDeleted`. Both clients now manage the catalogs interactively, and spec 41's revive-on-recreate covers recovery.
+  - **Docs**: corrected four *current-state* references (this repo's `CLAUDE.md` commands block, `AGENTS.md` command table, `context/project-overview.md`'s "(seeded, …)" claim, and the root `CLAUDE.md`'s scripts sentence). Historical narrative — this file's older entries and specs 06/07/31/34/41 — was deliberately **left alone**: those describe what was true when written, and rewriting them to look tidy would falsify the record.
+  - `yarn build` clean; `yarn lint` 0 errors, with the seed scripts' 6 `no-console` warnings gone (19 → 13 attributable to this change).
 
 - **2026-10-01 — Spec 41: soft delete for `maintenanceType` and `engineOilType`, with a referential guard.** Implemented end to end per the spec; `yarn build` clean, `yarn lint` 0 errors (19 pre-existing `no-console` warnings, none in touched files).
   - **Schema/migration**: `isDeleted Boolean @default(false)` on both models → `20261001061647_add_catalog_soft_delete`. `@default` backfilled everything, so no data migration. Confirmed against Neon: all 11 maintenance types and 3 oil types read `false`. Note `prisma migrate dev` did **not** regenerate the client here — a separate `npx prisma generate` was needed before `isDeleted` was queryable.

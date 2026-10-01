@@ -28,9 +28,9 @@ yarn lint                      # eslint src
 yarn lint:fix
 yarn prettier:fix
 yarn db:migrate                # prisma migrate deploy
-yarn seed:maintenance-types    # idempotent upsert of 8 plan-defined maintenance types
-yarn seed:engine-oil-types     # idempotent upsert of 3 oil types
 ```
+
+There are **no seed scripts** — the two catalog seeds were removed in spec 42. Both catalogs are populated and maintained entirely through the app and web clients, which have full create/edit/delete UI for them (spec 41 here, `bikelog_app` spec 45, `bikelog_client-web-` spec 28).
 
 `postinstall` runs `prisma generate` automatically. No real test suite (`yarn test` is a stub that exits 1) — "verification" means `yarn build` + clean `yarn lint` (no *new* errors; ~5 pre-existing ones remain outside Bike Log modules) plus manual exercise of the affected endpoint via `postman/bikelog-api.postman_collection.json` and `postman/dummy-data.md`, not curl one-offs. `postman/HORNET 2.0 USER MANUAL.pdf` is a real fixture for the manual-upload route.
 

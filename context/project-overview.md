@@ -34,7 +34,7 @@ A second `admin` role was added in spec 24, gating exactly one admin-only, non-u
 - **Authentication:** JWT-based register/login, single `User` role.
 - **Bike management:** CRUD for a user's bikes, with `currentOdometer` denormalized onto the bike for fast reminder/mileage math.
 - **Fuel & mileage:** fuel-log CRUD, full-tank-to-full-tank exact mileage computation, rolling-average fallback, monthly/yearly/lifetime mileage stats.
-- **Maintenance & reminders:** maintenance-type catalog (seeded, e.g. Engine Oil, Chain Lube, Tire Change, Brake Pads, General Service, Insurance, Registration/Tax, Other), maintenance-log CRUD with per-log user-editable interval, due/overdue/upcoming reminders computed on read.
+- **Maintenance & reminders:** maintenance-type catalog (user-managed from the app/web clients — e.g. Engine Oil, Chain Lube, Tire Change, Brake Pads, General Service, Insurance, Registration/Tax, Other; originally seeded, but the seed scripts were removed in spec 42), maintenance-log CRUD with per-log user-editable interval, due/overdue/upcoming reminders computed on read.
 - **Spending:** aggregated spending summary across `FuelLog.totalCost` + `MaintenanceLog.cost`, by category and time period.
 
 ## In Scope (MVP)

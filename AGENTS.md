@@ -23,8 +23,6 @@ Feature work follows numbered specs under `context/specs/` — see `context/spec
 | `yarn lint` / `yarn lint:fix` | ESLint `src/`                               |
 | `yarn prettier:fix`           | Prettier `src/`                             |
 | `yarn start:prod`             | `node dist/server.js` (after build)         |
-| `yarn seed:maintenance-types` | Seed 8 maintenance types (idempotent)       |
-| `yarn seed:engine-oil-types`  | Seed 3 oil types (idempotent)               |
 | `yarn db:migrate`             | `prisma migrate deploy` (needs `DATABASE_URL_UNPOOLED`) |
 | `yarn test`                   | **Stub** — no test suite exists             |
 
