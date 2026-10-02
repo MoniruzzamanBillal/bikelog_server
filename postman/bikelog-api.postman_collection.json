@@ -1092,6 +1092,68 @@
               }
             }
           ]
+        },
+        {
+          "name": "Delete Maintenance Type",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/maintenance-types/{{maintenanceTypeId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "maintenance-types",
+                "{{maintenanceTypeId}}"
+              ]
+            },
+            "description": "Soft delete (spec 41) \u2014 sets `isDeleted: true`; the row is never removed from Postgres. The type then disappears from `GET /maintenance-types`, but any maintenance log that already used it keeps showing its real name, because log reads populate `maintenanceType` as `{_id, name}`. Re-creating a type with the same name revives this same row (and its id) rather than inserting a duplicate. Deleting twice returns 404."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Attempt Delete While In Use (expect 409)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/maintenance-types/{{maintenanceTypeId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "maintenance-types",
+                "{{maintenanceTypeId}}"
+              ]
+            },
+            "description": "The referential guard (spec 41 \u00a7E). Run this with a `maintenanceTypeId` that at least one NON-deleted maintenance log still references. Returns 409 with a user-facing sentence the clients show verbatim in a warning toast, e.g.:\n\n    \"Engine Oil\" is used by 3 maintenance logs and can't be deleted. Remove or re-assign them first.\n\nOnly LIVE logs block: if the only logs referencing the type are themselves soft-deleted, the delete succeeds. Note every maintenance log has a required maintenanceTypeId, so any log at all pins its type."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 409\", function () {",
+                  "    pm.expect([409]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -1221,6 +1283,68 @@
                 "exec": [
                   "pm.test(\"Status code is 200\", function () {",
                   "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Engine Oil Type",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/engine-oil-types/{{engineOilTypeId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "engine-oil-types",
+                "{{engineOilTypeId}}"
+              ]
+            },
+            "description": "Soft delete (spec 41) \u2014 same semantics as Delete Maintenance Type: sets `isDeleted: true`, the row stays in Postgres, it vanishes from `GET /engine-oil-types`, historical logs keep showing its real name, and re-creating the same name revives this row and its id."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Attempt Delete While In Use (expect 409)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/engine-oil-types/{{engineOilTypeId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "engine-oil-types",
+                "{{engineOilTypeId}}"
+              ]
+            },
+            "description": "The referential guard (spec 41 \u00a7I) \u2014 the scenario this feature exists for: create an oil type, select it on a maintenance log, then try to delete it. Returns 409, e.g.:\n\n    \"Synthetic\" is used by 1 maintenance log and can't be deleted. Remove or re-assign it first.\n\nUnlike maintenanceTypeId, `oilTypeId` is nullable \u2014 a log that recorded no oil type never counts, so it cannot block this. Only LIVE logs block."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 409\", function () {",
+                  "    pm.expect([409]).to.include(pm.response.code);",
                   "});"
                 ]
               }

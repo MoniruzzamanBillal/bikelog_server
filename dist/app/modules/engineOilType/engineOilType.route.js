@@ -17,4 +17,6 @@ router.get("/", authCheck_1.default, engineOilType_controller_1.engineOilTypeCon
 // ! for updating an engine oil type
 router.patch("/:id", authCheck_1.default, (0, validateRequest_1.default)(engineOilType_validation_1.engineOilTypeValidations.updateEngineOilTypeSchema), engineOilType_controller_1.engineOilTypeController.updateEngineOilType);
 //
+// ! for soft-deleting an engine oil type (no validateRequest — there is no body)
+router.delete("/:id", authCheck_1.default, engineOilType_controller_1.engineOilTypeController.deleteEngineOilType);
 exports.engineOilTypeRouter = router;

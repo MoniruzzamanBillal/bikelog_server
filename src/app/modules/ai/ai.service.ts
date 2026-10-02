@@ -1,8 +1,8 @@
-import { askOpenRouter, TChatMessage } from "../../util/openRouterClient";
 import { prisma } from "../../lib/prisma";
+import { askOpenRouter, TChatMessage } from "../../util/openRouterClient";
 import { findOwnedBikeOrThrow } from "../bike/bike.utils";
-import { bikeManualServices } from "../bikeManual/bikeManual.service";
 import { TBikeManualMeta } from "../bikeManual/bikeManual.interface";
+import { bikeManualServices } from "../bikeManual/bikeManual.service";
 import { mileageRecordServices } from "../mileageRecord/mileageRecord.service";
 import { spendingServices } from "../spending/spending.service";
 import {
@@ -182,12 +182,12 @@ const getBikeChatReply = async (
   // ! model sees. Convert before stringifying, same as the list/get endpoints' toApiShape.
   const recentFuelLogs = rawRecentFuelLogs.map((log) => ({
     ...log,
-    pricePerLiter: Number(log.pricePerLiter),
-    totalCost: Number(log.totalCost),
+    pricePerLiter: Number(log?.pricePerLiter),
+    totalCost: Number(log?.totalCost),
   }));
   const recentMaintenanceLogs = rawRecentMaintenanceLogs.map((log) => ({
     ...log,
-    cost: Number(log.cost),
+    cost: Number(log?.cost),
   }));
 
   // ! only non-empty when relevant chunks were actually found — otherwise the section

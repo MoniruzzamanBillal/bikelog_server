@@ -8,6 +8,17 @@ import { findOwnedBikeOrThrow, bumpOdometerIfHigher } from "../bike/bike.utils";
 import { TMaintenanceLog } from "./maintenanceLog.interface";
 import { deleteCloudinaryImage } from "../../util/cloudinary";
 
+// ! Spec 41 §B: every read that returns a log populates its two catalog relations, so the
+// ! display name travels with the log instead of being joined client-side against the
+// ! catalog list. That join broke once the list endpoints started hiding soft-deleted rows
+// ! (spec 41 §D) — a historical log's type would silently relabel to "Maintenance".
+// ! Deliberately NO `isDeleted` filter here: a log must still resolve the name of a type
+// ! that has since been deleted. That is the entire point of this include.
+const catalogInclude = {
+  maintenanceType: { select: { id: true, name: true } },
+  oilType: { select: { id: true, name: true } },
+} as const;
+
 // every returned maintenance log gets three FK renames (not just _id/bike — spec 34
 // decision A) plus Decimal->Number conversion for cost
 const toApiShape = <
@@ -17,6 +28,8 @@ const toApiShape = <
     maintenanceTypeId: string;
     oilTypeId: string | null;
     cost: unknown;
+    maintenanceType?: { id: string; name: string } | null;
+    oilType?: { id: string; name: string } | null;
   },
 >(
   log: T,
@@ -24,8 +37,17 @@ const toApiShape = <
   ...log,
   _id: log.id,
   bike: log.bikeId,
-  maintenanceType: log.maintenanceTypeId,
-  oilType: log.oilTypeId,
+  // ! Populated when the caller passed `catalogInclude`; falls back to the bare id string
+  // ! so an un-included read still returns the pre-spec-41 shape rather than undefined.
+  // ! Both clients already accept either form (a surviving Mongoose-populate branch).
+  maintenanceType: log.maintenanceType
+    ? { _id: log.maintenanceType.id, name: log.maintenanceType.name }
+    : log.maintenanceTypeId,
+  // ! `oilTypeId` stays `null` (not `undefined`) when absent — preserving the existing
+  // ! wire contract exactly. `undefined` would drop the key from the JSON entirely.
+  oilType: log.oilType
+    ? { _id: log.oilType.id, name: log.oilType.name }
+    : log.oilTypeId,
   cost: Number(log.cost),
 });
 
@@ -40,16 +62,20 @@ const createMaintenanceLogIntoDB = async (
 ) => {
   const bike = await findOwnedBikeOrThrow(bikeId, userId);
 
-  const maintenanceType = await prisma.maintenanceType.findUnique({
-    where: { id: payload.maintenanceType },
+  // ! Spec 41 §G: findFirst, not findUnique — `isDeleted` is not a unique field, so
+  // ! findUnique will not accept it in `where`. A soft-deleted catalog row must be
+  // ! unreachable to new writes, otherwise the FK succeeds and a log points at a type the
+  // ! user can no longer see.
+  const maintenanceType = await prisma.maintenanceType.findFirst({
+    where: { id: payload.maintenanceType, isDeleted: false },
   });
   if (!maintenanceType) {
     throw new AppError(httpStatus.NOT_FOUND, "Maintenance type not found");
   }
 
   if (payload.oilType) {
-    const oilType = await prisma.engineOilType.findUnique({
-      where: { id: payload.oilType },
+    const oilType = await prisma.engineOilType.findFirst({
+      where: { id: payload.oilType, isDeleted: false },
     });
     if (!oilType) {
       throw new AppError(httpStatus.NOT_FOUND, "Engine oil type not found");
@@ -77,6 +103,7 @@ const createMaintenanceLogIntoDB = async (
       partsReplaced: payload.partsReplaced ?? [],
       notes: payload.notes,
     },
+    include: catalogInclude,
   });
 
   await bumpOdometerIfHigher(bike, payload.odometerReading!);
@@ -109,7 +136,13 @@ const getMaintenanceLogsFromDB = async (
   });
 
   const [result, meta] = await Promise.all([
-    prisma.maintenanceLog.findMany({ where, orderBy, skip, take }),
+    prisma.maintenanceLog.findMany({
+      where,
+      orderBy,
+      skip,
+      take,
+      include: catalogInclude,
+    }),
     prisma.maintenanceLog.count({ where }),
   ]);
 
@@ -121,6 +154,7 @@ const getMaintenanceLogByIdFromDB = async (bikeId: string, userId: string, id: s
 
   const log = await prisma.maintenanceLog.findFirst({
     where: { id, bikeId, isDeleted: false },
+    include: catalogInclude,
   });
 
   if (!log) {
@@ -147,8 +181,8 @@ const updateMaintenanceLogInDB = async (
   }
 
   if (payload.maintenanceType) {
-    const maintenanceType = await prisma.maintenanceType.findUnique({
-      where: { id: payload.maintenanceType },
+    const maintenanceType = await prisma.maintenanceType.findFirst({
+      where: { id: payload.maintenanceType, isDeleted: false },
     });
     if (!maintenanceType) {
       throw new AppError(httpStatus.NOT_FOUND, "Maintenance type not found");
@@ -156,8 +190,8 @@ const updateMaintenanceLogInDB = async (
   }
 
   if (payload.oilType) {
-    const oilType = await prisma.engineOilType.findUnique({
-      where: { id: payload.oilType },
+    const oilType = await prisma.engineOilType.findFirst({
+      where: { id: payload.oilType, isDeleted: false },
     });
     if (!oilType) {
       throw new AppError(httpStatus.NOT_FOUND, "Engine oil type not found");
@@ -189,6 +223,7 @@ const updateMaintenanceLogInDB = async (
   const updated = await prisma.maintenanceLog.update({
     where: { id: log.id },
     data: updateData,
+    include: catalogInclude,
   });
 
   return toApiShape(updated);
@@ -208,6 +243,7 @@ const deleteMaintenanceLogFromDB = async (bikeId: string, userId: string, id: st
   const updated = await prisma.maintenanceLog.update({
     where: { id: log.id },
     data: { isDeleted: true },
+    include: catalogInclude,
   });
 
   return toApiShape(updated);
@@ -219,6 +255,7 @@ const getRemindersFromDB = async (bikeId: string, userId: string) => {
   const logs = await prisma.maintenanceLog.findMany({
     where: { bikeId, isDeleted: false },
     orderBy: { serviceDate: "desc" },
+    include: catalogInclude,
   });
 
   // ! log.maintenanceTypeId is already a plain string off a Prisma row — no .toString()
@@ -232,7 +269,11 @@ const getRemindersFromDB = async (bikeId: string, userId: string) => {
   }
 
   const reminders: Array<{
-    maintenanceType: string;
+    // ! Spec 41 §C: was a bare id string, which both clients' own TReminder type always
+    // ! declared as { _id, name } — the mismatch logged in progress-tracker.md's Known
+    // ! Gaps since spec 34 §E. Populating it closes that gap and is what keeps the
+    // ! clients' reminder banners correct for a type that has since been soft-deleted.
+    maintenanceType: { _id: string; name: string };
     lastServiceDate: Date;
     lastOdometerReading: number;
     nextDueOdometer?: number;
@@ -275,7 +316,7 @@ const getRemindersFromDB = async (bikeId: string, userId: string) => {
 
     if (status) {
       const reminder: {
-        maintenanceType: string;
+        maintenanceType: { _id: string; name: string };
         lastServiceDate: Date;
         lastOdometerReading: number;
         nextDueOdometer?: number;
@@ -284,9 +325,10 @@ const getRemindersFromDB = async (bikeId: string, userId: string) => {
         kmRemaining?: number;
         daysRemaining?: number;
       } = {
-        // ! same pre-existing shape as before the migration (a bare id string, not the
-        // ! { _id, name } object the client type declares) — port verbatim, see spec 34 §E
-        maintenanceType: log.maintenanceTypeId,
+        maintenanceType: {
+          _id: log.maintenanceTypeId,
+          name: log.maintenanceType.name,
+        },
         lastServiceDate: log.serviceDate,
         lastOdometerReading: log.odometerReading,
         status,
@@ -341,6 +383,7 @@ const uploadMaintenanceLogImageIntoDB = async (
   const updated = await prisma.maintenanceLog.update({
     where: { id: log.id },
     data: { serviceImage: { url: file.path, publicId: file.filename } },
+    include: catalogInclude,
   });
 
   return toApiShape(updated);
@@ -375,6 +418,7 @@ const deleteMaintenanceLogImageFromDB = async (
   const updated = await prisma.maintenanceLog.update({
     where: { id: log.id },
     data: { serviceImage: Prisma.JsonNull },
+    include: catalogInclude,
   });
 
   return toApiShape(updated);

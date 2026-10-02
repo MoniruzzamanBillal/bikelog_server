@@ -36,8 +36,21 @@ const updateEngineOilType = catchAsync(async (req, res) => {
   });
 });
 
+const deleteEngineOilType = catchAsync(async (req, res) => {
+  const result = await engineOilTypeServices.deleteEngineOilTypeFromDB(
+    req.params.id,
+  );
+  sendResponse(res, {
+    status: httpStatus.OK,
+    success: true,
+    message: "Engine oil type deleted successfully",
+    data: result,
+  });
+});
+
 export const engineOilTypeController = {
   createEngineOilType,
   getEngineOilTypes,
   updateEngineOilType,
+  deleteEngineOilType,
 };
