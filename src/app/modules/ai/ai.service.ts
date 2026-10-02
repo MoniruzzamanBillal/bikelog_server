@@ -21,10 +21,13 @@ const NO_DATA_MILEAGE_MESSAGE =
 // ! recent-log cap for the chat context — bounds prompt size/cost regardless of how much
 // ! history a bike accumulates; a question about older history should be answered honestly
 // ! as out-of-scope rather than guessed (see the system prompt below)
-const CHAT_LOG_LIMIT = 20;
+const CHAT_LOG_LIMIT = 8;
 
 // ! how many manual excerpts to inject per chat question — bounds prompt size
 const MANUAL_CHUNK_TOP_K = 4;
+
+// ! per-excerpt character cap so four long chunks can't dominate the prompt
+const MANUAL_CHUNK_MAX_CHARS = 1_200;
 
 const getSpendingInsightFromDB = async (
   bikeId: string,
@@ -180,14 +183,27 @@ const getBikeChatReply = async (
   // ! JSON.stringify on a raw Prisma Decimal instance produces a STRING in the resulting
   // ! JSON text (e.g. "totalCost":"450.00"), not a bare number — silently changes what the
   // ! model sees. Convert before stringifying, same as the list/get endpoints' toApiShape.
+  // ! project only the fields the model can use - ids, timestamps, image URLs etc. are noise
   const recentFuelLogs = rawRecentFuelLogs.map((log) => ({
-    ...log,
-    pricePerLiter: Number(log?.pricePerLiter),
-    totalCost: Number(log?.totalCost),
+    date: log.date,
+    odometerReading: log.odometerReading,
+    litersAdded: log.litersAdded,
+    isFullTank: log.isFullTank,
+    pricePerLiter: Number(log.pricePerLiter),
+    totalCost: Number(log.totalCost),
+    fuelStation: log.fuelStation,
+    notes: log.notes,
   }));
   const recentMaintenanceLogs = rawRecentMaintenanceLogs.map((log) => ({
-    ...log,
-    cost: Number(log?.cost),
+    serviceDate: log.serviceDate,
+    odometerReading: log.odometerReading,
+    type: log.maintenanceType.name,
+    cost: Number(log.cost),
+    serviceCenter: log.serviceCenter,
+    partsReplaced: log.partsReplaced,
+    nextDueOdometer: log.nextDueOdometer,
+    nextDueDate: log.nextDueDate,
+    notes: log.notes,
   }));
 
   // ! only non-empty when relevant chunks were actually found — otherwise the section
@@ -195,7 +211,9 @@ const getBikeChatReply = async (
   const manualSection =
     relevantManualChunks.length > 0
       ? `Relevant excerpts from the owner's manual ("${manual?.originalName}"):\n` +
-        relevantManualChunks.map((chunk) => chunk.chunkText).join("\n---\n") +
+        relevantManualChunks
+          .map((chunk) => chunk.chunkText.slice(0, MANUAL_CHUNK_MAX_CHARS))
+          .join("\n---\n") +
         `\n\n`
       : "";
 

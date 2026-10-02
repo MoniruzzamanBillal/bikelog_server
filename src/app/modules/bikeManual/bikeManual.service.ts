@@ -5,8 +5,15 @@ import { prisma } from "../../lib/prisma";
 import { generateObjectId } from "../../util/generateObjectId";
 import { findOwnedBikeOrThrow, updateBikeManual } from "../bike/bike.utils";
 import { deleteCloudinaryImage, uploadRawBuffer } from "../../util/cloudinary";
-import { chunkManualText, scoreAndRankChunks } from "./bikeManual.utils";
+import {
+  chunkManualText,
+  scoreAndRankChunks,
+  tokenize,
+} from "./bikeManual.utils";
 import { TBikeManualMeta } from "./bikeManual.interface";
+
+// ! backstop on the keyword pre-filter so a very common word can't pull the whole manual back
+const MANUAL_CANDIDATE_CEILING = 40;
 
 const uploadBikeManualIntoDB = async (
   bikeId: string,
@@ -97,10 +104,33 @@ const getRelevantManualChunksForChat = async (
   question: string,
   topK: number,
 ) => {
-  const chunks = await prisma.bikeManualChunk.findMany({
-    where: { bikeId },
-    select: { chunkIndex: true, chunkText: true },
-  });
+  const select = { chunkIndex: true, chunkText: true } as const;
+  const keywords = Array.from(new Set(tokenize(question)));
+
+  // ! scoreAndRankChunks needs a candidate set to rank, but pulling every chunk (~120 KB per
+  // ! manual) across regions on each message is the largest payload in the chat path. Pre-filter
+  // ! in SQL on the question's keywords; fall back to the full read only when nothing matches.
+  // ! Proper Postgres full-text search is the real fix and belongs in its own spec.
+  let chunks =
+    keywords.length > 0
+      ? await prisma.bikeManualChunk.findMany({
+          where: {
+            bikeId,
+            OR: keywords.map((keyword) => ({
+              chunkText: { contains: keyword, mode: "insensitive" as const },
+            })),
+          },
+          select,
+          take: MANUAL_CANDIDATE_CEILING,
+        })
+      : [];
+
+  if (chunks.length === 0) {
+    chunks = await prisma.bikeManualChunk.findMany({
+      where: { bikeId },
+      select,
+    });
+  }
 
   return scoreAndRankChunks(chunks, question, topK);
 };

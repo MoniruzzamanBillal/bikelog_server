@@ -65,6 +65,7 @@ Tracks work items defined in `context/specs/`. Update the moment implementation 
 | [`40-list-endpoint-tie-break-order.md`](specs/40-list-endpoint-tie-break-order.md)                                                                 | Complete    |
 | [`41-catalog-soft-delete.md`](specs/41-catalog-soft-delete.md)                                                                                     | Complete    |
 | [`42-remove-catalog-seed-scripts.md`](specs/42-remove-catalog-seed-scripts.md)                                                                     | Complete    |
+| [`43-ai-production-latency.md`](specs/43-ai-production-latency.md)                                                                                 | Complete    |
 
 ## Completed
 
