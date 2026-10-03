@@ -162,6 +162,10 @@ API-level (style of `sqa-evidence/sqa.test.js`):
 
 Static: `yarn build` and `yarn lint` clean.
 
+## Follow-up
+
+SQA of this endpoint found two defects (accepts `Infinity`/absurd values; a concurrent fuel-log bump could overwrite a manual value). Both fixed in [`45-manual-odometer-hardening.md`](45-manual-odometer-hardening.md). Note the `bumpOdometerIfHigher` item below was resolved there too.
+
 ## Open items
 
 - Should `bumpOdometerIfHigher` be made atomic in the same change, or as its own spec? (Recommended: separate spec — fixes DEF-01, outside this request.)

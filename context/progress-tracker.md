@@ -4,6 +4,8 @@ Update this file after every meaningful implementation change.
 
 ## Current Phase
 
+**Spec 45 (2026-10-03) hardened the manual odometer endpoint** after a full SQA run found two defects in spec 44's feature: it accepted `Infinity`/absurd values (now `finite().max(999999)`), and `bumpOdometerIfHigher` could overwrite a concurrent manual update (now an atomic conditional write — which also fixes the long-standing DEF-01 race). See Recent Activity.
+
 **Spec 44 (2026-10-03) added a manual odometer update** — `PATCH /api/bikes/:id/odometer` lets a rider set their latest reading without logging fuel or maintenance. Rejects values below the current odometer (400). Server-only; the app (spec 47) and web (spec 29) Settings inputs are separate specs. See Recent Activity.
 
 **Spec 42 (2026-10-02) removed the two catalog seed scripts** at the user's direct instruction — both catalogs are now populated entirely from the app and web clients, which have full create/edit/delete UI. Tooling-only: no data was deleted, no runtime/API/schema path touched. See Recent Activity.
@@ -69,6 +71,7 @@ Tracks work items defined in `context/specs/`. Update the moment implementation 
 | [`42-remove-catalog-seed-scripts.md`](specs/42-remove-catalog-seed-scripts.md)                                                                     | Complete    |
 | [`43-ai-production-latency.md`](specs/43-ai-production-latency.md)                                                                                 | Complete    |
 | [`44-manual-odometer-update.md`](specs/44-manual-odometer-update.md)                                                                               | Complete    |
+| [`45-manual-odometer-hardening.md`](specs/45-manual-odometer-hardening.md)                                                                         | Complete    |
 
 ## Completed
 
@@ -85,6 +88,13 @@ Tracks work items defined in `context/specs/`. Update the moment implementation 
 - **Spec 08 — maintenance log + reminders**: Implemented all 6 service functions in `maintenanceLog.service.ts` — `createMaintenanceLogIntoDB` (ownership + referential checks on `maintenanceType`/`oilType`, server-computed `nextDueOdometer`, odometer bump), `getMaintenanceLogsFromDB` (QueryBuilder with `-serviceDate` sort + optional `maintenanceType` filter), `getMaintenanceLogByIdFromDB`, `updateMaintenanceLogInDB` (recomputes `nextDueOdometer` if `odometerReading` or `intervalKmUsed` changes, referential checks on update, strips client-supplied `nextDueOdometer`), `deleteMaintenanceLogFromDB` (soft delete), `getRemindersFromDB` (groups by `maintenanceType` → most recent log, km-based status with 50km buffer, date-based status with 14-day buffer, omits entries that are neither due nor upcoming). Wired all 6 controller handlers in `maintenanceLog.controller.ts` with `sendResponse`. No validation/route/model changes needed. `yarn build` clean, `yarn lint` clean (no new errors).
 
 ## Recent Activity
+
+- **2026-10-03 — Spec 45: manual odometer hardening (found by full pre-deploy SQA).** `sqa-evidence/odometer.test.js` (new, 40 cases TC-ODO-001…058) plus the existing 274-case suite were run against the committed `dist/` on a throwaway local Postgres; the real Neon DB was not touched. The new suite's first run: 35/40 — two real defects, three test mistakes.
+  - **DEF-15 (Critical)**: `PATCH /bikes/:id/odometer` accepted `1e999` → Postgres stored `Infinity`, responses showed `null`, and the "never lower" rule made the bike's odometer unrecoverable. Fix: `updateOdometerSchema` now `.finite().max(999999)` (the clients' own create cap).
+  - **DEF-16 (High, = known DEF-01)**: `bumpOdometerIfHigher` compared against a stale row then wrote unconditionally, so a fuel-log/maintenance-log save racing a manual update lost the manual value in 6/6 trials. Fix: the "only if higher" test is now inside the write (`updateMany ... currentOdometer < newReading`). Callers unchanged. This also fixes DEF-01 for plain fuel logs: `race.js` went from 3–4/8 wrong to 0/8.
+  - **After the fixes**: odometer suite 40/40; full suite 247 pass / 25 fail / 2 skip with **statuses identical to the pre-fix run** (no regressions; the 25 are the previously reported defects); behaviour tests 15/15; `yarn build` clean, `yarn lint` 0 errors.
+  - **Still open, pre-existing and not touched**: `POST /bikes` (`currentOdometer: 1e999`) and `POST /bikes/:id/fuel-logs` (`odometerReading: 1e999`) also accept `Infinity` (part of DEF-04); stack traces/Prisma text in error responses (DEF-02/03), shared-catalog writes by any user, login throttling, case-sensitive emails, list-query 500s, etc. — see `TESTING_REPORT.md`.
+  - `dist/` rebuilt; it is what Vercel serves, so it must be committed with `src/`.
 
 - **2026-10-03 — Spec 44: manual odometer update (`PATCH /api/bikes/:id/odometer`).** Implemented per spec; `yarn build` clean, `yarn lint` 0 errors (the same 16 pre-existing `no-console` warnings, none in touched files).
   - `bike.validation.ts` `updateOdometerSchema` (`currentOdometer`: number, `>= 0`); `bike.service.ts` `updateOdometerInDB`; `bike.controller.ts` `updateOdometer`; `bike.route.ts` `PATCH /:id/odometer` behind `authCheck` + `validateRequest`. Postman: `Update Bike Odometer` added under Bikes.

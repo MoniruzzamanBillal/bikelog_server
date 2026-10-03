@@ -31,12 +31,13 @@ const findOwnedBikeOrThrow = (bikeId, userId) => __awaiter(void 0, void 0, void 
 });
 exports.findOwnedBikeOrThrow = findOwnedBikeOrThrow;
 const bumpOdometerIfHigher = (bike, newReading) => __awaiter(void 0, void 0, void 0, function* () {
-    if (newReading > bike.currentOdometer) {
-        yield prisma_1.prisma.bike.update({
-            where: { id: bike.id },
-            data: { currentOdometer: newReading },
-        });
-    }
+    // ! the "only if higher" check lives in the write itself, not against `bike.currentOdometer`
+    // ! (read earlier in the caller's request) — otherwise a concurrent write, e.g. a manual
+    // ! odometer update, could be overwritten with this request's stale lower value (spec 45)
+    yield prisma_1.prisma.bike.updateMany({
+        where: { id: bike.id, currentOdometer: { lt: newReading } },
+        data: { currentOdometer: newReading },
+    });
 });
 exports.bumpOdometerIfHigher = bumpOdometerIfHigher;
 // ! only used by bikeManual.service.ts (replaces its old `bike.manual = ...; bike.save()`

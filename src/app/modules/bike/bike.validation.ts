@@ -32,9 +32,13 @@ const updateBikeSchema = z.object({
 
 const updateOdometerSchema = z.object({
   body: z.object({
+    // ! finite + max: z.number() accepts Infinity and Postgres stores it, which would wedge the
+    // ! bike's odometer for good (lower values are refused). 999999 matches the clients' create cap.
     currentOdometer: z
       .number({ required_error: "Odometer reading is required" })
-      .nonnegative(),
+      .finite("Odometer reading must be a finite number")
+      .nonnegative()
+      .max(999999, "Odometer reading can't exceed 999,999 km"),
   }),
 });
 
