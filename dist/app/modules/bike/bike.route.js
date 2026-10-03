@@ -18,6 +18,8 @@ router.get("/", authCheck_1.default, bike_controller_1.bikeController.getBikes);
 router.get("/:id", authCheck_1.default, bike_controller_1.bikeController.getBikeById);
 // ! for updating a bike
 router.patch("/:id", authCheck_1.default, (0, validateRequest_1.default)(bike_validation_1.bikeValidations.updateBikeSchema), bike_controller_1.bikeController.updateBike);
+// ! for manually setting the latest odometer reading (never lower than the current one)
+router.patch("/:id/odometer", authCheck_1.default, (0, validateRequest_1.default)(bike_validation_1.bikeValidations.updateOdometerSchema), bike_controller_1.bikeController.updateOdometer);
 // ! for deleting a bike
 router.delete("/:id", authCheck_1.default, bike_controller_1.bikeController.deleteBike);
 //

@@ -30,8 +30,16 @@ const updateBikeSchema = zod_1.z.object({
         currentOdometer: zod_1.z.number().nonnegative().optional(),
     }),
 });
+const updateOdometerSchema = zod_1.z.object({
+    body: zod_1.z.object({
+        currentOdometer: zod_1.z
+            .number({ required_error: "Odometer reading is required" })
+            .nonnegative(),
+    }),
+});
 //
 exports.bikeValidations = {
     createBikeSchema,
     updateBikeSchema,
+    updateOdometerSchema,
 };

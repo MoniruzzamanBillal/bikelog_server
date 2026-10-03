@@ -8,8 +8,13 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.bikeServices = void 0;
+const http_status_1 = __importDefault(require("http-status"));
+const AppError_1 = __importDefault(require("../../Error/AppError"));
 const prisma_1 = require("../../lib/prisma");
 const generateObjectId_1 = require("../../util/generateObjectId");
 const bike_utils_1 = require("./bike.utils");
@@ -61,6 +66,29 @@ const updateBikeInDB = (id, userId, payload) => __awaiter(void 0, void 0, void 0
     });
     return toApiShape(updated);
 });
+// ! manual "my odometer is now X" update. Only ever moves currentOdometer upward (equal is
+// ! allowed, so a repeat submit is idempotent). The `lte` guard lives in the write itself
+// ! rather than being checked against the row read above, so a concurrent fuel-log bump or a
+// ! second request can't be overwritten with a stale lower value. initialOdometer is never touched.
+const updateOdometerInDB = (id, userId, newReading) => __awaiter(void 0, void 0, void 0, function* () {
+    const bike = yield (0, bike_utils_1.findOwnedBikeOrThrow)(id, userId);
+    const { count } = yield prisma_1.prisma.bike.updateMany({
+        where: {
+            id: bike.id,
+            ownerId: userId,
+            isDeleted: false,
+            currentOdometer: { lte: newReading },
+        },
+        data: { currentOdometer: newReading },
+    });
+    if (count === 0) {
+        // ! re-read so the message shows the live value, in case a concurrent write raised it
+        const latest = yield (0, bike_utils_1.findOwnedBikeOrThrow)(id, userId);
+        throw new AppError_1.default(http_status_1.default.BAD_REQUEST, `Odometer can't be lower than the current reading (${latest.currentOdometer} km)`);
+    }
+    const updated = yield (0, bike_utils_1.findOwnedBikeOrThrow)(id, userId);
+    return toApiShape(updated);
+});
 const deleteBikeFromDB = (id, userId) => __awaiter(void 0, void 0, void 0, function* () {
     const bike = yield (0, bike_utils_1.findOwnedBikeOrThrow)(id, userId);
     const updated = yield prisma_1.prisma.bike.update({
@@ -74,6 +102,7 @@ exports.bikeServices = {
     getBikesFromDB,
     getBikeByIdFromDB,
     updateBikeInDB,
+    updateOdometerInDB,
     deleteBikeFromDB,
     bumpOdometerIfHigher: bike_utils_1.bumpOdometerIfHigher,
 };

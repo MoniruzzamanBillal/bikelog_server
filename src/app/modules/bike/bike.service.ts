@@ -1,3 +1,5 @@
+import httpStatus from "http-status";
+import AppError from "../../Error/AppError";
 import { prisma } from "../../lib/prisma";
 import { generateObjectId } from "../../util/generateObjectId";
 import { TBike } from "./bike.interface";
@@ -66,6 +68,40 @@ const updateBikeInDB = async (
   return toApiShape(updated);
 };
 
+// ! manual "my odometer is now X" update. Only ever moves currentOdometer upward (equal is
+// ! allowed, so a repeat submit is idempotent). The `lte` guard lives in the write itself
+// ! rather than being checked against the row read above, so a concurrent fuel-log bump or a
+// ! second request can't be overwritten with a stale lower value. initialOdometer is never touched.
+const updateOdometerInDB = async (
+  id: string,
+  userId: string,
+  newReading: number,
+) => {
+  const bike = await findOwnedBikeOrThrow(id, userId);
+
+  const { count } = await prisma.bike.updateMany({
+    where: {
+      id: bike.id,
+      ownerId: userId,
+      isDeleted: false,
+      currentOdometer: { lte: newReading },
+    },
+    data: { currentOdometer: newReading },
+  });
+
+  if (count === 0) {
+    // ! re-read so the message shows the live value, in case a concurrent write raised it
+    const latest = await findOwnedBikeOrThrow(id, userId);
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      `Odometer can't be lower than the current reading (${latest.currentOdometer} km)`,
+    );
+  }
+
+  const updated = await findOwnedBikeOrThrow(id, userId);
+  return toApiShape(updated);
+};
+
 const deleteBikeFromDB = async (id: string, userId: string) => {
   const bike = await findOwnedBikeOrThrow(id, userId);
   const updated = await prisma.bike.update({
@@ -80,6 +116,7 @@ export const bikeServices = {
   getBikesFromDB,
   getBikeByIdFromDB,
   updateBikeInDB,
+  updateOdometerInDB,
   deleteBikeFromDB,
   bumpOdometerIfHigher,
 };

@@ -21,6 +21,8 @@ const generateObjectId_1 = require("../../util/generateObjectId");
 const bike_utils_1 = require("../bike/bike.utils");
 const cloudinary_1 = require("../../util/cloudinary");
 const bikeManual_utils_1 = require("./bikeManual.utils");
+// ! backstop on the keyword pre-filter so a very common word can't pull the whole manual back
+const MANUAL_CANDIDATE_CEILING = 40;
 const uploadBikeManualIntoDB = (bikeId, userId, file) => __awaiter(void 0, void 0, void 0, function* () {
     const bike = yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
     if (!file) {
@@ -80,10 +82,30 @@ const deleteBikeManualFromDB = (bikeId, userId) => __awaiter(void 0, void 0, voi
 });
 // ! the only function ai.service.ts imports from this module
 const getRelevantManualChunksForChat = (bikeId, question, topK) => __awaiter(void 0, void 0, void 0, function* () {
-    const chunks = yield prisma_1.prisma.bikeManualChunk.findMany({
-        where: { bikeId },
-        select: { chunkIndex: true, chunkText: true },
-    });
+    const select = { chunkIndex: true, chunkText: true };
+    const keywords = Array.from(new Set((0, bikeManual_utils_1.tokenize)(question)));
+    // ! scoreAndRankChunks needs a candidate set to rank, but pulling every chunk (~120 KB per
+    // ! manual) across regions on each message is the largest payload in the chat path. Pre-filter
+    // ! in SQL on the question's keywords; fall back to the full read only when nothing matches.
+    // ! Proper Postgres full-text search is the real fix and belongs in its own spec.
+    let chunks = keywords.length > 0
+        ? yield prisma_1.prisma.bikeManualChunk.findMany({
+            where: {
+                bikeId,
+                OR: keywords.map((keyword) => ({
+                    chunkText: { contains: keyword, mode: "insensitive" },
+                })),
+            },
+            select,
+            take: MANUAL_CANDIDATE_CEILING,
+        })
+        : [];
+    if (chunks.length === 0) {
+        chunks = yield prisma_1.prisma.bikeManualChunk.findMany({
+            where: { bikeId },
+            select,
+        });
+    }
     return (0, bikeManual_utils_1.scoreAndRankChunks)(chunks, question, topK);
 });
 exports.bikeManualServices = {

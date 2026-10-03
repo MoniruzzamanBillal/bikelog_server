@@ -50,6 +50,20 @@ const updateBike = catchAsync(async (req, res) => {
   });
 });
 
+const updateOdometer = catchAsync(async (req, res) => {
+  const result = await bikeServices.updateOdometerInDB(
+    req.params.id,
+    req.user.userId,
+    req.body.currentOdometer,
+  );
+  sendResponse(res, {
+    status: httpStatus.OK,
+    success: true,
+    message: "Odometer updated successfully",
+    data: result,
+  });
+});
+
 const deleteBike = catchAsync(async (req, res) => {
   const result = await bikeServices.deleteBikeFromDB(
     req.params.id,
@@ -68,5 +82,6 @@ export const bikeController = {
   getBikes,
   getBikeById,
   updateBike,
+  updateOdometer,
   deleteBike,
 };

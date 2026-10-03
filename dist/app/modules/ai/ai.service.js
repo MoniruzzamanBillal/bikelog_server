@@ -10,8 +10,8 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.aiServices = void 0;
-const openRouterClient_1 = require("../../util/openRouterClient");
 const prisma_1 = require("../../lib/prisma");
+const openRouterClient_1 = require("../../util/openRouterClient");
 const bike_utils_1 = require("../bike/bike.utils");
 const bikeManual_service_1 = require("../bikeManual/bikeManual.service");
 const mileageRecord_service_1 = require("../mileageRecord/mileageRecord.service");
@@ -21,9 +21,11 @@ const NO_DATA_MILEAGE_MESSAGE = "No mileage data yet for this bike — log a fue
 // ! recent-log cap for the chat context — bounds prompt size/cost regardless of how much
 // ! history a bike accumulates; a question about older history should be answered honestly
 // ! as out-of-scope rather than guessed (see the system prompt below)
-const CHAT_LOG_LIMIT = 20;
+const CHAT_LOG_LIMIT = 8;
 // ! how many manual excerpts to inject per chat question — bounds prompt size
 const MANUAL_CHUNK_TOP_K = 4;
+// ! per-excerpt character cap so four long chunks can't dominate the prompt
+const MANUAL_CHUNK_MAX_CHARS = 1200;
 const getSpendingInsightFromDB = (bikeId, userId) => __awaiter(void 0, void 0, void 0, function* () {
     const bike = yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
     const [fuelLogCount, maintenanceLogCount] = yield Promise.all([
@@ -128,13 +130,35 @@ const getBikeChatReply = (bikeId, userId, messages) => __awaiter(void 0, void 0,
     // ! JSON.stringify on a raw Prisma Decimal instance produces a STRING in the resulting
     // ! JSON text (e.g. "totalCost":"450.00"), not a bare number — silently changes what the
     // ! model sees. Convert before stringifying, same as the list/get endpoints' toApiShape.
-    const recentFuelLogs = rawRecentFuelLogs.map((log) => (Object.assign(Object.assign({}, log), { pricePerLiter: Number(log.pricePerLiter), totalCost: Number(log.totalCost) })));
-    const recentMaintenanceLogs = rawRecentMaintenanceLogs.map((log) => (Object.assign(Object.assign({}, log), { cost: Number(log.cost) })));
+    // ! project only the fields the model can use - ids, timestamps, image URLs etc. are noise
+    const recentFuelLogs = rawRecentFuelLogs.map((log) => ({
+        date: log.date,
+        odometerReading: log.odometerReading,
+        litersAdded: log.litersAdded,
+        isFullTank: log.isFullTank,
+        pricePerLiter: Number(log.pricePerLiter),
+        totalCost: Number(log.totalCost),
+        fuelStation: log.fuelStation,
+        notes: log.notes,
+    }));
+    const recentMaintenanceLogs = rawRecentMaintenanceLogs.map((log) => ({
+        serviceDate: log.serviceDate,
+        odometerReading: log.odometerReading,
+        type: log.maintenanceType.name,
+        cost: Number(log.cost),
+        serviceCenter: log.serviceCenter,
+        partsReplaced: log.partsReplaced,
+        nextDueOdometer: log.nextDueOdometer,
+        nextDueDate: log.nextDueDate,
+        notes: log.notes,
+    }));
     // ! only non-empty when relevant chunks were actually found — otherwise the section
     // ! is omitted entirely rather than injecting an empty/misleading heading
     const manualSection = relevantManualChunks.length > 0
         ? `Relevant excerpts from the owner's manual ("${manual === null || manual === void 0 ? void 0 : manual.originalName}"):\n` +
-            relevantManualChunks.map((chunk) => chunk.chunkText).join("\n---\n") +
+            relevantManualChunks
+                .map((chunk) => chunk.chunkText.slice(0, MANUAL_CHUNK_MAX_CHARS))
+                .join("\n---\n") +
             `\n\n`
         : "";
     const systemMessage = {

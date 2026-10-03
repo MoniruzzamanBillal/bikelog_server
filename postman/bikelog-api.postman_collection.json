@@ -437,6 +437,47 @@
           ]
         },
         {
+          "name": "Update Bike Odometer",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/odometer",
+              "host": ["{{baseUrl}}"],
+              "path": ["bikes", "{{bikeId}}", "odometer"]
+            },
+            "description": "Manually set the bike's latest odometer reading (spec 44). Must be >= the current reading — a lower value returns 400. Equal is allowed (idempotent). Only `currentOdometer` is read; `initialOdometer`/`owner` in the body are ignored. Creates no fuel log or mileage record.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentOdometer\": 12500\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Delete Bike",
           "request": {
             "method": "DELETE",

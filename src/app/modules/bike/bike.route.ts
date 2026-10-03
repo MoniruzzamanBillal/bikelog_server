@@ -28,6 +28,14 @@ router.patch(
   bikeController.updateBike,
 );
 
+// ! for manually setting the latest odometer reading (never lower than the current one)
+router.patch(
+  "/:id/odometer",
+  authCheck,
+  validateRequest(bikeValidations.updateOdometerSchema),
+  bikeController.updateOdometer,
+);
+
 // ! for deleting a bike
 router.delete("/:id", authCheck, bikeController.deleteBike);
 

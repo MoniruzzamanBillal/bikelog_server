@@ -53,6 +53,15 @@ const updateBike = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, voi
         data: result,
     });
 }));
+const updateOdometer = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const result = yield bike_service_1.bikeServices.updateOdometerInDB(req.params.id, req.user.userId, req.body.currentOdometer);
+    (0, sendResponse_1.default)(res, {
+        status: http_status_1.default.OK,
+        success: true,
+        message: "Odometer updated successfully",
+        data: result,
+    });
+}));
 const deleteBike = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const result = yield bike_service_1.bikeServices.deleteBikeFromDB(req.params.id, req.user.userId);
     (0, sendResponse_1.default)(res, {
@@ -67,5 +76,6 @@ exports.bikeController = {
     getBikes,
     getBikeById,
     updateBike,
+    updateOdometer,
     deleteBike,
 };
