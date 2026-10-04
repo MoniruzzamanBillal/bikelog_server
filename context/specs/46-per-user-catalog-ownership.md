@@ -1,6 +1,6 @@
 # 46: Per-user ownership for the maintenance-type and engine-oil-type catalogs (server)
 
-Status: ⛔ Not Started — plan only, awaiting implementation.
+Status: 🚧 In Progress — **all code for both PRs is implemented, built and committed (2026-10-04)**. What remains is the DB-side rollout (execution-order steps 3–12), which only the operator can run: this environment has no access to the production Neon database. See the **Operator runbook** section at the end.
 
 Server half of a three-repo change. App counterpart: `bikelog_app/ai context/specs/48-per-user-catalogs.md`. Web counterpart: `bikelog_client-web-/context/specs/30-per-user-catalogs.md`. **This spec ships first** — but note the wire contract change is purely additive, so the clients are not blocked on it and can ship in either order afterwards.
 
@@ -520,11 +520,11 @@ With no test framework in this repo, the collection **is** the regression suite 
 
 ### PR1 checklist
 
-- [ ] 1. `schema.prisma` — `ownerId String?` + `owner User?` (explicit `onDelete: Restrict`) + composite uniques + indexes + `requiresOilType` + `User` back-relations
-- [ ] 2. Generate migration A via `migrate diff` against a shadow DB; verify the SQL matches §C
-- [ ] 3. `src/scripts/backfillCatalogOwners.ts` — phases 0–4, three modes, all comments from §C
-- [ ] 4. `yarn build` + `yarn lint`; commit fresh `dist/` (H5)
-- [ ] 5. Mark this spec **In Progress** in `context/progress-tracker.md`
+- [x] 1. `schema.prisma` — `ownerId String?` + `owner User?` (explicit `onDelete: Restrict`) + composite uniques + indexes + `requiresOilType` + `User` back-relations
+- [x] 2. Generate migration A via `migrate diff`; verify the SQL matches §C — `20261004061500_catalog_add_owner`. Generated **offline** with `--from-schema <pre-change copy> --to-schema prisma/schema.prisma`, which needs no shadow DB at all (and `--from-schema-datamodel` no longer exists in Prisma 7.10 — the flag was renamed to `--from-schema`). Output is statement-for-statement §C's migration A; only the statement *order* differs (Prisma emits DropIndex → AlterTable → CreateIndex → AddForeignKey), which is semantically identical and equally safe per §C's own per-statement table.
+- [x] 3. `src/scripts/backfillCatalogOwners.ts` — phases 0–4, three modes, all comments from §C. One deliberate divergence, commented in the file: phase 2 uses an explicit `findUnique`-then-`create` pair instead of `upsert({ ..., update: {} })`. Same effect, same idempotency guarantee, but it makes the created-vs-skipped counts reportable, which a no-op `upsert` cannot be.
+- [x] 4. `yarn build` + `yarn lint`; commit fresh `dist/` (H5)
+- [x] 5. Mark this spec **In Progress** in `context/progress-tracker.md`
 
 ### PR2 checklist
 
