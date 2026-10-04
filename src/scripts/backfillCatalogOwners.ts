@@ -80,10 +80,14 @@ type OriginalOil = {
 // ---------------------------------------------------------------------------
 
 async function assertMigrationState() {
+  // ! `information_schema.columns.table_name`/`is_nullable` are Postgres type `name`
+  // ! / `yes_or_no`, not `text`, and the PrismaNeon adapter cannot deserialize either —
+  // ! it fails with "Failed to deserialize column of type 'name'". Same for
+  // ! `pg_indexes.indexname`. Every identifier column read here must be cast to ::text.
   const cols = await prisma.$queryRaw<
     { table_name: string; is_nullable: string }[]
   >`
-    SELECT table_name, is_nullable
+    SELECT table_name::text AS table_name, is_nullable::text AS is_nullable
       FROM information_schema.columns
      WHERE table_schema = 'public'
        AND column_name = 'ownerId'
@@ -104,7 +108,7 @@ async function assertMigrationState() {
   }
 
   const idx = await prisma.$queryRaw<{ indexname: string }[]>`
-    SELECT indexname FROM pg_indexes
+    SELECT indexname::text AS indexname FROM pg_indexes
      WHERE schemaname = 'public'
        AND indexname IN (
          'maintenance_types_ownerId_name_key',

@@ -66,8 +66,12 @@ const chunked = (rows, size = CHUNK) => {
 // ---------------------------------------------------------------------------
 function assertMigrationState() {
     return __awaiter(this, void 0, void 0, function* () {
+        // ! `information_schema.columns.table_name`/`is_nullable` are Postgres type `name`
+        // ! / `yes_or_no`, not `text`, and the PrismaNeon adapter cannot deserialize either —
+        // ! it fails with "Failed to deserialize column of type 'name'". Same for
+        // ! `pg_indexes.indexname`. Every identifier column read here must be cast to ::text.
         const cols = yield prisma_1.prisma.$queryRaw `
-    SELECT table_name, is_nullable
+    SELECT table_name::text AS table_name, is_nullable::text AS is_nullable
       FROM information_schema.columns
      WHERE table_schema = 'public'
        AND column_name = 'ownerId'
@@ -82,7 +86,7 @@ function assertMigrationState() {
                 .join(", ")}. The backfill must run between A and C.`);
         }
         const idx = yield prisma_1.prisma.$queryRaw `
-    SELECT indexname FROM pg_indexes
+    SELECT indexname::text AS indexname FROM pg_indexes
      WHERE schemaname = 'public'
        AND indexname IN (
          'maintenance_types_ownerId_name_key',
