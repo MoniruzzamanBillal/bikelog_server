@@ -1,6 +1,6 @@
 # 46: Per-user ownership for the maintenance-type and engine-oil-type catalogs (server)
 
-Status: 🚧 In Progress — **all code for both PRs is implemented, built and committed (2026-10-04)**. What remains is the DB-side rollout (execution-order steps 3–12), which only the operator can run: this environment has no access to the production Neon database. See the **Operator runbook** section at the end.
+Status: 🚧 In Progress — all code for both PRs is implemented, built and committed (2026-10-04), and **migration A plus the `--apply` backfill have now been run against production** (16 users, 112 + 49 copies, 32 logs re-pointed). What remains is the **deploy**, `--finalize`, and migration C — plus the H7/H4 notes in the runbook's new correction bullet. See the **Operator runbook** section at the end, and `context/progress-tracker.md` Current Phase for the step-by-step state.
 
 Server half of a three-repo change. App counterpart: `bikelog_app/ai context/specs/48-per-user-catalogs.md`. Web counterpart: `bikelog_client-web-/context/specs/30-per-user-catalogs.md`. **This spec ships first** — but note the wire contract change is purely additive, so the clients are not blocked on it and can ship in either order afterwards.
 
@@ -724,6 +724,7 @@ Rehearse the whole thing on a Neon branch of production first (§Test plan stage
 Two notes on the window between steps 3 and 9 on production:
 
 - After step 5 the tables hold `users × rows` entries while the **deployed** code still has no owner filter, so every user sees every name repeated once per user — with several users and ~11 types, roughly 55 rows of visible duplication. Creates/updates/deletes still work. This is the main cosmetic hazard and the reason to run the sequence in one sitting.
+- **CORRECTION (2026-10-04, during the actual rollout):** the bullet below is wrong. The spec 46 commits were **never pushed or deployed** — production Vercel serves `master`, which does not contain them. So after step 5 the deployed, owner-blind code returned all 173 rows (12 originals + 161 copies) to every user, each name repeated 17 times, and §0 H2's ordering hazard **does** apply: the deploy must happen before `--finalize` and migration C. Read the bullet below as the condition the rollout was *supposed* to meet, not as a fact about it.
 - The ordering hazard §0 H2 warns about does **not** apply here, because the new code is already merged and deployed — this sequence is `A → backfill → finalize → C` against code that already filters by `ownerId`, which means the ownerless originals are invisible to everyone from the moment migration A lands. That is the safe ordering, not the dangerous one.
 
 ### Unverified claims
