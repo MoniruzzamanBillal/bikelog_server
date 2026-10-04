@@ -10,7 +10,9 @@ For product requirements, data model, and API surface, read `context/specs/bike-
 
 **Stack: Express + TypeScript + Prisma 7 + PostgreSQL (Neon).** The MongoDB/Mongoose → Postgres migration is complete and merged to `master` (PR #20, 2026-09-21). Every service function talks to Prisma exclusively; **zero Mongoose `.model.ts` files remain in `src/`**.
 
-All **40 numbered specs are complete** (plus sub-specs `31a`, `31b`, `32a`, `36a`). `00-build-plan.md` is marked Not Started but is a historical planning doc, not pending work. There is no remaining MVP or post-MVP backend feature work.
+Specs **01–45 are complete** (plus sub-specs `31a`, `31b`, `32a`, `36a`). `00-build-plan.md` is marked Not Started but is a historical planning doc, not pending work.
+
+**Spec 46 (per-user catalog ownership) is written but Not Started** — `context/specs/46-per-user-catalog-ownership.md`. It makes `MaintenanceType`/`EngineOilType` per-user (they are global today, which is both a disclosure leak and an IDOR in `maintenanceLog.service.ts`'s create *and* update paths). It is the first spec here to change live production data since the Phase 8 cutover: **read its §0 Hazards before touching anything**, especially H1 (`oilTypeId`'s FK is `ON DELETE SET NULL`, so a missed re-point silently nulls logs) and H3 (it is two PRs, because `migrate deploy` applies all pending migrations at once).
 
 **15 modules** under `src/app/modules/`, all with real business logic, mounted via `routeArray` in `src/app/router/index.ts`: `user` (at `/auth`), `bike`, `fuelLog`, `mileageRecord`, `maintenanceType`, `engineOilType`, `maintenanceLog`, `spending`, `bikeIssue`, `bikeAccessory`, `ai`, `bikeManual`, `bikeDocument`, `errorLog`, `notification`. No controller/service returns `501`. `package.json` still says `l2-boiler` — cosmetic leftover, harmless.
 

@@ -72,6 +72,7 @@ Tracks work items defined in `context/specs/`. Update the moment implementation 
 | [`43-ai-production-latency.md`](specs/43-ai-production-latency.md)                                                                                 | Complete    |
 | [`44-manual-odometer-update.md`](specs/44-manual-odometer-update.md)                                                                               | Complete    |
 | [`45-manual-odometer-hardening.md`](specs/45-manual-odometer-hardening.md)                                                                         | Complete    |
+| [`46-per-user-catalog-ownership.md`](specs/46-per-user-catalog-ownership.md)                                                                       | Not Started |
 
 ## Completed
 
