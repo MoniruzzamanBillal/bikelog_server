@@ -528,17 +528,17 @@ With no test framework in this repo, the collection **is** the regression suite 
 
 ### PR2 checklist
 
-- [ ] 1. `schema.prisma` — `ownerId String` + `owner User` (drop the `onDelete` arg); generate migration C
-- [ ] 2. `maintenanceType.utils.ts` + `engineOilType.utils.ts` — the two `findOwnedXOrThrow` helpers
-- [ ] 3. Both catalog services — `userId` threaded through all four functions each (§D)
-- [ ] 4. Both catalog controllers — `req.user.userId` in all eight handlers
-- [ ] 5. Both catalog validations + interfaces — `requiresOilType`; **never** `ownerId`
-- [ ] 6. `maintenanceLog.service.ts` — the four `ownerId: userId` additions; comment on `catalogInclude`
-- [ ] 7. Delete `migratePhase8MongoToPostgres.ts` + its `dist/` artifact (§H)
-- [ ] 8. Postman collection (§I)
-- [ ] 9. Docs — `CLAUDE.md:51`, `AGENTS.md`, `context/architecture.md`, `context/project-overview.md`, `context/ai-workflow-rules.md`, root `CLAUDE.md`
-- [ ] 10. `yarn build` + `yarn lint`; commit fresh `dist/`
-- [ ] 11. Mark **Complete** after step 12 of the execution order
+- [x] 1. `schema.prisma` — `ownerId String` + `owner User` (drop the `onDelete` arg); generate migration C → `20261004061600_catalog_owner_not_null`. The PR1 trick worked: `migrate diff` emits exactly the two `SET NOT NULL` statements and **no constraint churn**, confirming the FK was already in its final form.
+- [x] 2. `maintenanceType.utils.ts` + `engineOilType.utils.ts` — the two `findOwnedXOrThrow` helpers
+- [x] 3. Both catalog services — `userId` threaded through all four functions each (§D)
+- [x] 4. Both catalog controllers — `req.user.userId` in all eight handlers
+- [x] 5. Both catalog validations + interfaces — `requiresOilType`; **never** `ownerId` (both `T*` types carry an explicit comment saying why it is absent)
+- [x] 6. `maintenanceLog.service.ts` — the four `ownerId: userId` additions; comment on `catalogInclude`
+- [x] 7. Delete `migratePhase8MongoToPostgres.ts` + its `dist/` artifact (§H)
+- [x] 8. Postman collection (§I) — `{{tokenB}}`, "Login as User B", the two negative requests, all ten catalog descriptions rewritten, the 4 stale `seed:*` references dropped. Also fixed 3 more of the same stale references in `postman/dummy-data.md`, which §I did not count but which are the identical defect.
+- [x] 9. Docs — `CLAUDE.md` (both the soft-delete bullet and the mongoose-importer count, plus two new bullets), `AGENTS.md`, `context/architecture.md` (a new §, rather than rewriting its un-swept Mongoose-era prose), `context/project-overview.md`, `context/ai-workflow-rules.md` (including the now-false "greenfield build" opening, kept quoted for the record), root `CLAUDE.md`
+- [x] 10. `yarn build` + `yarn lint`; commit fresh `dist/`
+- [ ] 11. Mark **Complete** after step 12 of the execution order — **still open.** Steps 3–12 all mutate the live Neon database and were not run; see the runbook below.
 
 ### Doc updates (PR2)
 
@@ -679,3 +679,53 @@ After step 6: V2–V5, V7. After step 7: the V1 `diff`. After step 8's deploy: a
 - `requiresOilType` is set per type by its owner; no migration backfills it beyond the name match in §C phase 2. If H7 reveals production holds `"Engine Oil Change"`, record that the clients' dropdown was already dead and the flag is the fix.
 - No audit trail on catalog edits — out of scope, same as spec 44's note on odometer history.
 - Whether to centralise Prisma error mapping (`P2003`/`P2025`) in `globalErrorHandler` remains open; this spec deliberately keeps the guard-before-write pattern spec 41 established instead.
+
+---
+
+## Operator runbook — the part that is still open (added 2026-10-04)
+
+All the code above is committed. Everything below touches the live Neon database and **was not run**: the implementing session had no access to it, not even a read. So the repo is currently *ahead of* the database — the committed `schema.prisma` declares `ownerId` as required while production still has it nullable and all-`NULL`.
+
+### Read this first: both migrations are now in the repo at once
+
+§0 H3 assumed PR1 and PR2 would land as two separate merges, with the backfill run in between. They landed back-to-back instead, so `prisma migrate deploy` now sees **both** A and C pending. A plain `yarn db:migrate` therefore applies A *and then* C, and C fails with Postgres `23502` on the all-`NULL` column.
+
+That failure is the gate doing its job — A is applied, C's SQL is atomic so nothing of it lands, and **no data is touched or lost**. But it leaves C marked as a failed migration, which then needs `npx prisma migrate resolve --rolled-back 20261004061600_catalog_owner_not_null` before it can be retried. Avoid the detour by holding C back for the one command that applies A:
+
+```bash
+cd bikelog_server
+mkdir -p /tmp/spec46-hold
+mv prisma/migrations/20261004061600_catalog_owner_not_null /tmp/spec46-hold/
+# ... steps 1-9 below ...
+mv /tmp/spec46-hold/20261004061600_catalog_owner_not_null prisma/migrations/
+```
+
+Moving the folder changes nothing about the repo's committed state — put it back before step 10 and `git status` is clean again.
+
+### The sequence
+
+Rehearse the whole thing on a Neon branch of production first (§Test plan stage 2); only then repeat it against production. `neon` CLI is **not installed** on this machine — install it, or create the branch from the Neon console and copy both connection strings into `.env` (`DATABASE_URL` pooled, `DATABASE_URL_UNPOOLED` direct).
+
+| # | Command / action | Notes |
+| --- | --- | --- |
+| 1 | Create Neon branch `spec46-dryrun` from production; point `.env` at it | Reversible — delete the branch |
+| 2 | Take the **V1** before-snapshot | The proof of zero loss. `psql "$DATABASE_URL_UNPOOLED" -f v1.sql > before.txt` |
+| 3 | Hold C back (above), then `yarn db:migrate` | Applies **A only**. Confirm with `\d maintenance_types` |
+| 4 | `npx ts-node --transpile-only src/scripts/backfillCatalogOwners.ts` | Dry run. Settles **H7** — read the `requiresOilType:` line it prints for the real production row name |
+| 5 | `... backfillCatalogOwners.ts --apply` | Copies + re-points. Originals untouched, fully reversible |
+| 6 | Run **V2–V5, V7**; re-take V1 and `diff` | Pass criterion: the V1 diff is **byte-empty** |
+| 7 | Run `--apply` a second time | Idempotency proof: must report 0 created, 0 re-pointed |
+| 8 | **Break it deliberately once** — on a throwaway branch, skip step 5 and run `--finalize` | The H1 regression test, and the single most valuable thing in the dry run. It must abort on the assertion, not destroy data |
+| 9 | `... backfillCatalogOwners.ts --finalize` | **Irreversible.** Asserts, then deletes the originals |
+| 10 | Restore the C folder, then `yarn db:migrate` | Applies **C**. If it raises `23502`, a `NULL`-owner row was created in the window — inspect, assign or delete it, re-run. Do **not** weaken the migration |
+| 11 | V5 returns 0/0; a throwaway create + delete succeeds | |
+| 12 | Point `.env` back at production and repeat 2–11 there | Then §Test plan stage 3's 18-request multi-user pass |
+
+Two notes on the window between steps 3 and 9 on production:
+
+- After step 5 the tables hold `users × rows` entries while the **deployed** code still has no owner filter, so every user sees every name repeated once per user — with several users and ~11 types, roughly 55 rows of visible duplication. Creates/updates/deletes still work. This is the main cosmetic hazard and the reason to run the sequence in one sitting.
+- The ordering hazard §0 H2 warns about does **not** apply here, because the new code is already merged and deployed — this sequence is `A → backfill → finalize → C` against code that already filters by `ownerId`, which means the ownerless originals are invisible to everyone from the moment migration A lands. That is the safe ordering, not the dangerous one.
+
+### Unverified claims
+
+Nothing in this spec was exercised at runtime. Verification was `yarn build` + `yarn lint` + a static read; the Postman requests are written but unrun, and the `PrismaNeon` adapter cannot be pointed at local Postgres as a substitute (spec 31b). Treat every behavioural statement as derived from the code, not observed.

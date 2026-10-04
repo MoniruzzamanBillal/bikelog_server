@@ -31,7 +31,7 @@ Feature work follows numbered specs under `context/specs/` — see `context/spec
 - `yarn build` succeeds
 - `yarn lint` clean (no new errors)
 - Manually verify new/changed endpoints
-- For owner-scoped resources, confirm service checks ownership against `req.user.userId`
+- For owner-scoped resources, confirm service checks ownership against `req.user.userId` — this now includes `MaintenanceType` and `EngineOilType` (spec 46), not just `Bike`/`FuelLog`/`MaintenanceLog`
 
 ## Architecture gotchas
 
@@ -44,8 +44,9 @@ Feature work follows numbered specs under `context/specs/` — see `context/spec
 - **Nested resources**: `fuelLog`, `mileageRecord`, `maintenanceLog`, `spending`, `bikeIssue`, `bikeAccessory`, `ai`, `bikeManual`, `bikeDocument` mount under `/bikes/:bikeId/...` — their routers use `Router({ mergeParams: true })`
 - **Two routers, one module**: `maintenanceLog.route.ts` exports both `maintenanceLogRouter` (CRUD) and `reminderRouter` (`/reminders`); `errorLog.route.ts` likewise exports `errorLogRouter` (`/admin/error-logs`) and `errorLogCronRouter` (`/cron`)
 - **Cron routes skip `authCheck` deliberately** — `/api/cron/*` is gated on an `x-cron-secret` header matched against `CRON_SECRET`, driven by GitHub Actions
-- **Soft delete is explicit now**: Prisma has no `pre("find")` hook equivalent — **every** query against `user`/`bike`/`fuelLog`/`maintenanceLog`/`bikeIssue`/`bikeAccessory` must pass `isDeleted: false` in its own `where`. Omitting it leaks deleted rows
-- **Duplicate keys**: caught per-service as `Prisma.PrismaClientKnownRequestError` + `code === "P2002"` → 409 `AppError` (`maintenanceType`, `engineOilType`, `user`). `globalErrorHandler`'s Mongo-era `11000`/`CastError`/`ValidationError` branches are **dead** and `P2003`/`P2025` fall through to a generic 500 — catch those locally if they matter
+- **Soft delete is explicit now**: Prisma has no `pre("find")` hook equivalent — **every** query against `user`/`bike`/`fuelLog`/`maintenanceLog`/`bikeIssue`/`bikeAccessory`/`maintenanceType`/`engineOilType` must pass `isDeleted: false` in its own `where`. Omitting it leaks deleted rows
+- **Both catalogs are per-user (spec 46)**: `maintenanceType`/`engineOilType` queries need `ownerId` **as well as** `isDeleted: false`. Use `findOwnedMaintenanceTypeOrThrow` / `findOwnedEngineOilTypeOrThrow`; a cross-user id is a **404**, not a 403. `ownerId` never comes from the request body
+- **Duplicate keys**: caught per-service as `Prisma.PrismaClientKnownRequestError` + `code === "P2002"` → 409 `AppError` (`maintenanceType`, `engineOilType`, `user`). For the two catalogs it now fires on `(ownerId, name)`, not a global `name` — so the existing "already exists" message is finally true from the user's point of view (spec 46). `globalErrorHandler`'s Mongo-era `11000`/`CastError`/`ValidationError` branches are **dead** and `P2003`/`P2025` fall through to a generic 500 — catch those locally if they matter
 - **Unused deps** (don't import): `bcrypt`, `nodemailer`. `cloudinary`/`multer`/`multer-storage-cloudinary` (uploads), `openai` (via `openRouterClient.ts`) and `argon2` are all **live**
 - **Dead code** (don't import): `builder/Queryuilder.ts` — the old Mongoose query builder, replaced by `builder/buildPrismaListQuery.ts`; and `helper/openRouter.ts`, replaced by `util/openRouterClient.ts`
 - **Ids are app-generated**: every model is `id String @id` with no `@default` — call `generateObjectId()` on create (Mongo-format 24-char hex, preserved through the migration). Services map rows back to the Mongo-shaped wire contract (`id`→`_id`, FK columns→`bike`/`maintenanceType`/`oilType`, `Decimal`→`Number`), which is why the clients needed no changes

@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Bike Log API",
-    "description": "Backend API for the Bike Log app (Express + TypeScript + Mongoose). Auth via JWT Bearer token \u2014 run Auth > Login first (after Auth > Register once), which auto-captures {{token}}. Then run Bikes > Create Bike, Maintenance Types > Create Maintenance Type, and Engine Oil Types > Create Engine Oil Type to auto-capture the ids the rest of the collection chains off of. See dummy-data.md in this folder for the full field reference.",
+    "description": "Backend API for the Bike Log app (Express + TypeScript + **Prisma 7 + PostgreSQL/Neon**). Auth via JWT Bearer token \u2014 run Auth > Login first (after Auth > Register once), which auto-captures {{token}}. Then run Bikes > Create Bike, Maintenance Types > Create Maintenance Type, and Engine Oil Types > Create Engine Oil Type to auto-capture the ids the rest of the collection chains off of.\n\n**Both catalogs are per-user as of spec 46**: a fresh account starts with empty `maintenance-types` and `engine-oil-types` lists (there is no seeding \u2014 spec 42 removed the seed scripts), and another user's catalog id returns 404. Register a second account and run Auth > \"Login as User B\" to exercise the two negative requests at the end of Maintenance Types.\n\nSee dummy-data.md in this folder for the full field reference.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -23,6 +23,11 @@
     },
     {
       "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "tokenB",
       "value": "",
       "type": "string"
     },
@@ -190,6 +195,63 @@
                   "    if (value) {",
                   "        pm.collectionVariables.set(\"token\", value);",
                   "        console.log(\"Captured token =\", value);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login as User B (captures {{tokenB}})",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Spec 46 \u00a7I. A second account, so the per-user catalog scoping can actually be exercised. Register this user first (Auth > Register with a different email), then run this \u2014 it captures `{{tokenB}}` without disturbing `{{token}}`. The two negative requests at the end of Maintenance Types use it.\n\nWith no test framework in this repo, those two requests ARE the regression suite for the cross-tenant fix.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"riderB@example.com\",\n  \"password\": \"test1234\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code < 300) {",
+                  "    const body = pm.response.json();",
+                  "    const value = body.token;",
+                  "    if (value) {",
+                  "        pm.collectionVariables.set(\"tokenB\", value);",
+                  "        console.log(\"Captured tokenB =\", value);",
                   "    }",
                   "}"
                 ]
@@ -449,10 +511,16 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/bikes/{{bikeId}}/odometer",
-              "host": ["{{baseUrl}}"],
-              "path": ["bikes", "{{bikeId}}", "odometer"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "odometer"
+              ]
             },
-            "description": "Manually set the bike's latest odometer reading (spec 44). Must be >= the current reading — a lower value returns 400. Equal is allowed (idempotent). Only `currentOdometer` is read; `initialOdometer`/`owner` in the body are ignored. Creates no fuel log or mileage record.",
+            "description": "Manually set the bike's latest odometer reading (spec 44). Must be >= the current reading \u2014 a lower value returns 400. Equal is allowed (idempotent). Only `currentOdometer` is read; `initialOdometer`/`owner` in the body are ignored. Creates no fuel log or mileage record.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"currentOdometer\": 12500\n}",
@@ -1025,7 +1093,7 @@
                 "maintenance-types"
               ]
             },
-            "description": "Use a name distinct from the 8 seeded types (Engine Oil, Chain Lube, Tire Change, Brake Pads, General Service, Insurance, Registration/Tax, Other) to avoid confusion with catalog data from `yarn seed:maintenance-types`.",
+            "description": "Creates a maintenance type owned by the authenticated user. `requiresOilType: true` is what makes the clients show the engine-oil dropdown on a maintenance log (spec 46 \u00a7G) \u2014 it replaced the old client-side `name === \"Engine Oil\"` match, which only ever worked because the global catalog happened to be seeded with that row.\n\nRe-creating a name **you** soft-deleted revives your original row (and its id) instead of inserting a duplicate. A name another user already owns is not a conflict \u2014 it creates your own separate row with its own id.\n\n**Per-user catalog (spec 46).** This catalog is private to the authenticated user: `ownerId` is taken from the JWT, never from the body. A cross-user id returns **404** (\"Maintenance type not found\"), not 403 \u2014 the same code as a non-existent or soft-deleted id, so the endpoint never discloses that another user's row exists. A brand-new user's list is legitimately **empty** (200 + `[]`): there is no seeding.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": \"Suspension Check\",\n  \"defaultIntervalKm\": 5000,\n  \"defaultIntervalDays\": null\n}",
@@ -1072,7 +1140,7 @@
                 "maintenance-types"
               ]
             },
-            "description": "Run `yarn seed:maintenance-types` once against your DB first if this comes back empty."
+            "description": "Returns only the authenticated user's live types, sorted by name. An empty array is a correct response for a new account \u2014 the two catalog seed scripts were removed in spec 42, so both catalogs are populated entirely through the app and web clients.\n\n**Per-user catalog (spec 46).** This catalog is private to the authenticated user: `ownerId` is taken from the JWT, never from the body. A cross-user id returns **404** (\"Maintenance type not found\"), not 403 \u2014 the same code as a non-existent or soft-deleted id, so the endpoint never discloses that another user's row exists. A brand-new user's list is legitimately **empty** (200 + `[]`): there is no seeding."
           },
           "event": [
             {
@@ -1109,7 +1177,7 @@
                 "{{maintenanceTypeId}}"
               ]
             },
-            "description": "Partial update \u2014 omit any field to leave it unchanged. Pass null for defaultIntervalKm/defaultIntervalDays to explicitly clear it.",
+            "description": "Partial update \u2014 omit any field to leave it unchanged. Pass null for defaultIntervalKm/defaultIntervalDays to explicitly clear it. `requiresOilType` is a boolean (spec 46 \u00a7G). `ownerId` is not accepted in the body and is deliberately absent from the Zod schema \u2014 ownership can never be reassigned over the wire.\n\n**Per-user catalog (spec 46).** This catalog is private to the authenticated user: `ownerId` is taken from the JWT, never from the body. A cross-user id returns **404** (\"Maintenance type not found\"), not 403 \u2014 the same code as a non-existent or soft-deleted id, so the endpoint never discloses that another user's row exists. A brand-new user's list is legitimately **empty** (200 + `[]`): there is no seeding.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": \"Suspension Check (Updated)\",\n  \"defaultIntervalKm\": 6000\n}",
@@ -1149,7 +1217,7 @@
                 "{{maintenanceTypeId}}"
               ]
             },
-            "description": "Soft delete (spec 41) \u2014 sets `isDeleted: true`; the row is never removed from Postgres. The type then disappears from `GET /maintenance-types`, but any maintenance log that already used it keeps showing its real name, because log reads populate `maintenanceType` as `{_id, name}`. Re-creating a type with the same name revives this same row (and its id) rather than inserting a duplicate. Deleting twice returns 404."
+            "description": "Soft delete (spec 41) \u2014 sets `isDeleted: true`; the row is never removed from Postgres. The type then disappears from `GET /maintenance-types`, but any maintenance log that already used it keeps showing its real name, because log reads populate `maintenanceType` as `{_id, name}`. Re-creating a type with the same name revives this same row (and its id) rather than inserting a duplicate. Deleting twice returns 404.\n\n**Per-user catalog (spec 46).** This catalog is private to the authenticated user: `ownerId` is taken from the JWT, never from the body. A cross-user id returns **404** (\"Maintenance type not found\"), not 403 \u2014 the same code as a non-existent or soft-deleted id, so the endpoint never discloses that another user's row exists. A brand-new user's list is legitimately **empty** (200 + `[]`): there is no seeding."
           },
           "event": [
             {
@@ -1180,7 +1248,7 @@
                 "{{maintenanceTypeId}}"
               ]
             },
-            "description": "The referential guard (spec 41 \u00a7E). Run this with a `maintenanceTypeId` that at least one NON-deleted maintenance log still references. Returns 409 with a user-facing sentence the clients show verbatim in a warning toast, e.g.:\n\n    \"Engine Oil\" is used by 3 maintenance logs and can't be deleted. Remove or re-assign them first.\n\nOnly LIVE logs block: if the only logs referencing the type are themselves soft-deleted, the delete succeeds. Note every maintenance log has a required maintenanceTypeId, so any log at all pins its type."
+            "description": "The referential guard (spec 41 \u00a7E). Run this with a `maintenanceTypeId` that at least one NON-deleted maintenance log still references. Returns 409 with a user-facing sentence the clients show verbatim in a warning toast, e.g.:\n\n    \"Engine Oil\" is used by 3 maintenance logs and can't be deleted. Remove or re-assign them first.\n\nOnly LIVE logs block: if the only logs referencing the type are themselves soft-deleted, the delete succeeds. Note every maintenance log has a required maintenanceTypeId, so any log at all pins its type.\n\nSpec 46: the sentence is byte-identical to pre-spec-46, and the in-use count is deliberately NOT joined through to the bike's owner \u2014 ownership of the id is proven first, so every log that can match is necessarily yours."
           },
           "event": [
             {
@@ -1190,6 +1258,102 @@
                 "exec": [
                   "pm.test(\"Status code is 409\", function () {",
                   "    pm.expect([409]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Maintenance Types as User B",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/maintenance-types",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "maintenance-types"
+              ]
+            },
+            "description": "Spec 46 \u00a7I \u2014 the disclosure half of the fix. Run Auth > \"Login as User B\" first. Expect 200 with **only B's own rows**: zero `_id` overlap with the List Maintenance Types response for user A. Before spec 46 this returned every user's rows.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenB}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update User A's Maintenance Type as User B (expect 404)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/maintenance-types/{{maintenanceTypeId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "maintenance-types",
+                "{{maintenanceTypeId}}"
+              ]
+            },
+            "description": "Spec 46 \u00a7E \u2014 the IDOR half. `{{maintenanceTypeId}}` was captured while authenticated as user A; this sends it with B's token. Expect **404** \"Maintenance type not found\", and A's row unchanged afterwards. Before spec 46 this returned 200 and renamed another user's catalog entry.\n\n404 rather than 403 is deliberate and is this repo's convention (`findOwnedBikeOrThrow`): it collapses \"no such id\", \"soft-deleted\" and \"someone else's\" into one indistinguishable path and never confirms that another user's row exists.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Hijacked By User B\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenB}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 404\", function () {",
+                  "    pm.expect([404]).to.include(pm.response.code);",
                   "});"
                 ]
               }
@@ -1221,7 +1385,7 @@
                 "engine-oil-types"
               ]
             },
-            "description": "Use a name distinct from the 3 seeded types (Mineral, Semi-Synthetic, Synthetic) to avoid confusion with catalog data from `yarn seed:engine-oil-types`.",
+            "description": "Creates an engine oil type owned by the authenticated user. Re-creating a name **you** soft-deleted revives your original row and its id; a name another user already owns is not a conflict.\n\n**Per-user catalog (spec 46).** This catalog is private to the authenticated user: `ownerId` is taken from the JWT, never from the body. A cross-user id returns **404** (\"Engine oil type not found\"), not 403 \u2014 the same code as a non-existent or soft-deleted id, so the endpoint never discloses that another user's row exists. A brand-new user's list is legitimately **empty** (200 + `[]`): there is no seeding.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": \"Fully Synthetic 10W-40\",\n  \"suggestedIntervalKm\": 1200\n}",
@@ -1268,7 +1432,7 @@
                 "engine-oil-types"
               ]
             },
-            "description": "Run `yarn seed:engine-oil-types` once against your DB first if this comes back empty."
+            "description": "Returns only the authenticated user's live oil types, sorted by name. An empty array is a correct response for a new account \u2014 the catalog seed scripts were removed in spec 42, so this catalog is populated entirely through the app and web clients.\n\n**Per-user catalog (spec 46).** This catalog is private to the authenticated user: `ownerId` is taken from the JWT, never from the body. A cross-user id returns **404** (\"Engine oil type not found\"), not 403 \u2014 the same code as a non-existent or soft-deleted id, so the endpoint never discloses that another user's row exists. A brand-new user's list is legitimately **empty** (200 + `[]`): there is no seeding."
           },
           "event": [
             {
@@ -1305,7 +1469,7 @@
                 "{{engineOilTypeId}}"
               ]
             },
-            "description": "Partial update \u2014 omit any field to leave it unchanged.",
+            "description": "Partial update \u2014 omit any field to leave it unchanged. `ownerId` is not accepted in the body, so ownership can never be reassigned over the wire.\n\n**Per-user catalog (spec 46).** This catalog is private to the authenticated user: `ownerId` is taken from the JWT, never from the body. A cross-user id returns **404** (\"Engine oil type not found\"), not 403 \u2014 the same code as a non-existent or soft-deleted id, so the endpoint never discloses that another user's row exists. A brand-new user's list is legitimately **empty** (200 + `[]`): there is no seeding.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": \"Fully Synthetic 10W-40 (Updated)\",\n  \"suggestedIntervalKm\": 1300\n}",
@@ -1345,7 +1509,7 @@
                 "{{engineOilTypeId}}"
               ]
             },
-            "description": "Soft delete (spec 41) \u2014 same semantics as Delete Maintenance Type: sets `isDeleted: true`, the row stays in Postgres, it vanishes from `GET /engine-oil-types`, historical logs keep showing its real name, and re-creating the same name revives this row and its id."
+            "description": "Soft delete (spec 41) \u2014 same semantics as Delete Maintenance Type: sets `isDeleted: true`, the row stays in Postgres, it vanishes from `GET /engine-oil-types`, historical logs keep showing its real name, and re-creating the same name revives this row and its id.\n\n**Per-user catalog (spec 46).** This catalog is private to the authenticated user: `ownerId` is taken from the JWT, never from the body. A cross-user id returns **404** (\"Engine oil type not found\"), not 403 \u2014 the same code as a non-existent or soft-deleted id, so the endpoint never discloses that another user's row exists. A brand-new user's list is legitimately **empty** (200 + `[]`): there is no seeding."
           },
           "event": [
             {
@@ -1376,7 +1540,7 @@
                 "{{engineOilTypeId}}"
               ]
             },
-            "description": "The referential guard (spec 41 \u00a7I) \u2014 the scenario this feature exists for: create an oil type, select it on a maintenance log, then try to delete it. Returns 409, e.g.:\n\n    \"Synthetic\" is used by 1 maintenance log and can't be deleted. Remove or re-assign it first.\n\nUnlike maintenanceTypeId, `oilTypeId` is nullable \u2014 a log that recorded no oil type never counts, so it cannot block this. Only LIVE logs block."
+            "description": "The referential guard (spec 41 \u00a7I) \u2014 the scenario this feature exists for: create an oil type, select it on a maintenance log, then try to delete it. Returns 409, e.g.:\n\n    \"Synthetic\" is used by 1 maintenance log and can't be deleted. Remove or re-assign it first.\n\nUnlike maintenanceTypeId, `oilTypeId` is nullable \u2014 a log that recorded no oil type never counts, so it cannot block this. Only LIVE logs block.\n\nSpec 46: the sentence is byte-identical to pre-spec-46, and the count is deliberately not joined to the bike's owner \u2014 ownership of the id is proven first."
           },
           "event": [
             {

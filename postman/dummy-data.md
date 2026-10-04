@@ -18,7 +18,7 @@ Companion doc for `bikelog-api.postman_collection.json`. Every example body belo
 5. Auth is Bearer `{{token}}` at the collection level — you don't need to set headers manually on each request.
 6. `Bikes → Delete Bike` soft-deletes the bike everything else chains off of — run it last, if at all.
 
-If you'd rather seed the two catalog collections instead of creating your own via Postman, run `yarn seed:maintenance-types` and `yarn seed:engine-oil-types` from `bikelog_server/`, then use `List Maintenance Types` / `List Engine Oil Types` to grab a real `_id` and paste it over `{{maintenanceTypeId}}` / `{{engineOilTypeId}}` manually.
+There is no way to seed the two catalogs: the seed scripts were removed in spec 42, and spec 46 made both catalogs **per-user**, so a fresh account's `List Maintenance Types` / `List Engine Oil Types` legitimately returns `[]`. Create your own rows via the two `Create` requests — they auto-capture `{{maintenanceTypeId}}` / `{{engineOilTypeId}}` for you.
 
 ---
 
@@ -167,7 +167,7 @@ All mileage records are auto-created when a full-tank fuel log closes a period �
 
 ---
 
-## Maintenance Types (`/api/maintenance-types`) — catalog, not per-bike
+## Maintenance Types (`/api/maintenance-types`) — per-user catalog, not per-bike
 
 ### `POST /api/maintenance-types` — auth required
 
@@ -175,13 +175,16 @@ All mileage records are auto-created when a full-tank fuel log closes a period �
 {
   "name": "Suspension Check",
   "defaultIntervalKm": 5000,
-  "defaultIntervalDays": null
+  "defaultIntervalDays": null,
+  "requiresOilType": false
 }
 ```
 
-`name` required; `defaultIntervalKm`/`defaultIntervalDays` optional, positive numbers or `null`.
+`name` required; `defaultIntervalKm`/`defaultIntervalDays` optional, positive numbers or `null`; `requiresOilType` optional boolean, defaults `false`.
 
-**Already-seeded types** (via `yarn seed:maintenance-types`) — use these names/ids if you don't want to create your own:
+`requiresOilType: true` is what makes both clients show the engine-oil dropdown on a maintenance log (spec 46 §G). It replaced the old client-side `name === "Engine Oil"` string match, which only worked because the global catalog happened to be seeded with that exact name. **`ownerId` is not accepted in the body** on create or update — it comes from the JWT.
+
+**The 8 types specs 06/07 originally seeded**, kept here only as sensible example values to type in — nothing seeds them any more (spec 42 removed the scripts, and spec 46 made the catalog per-user, so a new account starts empty):
 | name | defaultIntervalKm | defaultIntervalDays |
 |---|---|---|
 | Engine Oil | – | – |
@@ -195,11 +198,11 @@ All mileage records are auto-created when a full-tank fuel log closes a period �
 
 ### `GET /api/maintenance-types` — auth required
 
-Lists all maintenance types (not scoped to a bike — shared catalog).
+Lists the **authenticated user's own** live maintenance types, sorted by name (spec 46 — not scoped to a bike, but scoped to the rider). An empty array is correct for a new account. Another user's id on the `PATCH`/`DELETE` routes returns 404, never 403.
 
 ---
 
-## Engine Oil Types (`/api/engine-oil-types`) — catalog, not per-bike
+## Engine Oil Types (`/api/engine-oil-types`) — per-user catalog, not per-bike
 
 ### `POST /api/engine-oil-types` — auth required
 
@@ -212,7 +215,7 @@ Lists all maintenance types (not scoped to a bike — shared catalog).
 
 Both fields required; `suggestedIntervalKm` positive.
 
-**Already-seeded types** (via `yarn seed:engine-oil-types`):
+**The 3 types spec 07 originally seeded**, kept as example values only — nothing seeds them any more, and this catalog is per-user as of spec 46:
 | name | suggestedIntervalKm |
 |---|---|
 | Mineral | 800 |

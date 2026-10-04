@@ -17,8 +17,10 @@ const http_status_1 = __importDefault(require("http-status"));
 const catchAsync_1 = __importDefault(require("../../util/catchAsync"));
 const sendResponse_1 = __importDefault(require("../../util/sendResponse"));
 const engineOilType_service_1 = require("./engineOilType.service");
+// ! Spec 46 §D: `req.user.userId` is now the first argument to every service call — these
+// ! handlers previously never read `req.user`, which is how the catalog ended up global.
 const createEngineOilType = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const result = yield engineOilType_service_1.engineOilTypeServices.createEngineOilTypeIntoDB(req.body);
+    const result = yield engineOilType_service_1.engineOilTypeServices.createEngineOilTypeIntoDB(req.user.userId, req.body);
     (0, sendResponse_1.default)(res, {
         status: http_status_1.default.CREATED,
         success: true,
@@ -27,7 +29,7 @@ const createEngineOilType = (0, catchAsync_1.default)((req, res) => __awaiter(vo
     });
 }));
 const getEngineOilTypes = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const result = yield engineOilType_service_1.engineOilTypeServices.getEngineOilTypesFromDB();
+    const result = yield engineOilType_service_1.engineOilTypeServices.getEngineOilTypesFromDB(req.user.userId);
     (0, sendResponse_1.default)(res, {
         status: http_status_1.default.OK,
         success: true,
@@ -36,7 +38,7 @@ const getEngineOilTypes = (0, catchAsync_1.default)((req, res) => __awaiter(void
     });
 }));
 const updateEngineOilType = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const result = yield engineOilType_service_1.engineOilTypeServices.updateEngineOilTypeInDB(req.params.id, req.body);
+    const result = yield engineOilType_service_1.engineOilTypeServices.updateEngineOilTypeInDB(req.user.userId, req.params.id, req.body);
     (0, sendResponse_1.default)(res, {
         status: http_status_1.default.OK,
         success: true,
@@ -45,7 +47,7 @@ const updateEngineOilType = (0, catchAsync_1.default)((req, res) => __awaiter(vo
     });
 }));
 const deleteEngineOilType = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const result = yield engineOilType_service_1.engineOilTypeServices.deleteEngineOilTypeFromDB(req.params.id);
+    const result = yield engineOilType_service_1.engineOilTypeServices.deleteEngineOilTypeFromDB(req.user.userId, req.params.id);
     (0, sendResponse_1.default)(res, {
         status: http_status_1.default.OK,
         success: true,

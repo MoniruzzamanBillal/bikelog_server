@@ -81,7 +81,7 @@ model Bike {
 
 model MaintenanceType {
   id                  String   @id
-  ownerId             String?
+  ownerId             String
   name                String
   defaultIntervalKm   Int?
   defaultIntervalDays Int?
@@ -90,7 +90,7 @@ model MaintenanceType {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  owner           User?            @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  owner           User             @relation(fields: [ownerId], references: [id])
   maintenanceLogs MaintenanceLog[]
 
   // ! The unique deliberately covers soft-deleted rows (no partial index on isDeleted).
@@ -103,14 +103,14 @@ model MaintenanceType {
 
 model EngineOilType {
   id                  String   @id
-  ownerId             String?
+  ownerId             String
   name                String
   suggestedIntervalKm Float
   isDeleted           Boolean  @default(false)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  owner           User?            @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  owner           User             @relation(fields: [ownerId], references: [id])
   maintenanceLogs MaintenanceLog[]
 
   // ! Same rationale as MaintenanceType — the unique covers soft-deleted rows so the

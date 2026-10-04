@@ -3,8 +3,15 @@ import catchAsync from "../../util/catchAsync";
 import sendResponse from "../../util/sendResponse";
 import { maintenanceTypeServices } from "./maintenanceType.service";
 
+// ! Spec 46 §D: these four handlers used to never read `req.user` at all, which is how the
+// ! catalog ended up global. `req.user.userId` is now the first argument to every service
+// ! call. `authCheck` guarantees `req.user` is populated on all four routes.
+
 const createMaintenanceType = catchAsync(async (req, res) => {
-  const result = await maintenanceTypeServices.createMaintenanceTypeIntoDB(req.body);
+  const result = await maintenanceTypeServices.createMaintenanceTypeIntoDB(
+    req.user.userId,
+    req.body,
+  );
   sendResponse(res, {
     status: httpStatus.CREATED,
     success: true,
@@ -14,7 +21,9 @@ const createMaintenanceType = catchAsync(async (req, res) => {
 });
 
 const getMaintenanceTypes = catchAsync(async (req, res) => {
-  const result = await maintenanceTypeServices.getMaintenanceTypesFromDB();
+  const result = await maintenanceTypeServices.getMaintenanceTypesFromDB(
+    req.user.userId,
+  );
   sendResponse(res, {
     status: httpStatus.OK,
     success: true,
@@ -25,6 +34,7 @@ const getMaintenanceTypes = catchAsync(async (req, res) => {
 
 const updateMaintenanceType = catchAsync(async (req, res) => {
   const result = await maintenanceTypeServices.updateMaintenanceTypeInDB(
+    req.user.userId,
     req.params.id,
     req.body,
   );
@@ -38,6 +48,7 @@ const updateMaintenanceType = catchAsync(async (req, res) => {
 
 const deleteMaintenanceType = catchAsync(async (req, res) => {
   const result = await maintenanceTypeServices.deleteMaintenanceTypeFromDB(
+    req.user.userId,
     req.params.id,
   );
   sendResponse(res, {

@@ -44,7 +44,7 @@ No file upload, payment, or email dependencies are needed for Bike Log — `clou
 
 - Users authenticate via `POST /api/auth/login`, receiving a JWT signed with `config.jwt_secret`.
 - Every protected route calls `authCheck`. Almost all routes are ownership-gated, not role-gated (see next bullet) — the one exception is spec 24's admin-only `/admin/error-logs` routes, which additionally require `adminCheck`.
-- Ownership, not roles, gates access to every user-owned resource (`Bike`/`FuelLog`/`MaintenanceLog`/etc.): a route handler must confirm the requested resource actually belongs to `req.user`'s id before returning or mutating it — there's no separate authorization middleware for this, so each service function is responsible for that check itself. This is unrelated to `adminCheck`, which gates a handful of non-user-owned, admin-facing resources instead (currently just error logs).
+- Ownership, not roles, gates access to every user-owned resource (`Bike`/`FuelLog`/`MaintenanceLog`/`MaintenanceType`/`EngineOilType`/etc.): a route handler must confirm the requested resource actually belongs to `req.user`'s id before returning or mutating it — there's no separate authorization middleware for this, so each service function is responsible for that check itself. This is unrelated to `adminCheck`, which gates a handful of non-user-owned, admin-facing resources instead (currently just error logs).
 
 ## Invariants
 
@@ -63,3 +63,45 @@ No file upload, payment, or email dependencies are needed for Bike Log — `clou
 
 - Cache the Mongoose connection across invocations (connect once at module scope) — a fresh connection per invocation will exhaust connection limits fast.
 - Maintenance reminders must be computed **on read** (comparing `currentOdometer` to `nextDueOdometer` inside the request handler), not via a background cron — serverless functions don't keep a persistent process running. Phase-2 push notifications use a Vercel Cron Job hitting a dedicated route instead.
+
+## Per-user catalog ownership (spec 46)
+
+> Note: the sections above still carry Mongoose-era language in places (schemas, `pre("find")` hooks,
+> `$group` wording) and were never swept after the Postgres migration. `bikelog_server/CLAUDE.md` and
+> `context/progress-tracker.md` win wherever they conflict. This section is post-migration and current.
+
+`MaintenanceType` and `EngineOilType` were **global** catalogs through spec 45: no owner column, both
+services queried by `id` alone, and all eight routes carried a bare `authCheck`. Spec 38 recorded that as
+deliberate ("no `ownerId`/FK-to-`user` on either … **`authCheck` only, no ownership check (there is no
+owner to check against)**") and spec 41 built soft delete on the same assumption. Spec 46 **supersedes**
+that rationale — it does not rewrite it. There is now an owner to check against.
+
+The invariant, which joins the seven in the list above:
+
+9. **Both catalogs are owner-scoped, and ownership never arrives over the wire.** Each model carries a
+   required `ownerId` with `@@unique([ownerId, name])` plus `@@index([ownerId])`, mirroring `Bike`'s
+   convention exactly (scalar `ownerId`, relation field `owner`, no `onDelete` argument → `RESTRICT`,
+   which is safe because the server has no user hard-delete anywhere). Every query against either model
+   must carry **both** `ownerId` and `isDeleted: false`. Reads and writes go through
+   `findOwnedMaintenanceTypeOrThrow` / `findOwnedEngineOilTypeOrThrow` (`<module>.utils.ts`), each a mirror
+   of `findOwnedBikeOrThrow` — one query, one 404. A cross-user id returns **404, not 403**: that is this
+   repo's convention for exactly this case, it collapses "no such id" / "soft-deleted" / "another user's"
+   into one indistinguishable path, and it does not confirm that another user's resource exists.
+   `ownerId` appears in **neither** Zod schema and **neither** `T*` type — it is read from the verified
+   JWT in the controller. Putting it in a validation schema would reintroduce the IDOR through the front
+   door.
+
+Three consequences worth knowing before touching this area:
+
+- **The composite unique deliberately covers soft-deleted rows** (no partial index on `isDeleted`). That is
+  what keeps spec 41 §F's revive-by-name path load-bearing: a user re-adding a name *they* deleted revives
+  their own row, keeping its id, so their historical logs stay correctly labelled. Another user's row with
+  the same name is a different row and is never consulted.
+- **`maintenanceLog.service.ts`'s `catalogInclude` filters on neither `isDeleted` nor `ownerId`** — and must
+  not. A historical log has to resolve the name of a since-deleted type, and after spec 46 a log's catalog
+  rows are owner-coherent by construction (both write paths only accept a type the bike's owner owns).
+  Filtering there is the tempting wrong move; it would re-break the exact bug spec 41 fixed.
+- **New users get empty catalogs.** There is no seeding — spec 42 removed both seed scripts at the user's
+  direct instruction. `MaintenanceType.requiresOilType` (spec 46 §G) is what gates the clients' engine-oil
+  dropdown, replacing a `name === "Engine Oil"` string match that only ever worked because the global
+  catalog happened to be seeded with that row.

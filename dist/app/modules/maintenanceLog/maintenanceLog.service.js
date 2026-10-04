@@ -27,6 +27,13 @@ const cloudinary_1 = require("../../util/cloudinary");
 // ! (spec 41 §D) — a historical log's type would silently relabel to "Maintenance".
 // ! Deliberately NO `isDeleted` filter here: a log must still resolve the name of a type
 // ! that has since been deleted. That is the entire point of this include.
+// !
+// ! Spec 46 §D: and deliberately NO owner filter either — this is the tempting wrong move.
+// ! After spec 46 a log's catalog rows are owner-coherent BY CONSTRUCTION (the write paths
+// ! below only accept a type the bike's owner owns, and the backfill re-pointed every
+// ! historical log to its owner's copy), so filtering here would add nothing and would
+// ! re-break the exact bug spec 41 fixed. `getRemindersFromDB`'s non-optional
+// ! `log.maintenanceType.name` stays safe for the same reason.
 const catalogInclude = {
     maintenanceType: { select: { id: true, name: true } },
     oilType: { select: { id: true, name: true } },
@@ -55,15 +62,18 @@ const createMaintenanceLogIntoDB = (bikeId, userId, payload) => __awaiter(void 0
     // ! findUnique will not accept it in `where`. A soft-deleted catalog row must be
     // ! unreachable to new writes, otherwise the FK succeeds and a log points at a type the
     // ! user can no longer see.
+    // ! Spec 46 §D — THIS IS THE ACTUAL IDOR the spec fixes, not the list leak. Without
+    // ! `ownerId: userId` a user could attach another user's catalog row to their own log
+    // ! just by submitting its id. `userId` was already in scope here the whole time.
     const maintenanceType = yield prisma_1.prisma.maintenanceType.findFirst({
-        where: { id: payload.maintenanceType, isDeleted: false },
+        where: { id: payload.maintenanceType, ownerId: userId, isDeleted: false },
     });
     if (!maintenanceType) {
         throw new AppError_1.default(http_status_1.default.NOT_FOUND, "Maintenance type not found");
     }
     if (payload.oilType) {
         const oilType = yield prisma_1.prisma.engineOilType.findFirst({
-            where: { id: payload.oilType, isDeleted: false },
+            where: { id: payload.oilType, ownerId: userId, isDeleted: false },
         });
         if (!oilType) {
             throw new AppError_1.default(http_status_1.default.NOT_FOUND, "Engine oil type not found");
@@ -142,9 +152,11 @@ const updateMaintenanceLogInDB = (bikeId, userId, id, payload) => __awaiter(void
     if (!log) {
         throw new AppError_1.default(http_status_1.default.NOT_FOUND, "Maintenance log not found");
     }
+    // ! Spec 46 §D: the update path is the second IDOR site and the easy one to miss —
+    // ! re-assigning a log to another user's catalog row must 404 exactly as creating one does.
     if (payload.maintenanceType) {
         const maintenanceType = yield prisma_1.prisma.maintenanceType.findFirst({
-            where: { id: payload.maintenanceType, isDeleted: false },
+            where: { id: payload.maintenanceType, ownerId: userId, isDeleted: false },
         });
         if (!maintenanceType) {
             throw new AppError_1.default(http_status_1.default.NOT_FOUND, "Maintenance type not found");
@@ -152,7 +164,7 @@ const updateMaintenanceLogInDB = (bikeId, userId, id, payload) => __awaiter(void
     }
     if (payload.oilType) {
         const oilType = yield prisma_1.prisma.engineOilType.findFirst({
-            where: { id: payload.oilType, isDeleted: false },
+            where: { id: payload.oilType, ownerId: userId, isDeleted: false },
         });
         if (!oilType) {
             throw new AppError_1.default(http_status_1.default.NOT_FOUND, "Engine oil type not found");
