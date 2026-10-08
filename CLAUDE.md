@@ -45,6 +45,24 @@ See `ENV_SETUP.md` for the full table. Two things that bite:
 
 `MONGO_DATABASE_URL` is still read by `src/app/config/index.ts` but is vestigial post-migration.
 
+Write `.env` entries as `KEY=value` with **no spaces around the `=`**. The npm `dotenv` package trims whitespace around keys, so `KEY = value` works for `yarn dev` — but Compose's `env_file` parser is a different implementation, and a key arriving as `"JWT_ACCESS_SECRET "` would leave `process.env.JWT_ACCESS_SECRET` undefined and 401 every authenticated request while the container still reported healthy. `.env.example` is the committed template.
+
+### Docker (spec 47)
+
+```bash
+docker compose up local -d --build          # builds and serves on :5000
+docker compose exec local yarn db:migrate   # migrations are MANUAL, never on startup
+```
+
+Four things to know:
+
+- **There is no `postgres` service and there never should be.** The `PrismaNeon` adapter cannot talk to a local Postgres (see above), so the container reads `DATABASE_URL` and connects to the real Neon host. No volumes either — nothing writes to the filesystem at runtime.
+- **Migrations are deliberately not run on container start.** No entrypoint script, no `migrate deploy` in `CMD`. This project applies migrations by hand and `deploy.yml` doesn't run them either; `prisma/` and `prisma.config.ts` ship in the image only so the `exec` above works. `npx prisma migrate status` is the read-only version.
+- **`ENV PORT=5000` is load-bearing.** `src/app/config/index.ts` reads `process.env.PORT` with no fallback, so `app.listen(undefined)` would bind a random ephemeral port, log `listening from port undefined`, and leave the container green but unreachable. Pinned in both the Dockerfile and compose.
+- **The healthcheck is liveness-only.** `GET /` returns 200 without touching the database, and `server.ts` only `console.log`s a `$connect()` failure — so a container with a broken `DATABASE_URL` reports healthy while every data route 500s. Prove the DB separately; a login attempt with a bogus email returning a real `404` is enough.
+
+Base image is `node:22-slim` rather than alpine because `bcrypt` (a dead dependency — nothing in `src/` imports it; only `argon2` is used) has no musl prebuild and would pull a `python3 make g++` toolchain into the build. `openssl` is installed in both the `deps` and `runner` stages: `prisma migrate` runs in the runner and warns about an undetectable libssl version without it. `TZ` is pinned to `Asia/Dhaka` because `spending.service.ts` and `mileageRecord.service.ts` bucket months in **local** time, which would shift under the container's default UTC.
+
 ## Architecture at a glance
 
 - **Module-per-feature** under `src/app/modules/<domain>/`: `.route.ts` / `.controller.ts` / `.service.ts` / `.interface.ts` / `.validation.ts` (`.constant.ts` where an `as const` enum is needed). There are **no `.model.ts` files** — the data model lives in `prisma/schema.prisma`. New modules register in `src/app/router/index.ts`'s `routeArray`. Nested-resource modules use `Router({ mergeParams: true })` since they mount under `/bikes/:bikeId/...`; `maintenanceLog.route.ts` and `errorLog.route.ts` each uniquely export **two** routers from one module.

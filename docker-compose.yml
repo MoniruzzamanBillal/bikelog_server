@@ -1,0 +1,78 @@
+services:
+  local:
+    image: bikelog-server-local:${VERSION:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bikelog-server-local
+
+    # Unlike the web client, every value here is read at RUNTIME (src/app/config/index.ts),
+    # not inlined at build time — so these belong in env_file, not in build args. Changing
+    # a secret is a restart, not a rebuild.
+    #
+    # There is deliberately no postgres service in this file: src/app/lib/prisma.ts uses
+    # the PrismaNeon WebSocket adapter, which cannot talk to a local Postgres. DATABASE_URL
+    # must point at a real Neon host, so the container just needs outbound network.
+    env_file:
+      - .env
+
+    environment:
+      # Both deliberately override .env. PORT has no code-level default (see Dockerfile),
+      # and NODE_ENV must be `production` in a container so Prisma skips its verbose query
+      # logging and the dev global-client cache in src/app/lib/prisma.ts.
+      PORT: "5000"
+      NODE_ENV: production
+
+      # Containers default to UTC; this machine and the app's domain are Asia/Dhaka
+      # (UTC+6, no DST — notification.utils.ts:1 says so). That matters because
+      # spending.service.ts:231 and mileageRecord.service.ts:254 both bucket months with
+      # `new Date(now.getFullYear(), now.getMonth() - i, 1)` — LOCAL time. Under UTC the
+      # first six hours of each Dhaka day resolve to the previous UTC day, so the "last N
+      # months" trend windows silently shift at month boundaries. Pinning TZ keeps the
+      # container's aggregations identical to how this code has always behaved locally.
+      TZ: Asia/Dhaka
+
+    ports:
+      - "5000:5000"
+
+    restart: unless-stopped
+
+    healthcheck:
+      # node:22-slim ships neither wget nor curl, so probe with node itself.
+      # LIVENESS ONLY: GET / returns 200 without touching the database, and a failed
+      # prisma.$connect() in src/server.ts is only console.log'd — the process stays alive
+      # with exit code 0. A container with a broken DATABASE_URL will report healthy here,
+      # so prove the DB separately (a real login round-trip).
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://127.0.0.1:5000/',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+    deploy:
+      resources:
+        limits:
+          # 1G rather than 512M: uploadDocument.ts and uploadManual.ts use multer
+          # memoryStorage at 20MB per file, and bikeDocument accepts 10 files per request,
+          # so concurrent uploads are buffered entirely in RSS.
+          memory: 1G
+          cpus: "1.0"
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    networks:
+      - local-network
+
+networks:
+  local-network:
+    driver: bridge

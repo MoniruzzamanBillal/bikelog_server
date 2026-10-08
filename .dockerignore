@@ -1,0 +1,40 @@
+# Docker does NOT consult .gitignore — everything excluded from the build context has to
+# be listed here explicitly.
+
+node_modules
+
+# dist/ is checked into git in this repo (vercel.json deploys the prebuilt dist/server.js),
+# so without this line the committed — and possibly stale — JS would enter the context.
+# tsc does not prune outputs for deleted sources, so a stale dist/ can survive `yarn build`.
+# The image always compiles from src/ instead.
+dist
+
+.git
+.env
+.env.*
+.vercel
+*.tsbuildinfo
+.vscode
+.github
+
+# docs, API fixtures and the leftover root-level scripts/ dir — none are needed to build
+# or run, and postman/ carries a multi-MB PDF fixture.
+context
+postman
+scripts
+*.md
+
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Deliberately NOT excluded, all required by the build:
+#   src/                tsc input
+#   prisma/             read by postinstall's `prisma generate`
+#   prisma.config.ts    supplies the schema path (and the migration URL)
+#   tsconfig.json       rootDir/outDir for the build
+#   package.json        scripts + the dependency manifest
