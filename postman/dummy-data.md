@@ -131,7 +131,7 @@ Soft delete (`isDeleted: true`). No body.
 
 | Field                  | Required | Notes                                         |
 | ---------------------- | -------- | --------------------------------------------- |
-| `odometerReading`      | yes      | number                                        |
+| `odometerReading`      | yes      | number, 0–999,999; must not go backwards in date order (see below) |
 | `litersAdded`          | yes      | positive number                               |
 | `isFullTank`           | yes      | boolean — drives mileage-record closing logic |
 | `pricePerLiter`        | yes      | positive number                               |
@@ -139,6 +139,8 @@ Soft delete (`isDeleted: true`). No body.
 | `date`                 | no       | defaults to now; use for back-logging — but never before the bike's own `purchaseDate` (see below) |
 
 **`date` can't predate the bike's `purchaseDate`** — a fuel log dated earlier than the bike's own `purchaseDate` gets a `400` ("Fuel log date cannot be before the bike's purchase date (YYYY-MM-DD)"), on both create and update. A date exactly equal to `purchaseDate` is allowed (you can log fuel the day you bought the bike); omitting `date` (defaults to now) is always fine, since "now" is necessarily after purchase.
+
+**`odometerReading` is validated (spec 48).** Negative, non-finite or > 999,999 → `400`. It must also be non-decreasing in *date* order across the bike's live fuel logs: not below the bike's `initialOdometer` or the latest earlier log, and not above the next later log (`400`, with the bounding reading in the message). Backdating between existing logs is fine. A full-tank fill exactly at the previous full-tank reading (0 km) is saved but closes no mileage record (`mileageRecordClosed: null`). The same check runs on `PATCH` when `odometerReading` or `date` changes.
 
 **Never send `totalCost`** — the Zod schema technically accepts it, but the service always overwrites it with `litersAdded * pricePerLiter` server-side and discards whatever you send (this was a real bug fixed in a later audit — see `context/progress-tracker.md`'s "Recent Activity").
 

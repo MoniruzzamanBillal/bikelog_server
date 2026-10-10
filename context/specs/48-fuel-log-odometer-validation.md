@@ -1,6 +1,6 @@
 # 48: Fuel-log odometer validation (server)
 
-Status: ⏳ Not started.
+Status: ✅ Complete — implemented and verified 2026-10-10 (optional step 5 skipped; step 6 is an operator step on production — see checklist).
 
 Fixes **DEF-04 (High)** from `TESTING_REPORT.md` (SQA cases TC-FUEL-015, TC-FUEL-016, TC-FUEL-018). Follow-up to specs 04 (fuel log + mileage closure), 26 (backdated logs) and 45 (manual odometer hardening, which explicitly left the fuel-log schema unchanged and pointed here).
 
@@ -72,15 +72,15 @@ Validation and the closure pre-computation move **before** `prisma.fuelLog.creat
 
 ### Progress checklist
 
-- [ ] 1. `fuelLog.validation.ts` — bounded `odometerReading` in create + update schemas
-- [ ] 2. `fuelLog.service.ts` — new `assertOdometerInSequence` helper
-- [ ] 3. `fuelLog.service.ts › createFuelLogIntoDB` — call the helper; pre-compute closure; skip record on 0 km; guard negative
-- [ ] 4. `fuelLog.service.ts › updateFuelLogInDB` — call the helper when `odometerReading`/`date` change; bump bike odometer if raised
-- [ ] 5. (Optional) DB `CHECK` constraint migration
-- [ ] 6. One-off cleanup of existing bad rows (before step 5 if it is done)
-- [ ] 7. `yarn build` + `yarn lint`, rebuild `dist/`
-- [ ] 8. Tests: SQA cases + new cases below
-- [ ] 9. Docs: progress tracker, `TESTING_REPORT.md` addendum, Postman collection description
+- [x] 1. `fuelLog.validation.ts` — bounded `odometerReading` in create + update schemas
+- [x] 2. `fuelLog.service.ts` — new `assertOdometerInSequence` helper
+- [x] 3. `fuelLog.service.ts › createFuelLogIntoDB` — call the helper; pre-compute closure; skip record on 0 km; guard negative
+- [x] 4. `fuelLog.service.ts › updateFuelLogInDB` — call the helper when `odometerReading`/`date` change; bump bike odometer if raised
+- [ ] 5. (Optional) DB `CHECK` constraint migration — **skipped on purpose**: optional, and it must ship after cleanup (step 6); the service/validation fix alone closes DEF-04
+- [ ] 6. One-off cleanup of existing bad rows — **operator step, not run**: needs production access; use the two `SELECT`s in §6 and review before touching anything
+- [x] 7. `yarn build` + `yarn lint`, rebuild `dist/`
+- [x] 8. Tests: SQA cases + new cases below
+- [x] 9. Docs: progress tracker, `TESTING_REPORT.md` addendum, Postman collection description
 
 ### 1. `src/app/modules/fuelLog/fuelLog.validation.ts`
 
@@ -278,3 +278,24 @@ Client smoke test (no code change expected): in both clients, submit a lower rea
 3. Back up prod, run step-6 queries, clean legacy rows.
 4. Deploy rebuilt `dist/`; then (optional) apply step-5 migration.
 5. Update `context/progress-tracker.md`, add the addendum to `TESTING_REPORT.md` (DEF-04 → fixed, reference this spec), and flip this spec's status to ✅ Complete.
+
+---
+
+## Results (2026-10-10)
+
+Run on a throwaway local Postgres (the real Neon DB was not touched), server started from the rebuilt `dist/`, compared against the pre-change `dist/` from `HEAD`.
+
+| Run | Before (old `dist/`) | After |
+| --- | --- | --- |
+| New `sqa-evidence/fuelodometer.test.js` (27 cases: validation, ordering, backdating, soft-delete, full-tank, 0 km, PATCH) | 14 / 27 (13 real failures) | **27 / 27** |
+| `sqa.test.js` (274 cases) | 248 pass / 24 fail / 2 skip | 251 / 21 / 2 — **only TC-FUEL-015, 016, 018 changed (FAIL → PASS)**, no other status moved |
+| `odometer.test.js` (spec 44/45) | 40 / 40 | 40 / 40 |
+| `race.js` (DEF-01 probe) | — | 0/8 and 0/8 wrong trials |
+| `behaviour.test.js` | — | 15 / 15 |
+| `yarn build` / `yarn lint` | clean / 0 errors, 23 warnings | clean / 0 errors, 23 warnings (no new) |
+
+Notes:
+
+- The baseline here is 248/24/2, not the documented 247/25/2: the one-case difference is TC-FUEL-026 (the DEF-01 race probe), which is flaky by nature.
+- Decision confirmed by TC-FUEL-016: the 1350 km "current odometer" in that fixture comes from fuel logs, so the date-ordered rule rejects the 500 km reading.
+- Client smoke test (surfacing the new 400 messages in both clients' error toast) was **not** run — it needs the apps; no client code changed.

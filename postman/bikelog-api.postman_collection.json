@@ -603,7 +603,7 @@
                 "fuel-logs"
               ]
             },
-            "description": "Never send `totalCost` \u2014 it's always server-computed as litersAdded * pricePerLiter and any client value is discarded. Response shape is `data.fuelLog` (+ `data.mileageRecordClosed` if isFullTank closed a period).",
+            "description": "Never send `totalCost` \u2014 it's always server-computed as litersAdded * pricePerLiter and any client value is discarded. `odometerReading` must be 0\u2013999,999 and can't go backwards in date order across this bike's fuel logs (400 otherwise, spec 48). Response shape is `data.fuelLog` (+ `data.mileageRecordClosed` if isFullTank closed a period; `null` for a 0 km full-tank fill).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"odometerReading\": 1550,\n  \"litersAdded\": 8.5,\n  \"isFullTank\": true,\n  \"pricePerLiter\": 125.5,\n  \"fuelStation\": \"Padma Filling Station\",\n  \"date\": \"2026-07-01\",\n  \"notes\": \"Full tank before highway trip\"\n}",
@@ -745,7 +745,7 @@
                 "{{fuelLogId}}"
               ]
             },
-            "description": "Fails with 409 if this fuel log was already closed into a mileage record. `totalCost` is recomputed server-side whenever litersAdded/pricePerLiter change; a client-sent totalCost is dropped.",
+            "description": "Fails with 409 if this fuel log was already closed into a mileage record. `totalCost` is recomputed server-side whenever litersAdded/pricePerLiter change; a client-sent totalCost is dropped. Changing `odometerReading`/`date` re-runs the same odometer ordering check as create (400), excluding this log itself; a raised reading bumps the bike's current odometer.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"odometerReading\": 1560,\n  \"notes\": \"Corrected odometer reading\"\n}",
