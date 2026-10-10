@@ -1,6 +1,6 @@
 # 49: Close out DEF-01 — odometer lost-update race (verify, repair data, remaining gaps)
 
-Status: ⏳ Not started.
+Status: ✅ Complete — implemented and verified locally 2026-10-10. Two checklist items are production operator steps and were NOT run (1's live check, 4).
 
 Closes **DEF-01 (High)** from `TESTING_REPORT.md`: with concurrent fuel-log writes the bike's `currentOdometer` ended up _lower than the highest reading_ in 5/8 (5 parallel) and 6/8 (20 parallel) trials. Reminders (overdue/upcoming), lifetime mileage and the AI prompt's "Current odometer" all read that number.
 
@@ -80,13 +80,13 @@ Keep it a **script, not a test framework** — `CLAUDE.md`: "No real test suite 
 
 ### Progress checklist
 
-- [ ] 1. Confirm production runs the atomic `bumpOdometerIfHigher` (G1)
-- [ ] 2. `maintenanceLog.service.ts` — bump on update (G3)
-- [ ] 3. `src/scripts/reconcileBikeOdometer.ts` — dry-run / `--apply` repair (G2)
-- [ ] 4. Run the dry run against production, review, back up, `--apply`, re-run dry run (must report 0)
-- [ ] 5. `src/scripts/checkOdometerRace.ts` — repo-local regression guard (G4)
-- [ ] 6. `yarn build` + `yarn lint` (0 errors, no new warnings), rebuild `dist/`
-- [ ] 7. Docs: `TESTING_REPORT.md` DEF-01 → fixed (G5), `progress-tracker.md`, spec 45 cross-reference, `CLAUDE.md` script mention
+- [ ] 1. Confirm production runs the atomic `bumpOdometerIfHigher` (G1) — **repo-level half done** (`origin/master` contains spec 45's commit `5274a84` and a committed `dist/` with the `updateMany`; `gh` isn't installed here so the last deploy run couldn't be read). **Live half not run**: it writes a throwaway user/bike to production — run `node dist/scripts/checkOdometerRace.js` with `BASE_URL` set to the production API and a throwaway account
+- [x] 2. `maintenanceLog.service.ts` — bump on update (G3)
+- [x] 3. `src/scripts/reconcileBikeOdometer.ts` — dry-run / `--apply` repair (G2)
+- [ ] 4. Run the dry run against production, review, back up, `--apply`, re-run dry run (must report 0) — **operator step, not run**: `--apply` writes production data. Proven locally on seeded rows (below)
+- [x] 5. `src/scripts/checkOdometerRace.ts` — repo-local regression guard (G4)
+- [x] 6. `yarn build` + `yarn lint` (0 errors, no new warnings), rebuild `dist/`
+- [x] 7. Docs: `TESTING_REPORT.md` DEF-01 → fixed (G5), `progress-tracker.md`, spec 45 cross-reference, `CLAUDE.md` script mention
 
 ### 1. Confirm production (G1) — read-only
 
@@ -185,3 +185,28 @@ It is a manual verification tool, not part of `yarn build`. Add a one-line menti
 - `TESTING_REPORT.md` — DEF-01 → _fixed in spec 45, verified on production in spec 49_, with the repair count.
 - `context/specs/45-manual-odometer-hardening.md` — one-line cross-reference ("DEF-01 closed out in spec 49").
 - `CLAUDE.md` — the two new scripts under Commands; note maintenance update now bumps the odometer (`Bike.initialOdometer vs. currentOdometer` bullet).
+
+---
+
+## Results (2026-10-10)
+
+All local: throwaway Postgres, server from the rebuilt `dist/`. The real Neon DB was not touched.
+
+| Check | Result |
+| --- | --- |
+| `checkOdometerRace` vs the real build | `parallel=5: 0/8`, `parallel=20: 0/8`, exit 0 |
+| **Mutation check** — copy of `dist/` with `bumpOdometerIfHigher` reverted to read-then-write | `parallel=5: 5/8`, `parallel=20: 6/8`, exit 1 — exactly the numbers in `TESTING_REPORT.md` DEF-01, so the guard does bite. Done on a scratch copy; nothing reverted in the repo |
+| `reconcileBikeOdometer` on 6 seeded bikes | dry run listed exactly the 3 victims (race victim 1100→1500, maintenance victim 1000→2000, deleted-log bike 1000→1100 — the soft-deleted 9000 reading was ignored). Untouched: manual-update bike (5000 > its logs), soft-deleted bike, clean bike. `--apply` raised 3, "still behind: 0"; second dry run reported none |
+| Maintenance `PATCH` bump (`sqa-evidence/odometerrace.test.js`, 5 cases) | 5 / 5 (old build: 3 / 5 — `patch-raise` and `patch-lower` fail) |
+| `fuelodometer.test.js` (spec 48) | 27 / 27 |
+| `odometer.test.js` | 40 / 40 |
+| `sqa.test.js` | 251 / 21 / 2 — identical statuses to the spec 48 run |
+| `yarn build` / `yarn lint` | clean / 0 errors, 23 warnings (unchanged; the new scripts carry `/* eslint-disable no-console */` like `server.ts`) |
+
+### Found while verifying (not fixed here)
+
+`POST /bikes/:id/maintenance-logs` with a raw `odometerReading: 1e999` returns 201 and wedges the bike's `currentOdometer` at `Infinity` (JSON shows `null`) — the same hazard as DEF-15/DEF-04, in a schema spec 49 did not own. This spec's §C makes the *update* path a second way to reach it, so the maintenance-log schemas get the same bounds in spec 50 (`50-sanity-validation-def13.md`).
+
+### Not run (production operator steps)
+
+Live race check against production, and the reconcile dry-run/apply against the production DB. Commands are in §2 above. Expect "0 bikes behind" to be a valid result — the race needed concurrent writes.

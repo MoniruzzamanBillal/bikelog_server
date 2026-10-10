@@ -180,7 +180,7 @@ const updateMaintenanceLogInDB = async (
   id: string,
   payload: Partial<TMaintenanceLog>,
 ) => {
-  await findOwnedBikeOrThrow(bikeId, userId);
+  const bike = await findOwnedBikeOrThrow(bikeId, userId);
 
   const log = await prisma.maintenanceLog.findFirst({
     where: { id, bikeId, isDeleted: false },
@@ -237,6 +237,13 @@ const updateMaintenanceLogInDB = async (
     data: updateData,
     include: catalogInclude,
   });
+
+  // ! create bumps the bike odometer; an edit that raises the reading must too, or
+  // ! currentOdometer ends up below the highest logged reading with no race involved (spec 49 §C).
+  // ! Atomic and a no-op when the reading was lowered — nothing rolls the odometer back
+  if (payload.odometerReading !== undefined) {
+    await bumpOdometerIfHigher(bike, updated.odometerReading);
+  }
 
   return toApiShape(updated);
 };

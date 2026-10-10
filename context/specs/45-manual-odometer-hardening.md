@@ -2,7 +2,7 @@
 
 Status: ✅ Complete — both defects fixed and re-verified 2026-10-03.
 
-Follow-up to `44-manual-odometer-update.md`. Found by `sqa-evidence/odometer.test.js` (TC-ODO-xxx) while testing the full backend before deploy.
+Follow-up to `44-manual-odometer-update.md`. DEF-01 (the same race) was closed out — data repair, maintenance-update gap, regression guard — in `49-odometer-race-closure.md`. Found by `sqa-evidence/odometer.test.js` (TC-ODO-xxx) while testing the full backend before deploy.
 
 ---
 

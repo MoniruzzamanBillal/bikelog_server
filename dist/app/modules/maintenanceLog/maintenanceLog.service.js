@@ -145,7 +145,7 @@ const getMaintenanceLogByIdFromDB = (bikeId, userId, id) => __awaiter(void 0, vo
 });
 const updateMaintenanceLogInDB = (bikeId, userId, id, payload) => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b, _c;
-    yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
+    const bike = yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
     const log = yield prisma_1.prisma.maintenanceLog.findFirst({
         where: { id, bikeId, isDeleted: false },
     });
@@ -193,6 +193,12 @@ const updateMaintenanceLogInDB = (bikeId, userId, id, payload) => __awaiter(void
         data: updateData,
         include: catalogInclude,
     });
+    // ! create bumps the bike odometer; an edit that raises the reading must too, or
+    // ! currentOdometer ends up below the highest logged reading with no race involved (spec 49 §C).
+    // ! Atomic and a no-op when the reading was lowered — nothing rolls the odometer back
+    if (payload.odometerReading !== undefined) {
+        yield (0, bike_utils_1.bumpOdometerIfHigher)(bike, updated.odometerReading);
+    }
     return toApiShape(updated);
 });
 const deleteMaintenanceLogFromDB = (bikeId, userId, id) => __awaiter(void 0, void 0, void 0, function* () {
