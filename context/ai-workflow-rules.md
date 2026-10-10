@@ -2,7 +2,7 @@
 
 ## Overall Approach
 
-This is a **greenfield build**, not a live/already-shipped codebase — unlike a mature project, there's no production traffic or existing users to avoid breaking. That said, don't take that as license to over-build: implement one module/feature at a time, following `context/specs/00-build-plan.md`'s order, and verify each before moving to the next. The current state is boilerplate cloned from `expense-tracker-server` (`transaction`/`user` modules) — expect to replace or heavily rework it, not build alongside it.
+**This opening claim is no longer true, and it is the assumption that produced spec 46's defect.** It described the repo in 2026-09 and was left standing far too long: there are now several real users with real logs in a live Neon database, and spec 46 was the first spec since the Phase 8 cutover to have to migrate production data. Treat schema and ownership changes as touching real data. The original sentence, kept for the record: _"This is a greenfield build, not a live/already-shipped codebase — unlike a mature project, there's no production traffic or existing users to avoid breaking."_ That said, don't take that as license to over-build: implement one module/feature at a time, following `context/specs/00-build-plan.md`'s order, and verify each before moving to the next. The current state is boilerplate cloned from `expense-tracker-server` (`transaction`/`user` modules) — expect to replace or heavily rework it, not build alongside it.
 
 ## Scoping Rules
 
@@ -33,4 +33,4 @@ This is a **greenfield build**, not a live/already-shipped codebase — unlike a
 - [ ] `yarn build` (TypeScript compile) succeeds.
 - [ ] `yarn lint` is clean (no new errors/warnings).
 - [ ] New/changed endpoints manually verified (curl or similar) against the expected request/response shape from `bike-log-plan.md`.
-- [ ] If the change touches a resource with an owner (`Bike`, `FuelLog`, `MaintenanceLog`), confirm the service checks ownership against `req.user` before returning/mutating it.
+- [ ] If the change touches a resource with an owner (`Bike`, `FuelLog`, `MaintenanceLog`, and since spec 46 **`MaintenanceType` and `EngineOilType`**), confirm the service checks ownership against `req.user` before returning/mutating it. For the two catalogs that means `ownerId` **and** `isDeleted: false` on every query, via `findOwnedMaintenanceTypeOrThrow` / `findOwnedEngineOilTypeOrThrow`; a cross-user id must 404, not 403.

@@ -17,8 +17,11 @@ const http_status_1 = __importDefault(require("http-status"));
 const catchAsync_1 = __importDefault(require("../../util/catchAsync"));
 const sendResponse_1 = __importDefault(require("../../util/sendResponse"));
 const maintenanceType_service_1 = require("./maintenanceType.service");
+// ! Spec 46 §D: these four handlers used to never read `req.user` at all, which is how the
+// ! catalog ended up global. `req.user.userId` is now the first argument to every service
+// ! call. `authCheck` guarantees `req.user` is populated on all four routes.
 const createMaintenanceType = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const result = yield maintenanceType_service_1.maintenanceTypeServices.createMaintenanceTypeIntoDB(req.body);
+    const result = yield maintenanceType_service_1.maintenanceTypeServices.createMaintenanceTypeIntoDB(req.user.userId, req.body);
     (0, sendResponse_1.default)(res, {
         status: http_status_1.default.CREATED,
         success: true,
@@ -27,7 +30,7 @@ const createMaintenanceType = (0, catchAsync_1.default)((req, res) => __awaiter(
     });
 }));
 const getMaintenanceTypes = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const result = yield maintenanceType_service_1.maintenanceTypeServices.getMaintenanceTypesFromDB();
+    const result = yield maintenanceType_service_1.maintenanceTypeServices.getMaintenanceTypesFromDB(req.user.userId);
     (0, sendResponse_1.default)(res, {
         status: http_status_1.default.OK,
         success: true,
@@ -36,7 +39,7 @@ const getMaintenanceTypes = (0, catchAsync_1.default)((req, res) => __awaiter(vo
     });
 }));
 const updateMaintenanceType = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const result = yield maintenanceType_service_1.maintenanceTypeServices.updateMaintenanceTypeInDB(req.params.id, req.body);
+    const result = yield maintenanceType_service_1.maintenanceTypeServices.updateMaintenanceTypeInDB(req.user.userId, req.params.id, req.body);
     (0, sendResponse_1.default)(res, {
         status: http_status_1.default.OK,
         success: true,
@@ -45,7 +48,7 @@ const updateMaintenanceType = (0, catchAsync_1.default)((req, res) => __awaiter(
     });
 }));
 const deleteMaintenanceType = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const result = yield maintenanceType_service_1.maintenanceTypeServices.deleteMaintenanceTypeFromDB(req.params.id);
+    const result = yield maintenanceType_service_1.maintenanceTypeServices.deleteMaintenanceTypeFromDB(req.user.userId, req.params.id);
     (0, sendResponse_1.default)(res, {
         status: http_status_1.default.OK,
         success: true,

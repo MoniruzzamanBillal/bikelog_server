@@ -3,8 +3,14 @@ import catchAsync from "../../util/catchAsync";
 import sendResponse from "../../util/sendResponse";
 import { engineOilTypeServices } from "./engineOilType.service";
 
+// ! Spec 46 §D: `req.user.userId` is now the first argument to every service call — these
+// ! handlers previously never read `req.user`, which is how the catalog ended up global.
+
 const createEngineOilType = catchAsync(async (req, res) => {
-  const result = await engineOilTypeServices.createEngineOilTypeIntoDB(req.body);
+  const result = await engineOilTypeServices.createEngineOilTypeIntoDB(
+    req.user.userId,
+    req.body,
+  );
   sendResponse(res, {
     status: httpStatus.CREATED,
     success: true,
@@ -14,7 +20,9 @@ const createEngineOilType = catchAsync(async (req, res) => {
 });
 
 const getEngineOilTypes = catchAsync(async (req, res) => {
-  const result = await engineOilTypeServices.getEngineOilTypesFromDB();
+  const result = await engineOilTypeServices.getEngineOilTypesFromDB(
+    req.user.userId,
+  );
   sendResponse(res, {
     status: httpStatus.OK,
     success: true,
@@ -25,6 +33,7 @@ const getEngineOilTypes = catchAsync(async (req, res) => {
 
 const updateEngineOilType = catchAsync(async (req, res) => {
   const result = await engineOilTypeServices.updateEngineOilTypeInDB(
+    req.user.userId,
     req.params.id,
     req.body,
   );
@@ -38,6 +47,7 @@ const updateEngineOilType = catchAsync(async (req, res) => {
 
 const deleteEngineOilType = catchAsync(async (req, res) => {
   const result = await engineOilTypeServices.deleteEngineOilTypeFromDB(
+    req.user.userId,
     req.params.id,
   );
   sendResponse(res, {

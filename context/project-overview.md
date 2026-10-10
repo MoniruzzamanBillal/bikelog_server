@@ -13,7 +13,7 @@ Bike Log's backend is a REST API built with Express, TypeScript, and MongoDB (Mo
 
 ## Roles
 
-Every user sees and manages only their own bikes and logs — ownership, not role, gates every rider-facing resource. Auth is JWT-based (register/login); there is no public, unauthenticated data.
+Every user sees and manages only their own bikes, logs **and catalogs** — ownership, not role, gates every rider-facing resource. The two catalogs (`MaintenanceType`, `EngineOilType`) were the one exception until spec 46: they were global, so every user saw every other user's entries and could rename or soft-delete them. Spec 38's "there is no owner to check against" rationale was accurate when written and is now **superseded**, not wrong in hindsight — the product outgrew it. Auth is JWT-based (register/login); there is no public, unauthenticated data.
 
 A second `admin` role was added in spec 24, gating exactly one admin-only, non-user-owned resource so far: the automatic error-log system (`GET /admin/error-logs`, `GET /admin/error-logs/:id`). There's no admin-promotion endpoint — the first admin account is a direct database write — and no admin-facing UI/dashboard exists; this is backend-only infrastructure for now, not a general admin role rollout.
 
@@ -34,7 +34,7 @@ A second `admin` role was added in spec 24, gating exactly one admin-only, non-u
 - **Authentication:** JWT-based register/login, single `User` role.
 - **Bike management:** CRUD for a user's bikes, with `currentOdometer` denormalized onto the bike for fast reminder/mileage math.
 - **Fuel & mileage:** fuel-log CRUD, full-tank-to-full-tank exact mileage computation, rolling-average fallback, monthly/yearly/lifetime mileage stats.
-- **Maintenance & reminders:** maintenance-type catalog (user-managed from the app/web clients — e.g. Engine Oil, Chain Lube, Tire Change, Brake Pads, General Service, Insurance, Registration/Tax, Other; originally seeded, but the seed scripts were removed in spec 42), maintenance-log CRUD with per-log user-editable interval, due/overdue/upcoming reminders computed on read.
+- **Maintenance & reminders:** maintenance-type catalog — **per-user since spec 46**, managed entirely from the app/web clients (e.g. Engine Oil, Chain Lube, Tire Change, Brake Pads, General Service, Insurance, Registration/Tax, Other; originally seeded globally, but the seed scripts were removed in spec 42 and a new account now starts with an empty catalog). Each type carries a `requiresOilType` flag, which is what surfaces the engine-oil dropdown on a maintenance log, maintenance-log CRUD with per-log user-editable interval, due/overdue/upcoming reminders computed on read.
 - **Spending:** aggregated spending summary across `FuelLog.totalCost` + `MaintenanceLog.cost`, by category and time period.
 
 ## In Scope (MVP)
@@ -48,7 +48,7 @@ A second `admin` role was added in spec 24, gating exactly one admin-only, non-u
 
 ## Out of Scope (for now / Phase 2)
 
-- General maintenance & parts catalog beyond Engine Oil (tire change, chain/sprocket, brake pads, general service, insurance/registration renewal, accessories/other) — schema supports it (`MaintenanceType`), but not all types are wired up yet.
+- General maintenance & parts catalog beyond Engine Oil (tire change, chain/sprocket, brake pads, general service, insurance/registration renewal, accessories/other) — schema supports it (`MaintenanceType`, per-user since spec 46), but not all types are wired up yet.
 - Push notifications for reminders (Vercel Cron + Expo push) — MVP only surfaces reminders via an in-app-computed endpoint (Tier 1); real OS push is Phase 2 (Tier 2).
 - Charts (mileage trend, spend trend over time) — stats are plain totals/cards for now, no charting library chosen yet.
 - No automated test suite planned yet (`yarn test` in `bikelog-server/package.json` is currently a stub that just exits with an error, inherited from the cloned boilerplate).
