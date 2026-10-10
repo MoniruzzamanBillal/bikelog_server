@@ -1,6 +1,6 @@
 # 46: Per-user ownership for the maintenance-type and engine-oil-type catalogs (server)
 
-Status: 🚧 In Progress — all code for both PRs is implemented, built and committed (2026-10-04), and **migration A plus the `--apply` backfill have now been run against production** (16 users, 112 + 49 copies, 32 logs re-pointed). What remains is the **deploy**, `--finalize`, and migration C — plus the H7/H4 notes in the runbook's new correction bullet. See the **Operator runbook** section at the end, and `context/progress-tracker.md` Current Phase for the step-by-step state.
+Status: ✅ Complete (rollout) — code merged to `master` (PR #23, 2026-10-10); on production, migration A, the backfill, `--finalize` and migration C are all applied (confirmed by read-only queries 2026-10-10: `ownerId` is `NOT NULL` on both tables, 0 unowned rows, 0 logs pointing at another owner's catalog row, 23 logs / 9 with an oil type intact). **Not run:** Test-plan stage 3's multi-user API pass, and the V1 before/after diff (the before-snapshot was never taken, so zero-loss rests on the row/reference counts instead).
 
 Server half of a three-repo change. App counterpart: `bikelog_app/ai context/specs/48-per-user-catalogs.md`. Web counterpart: `bikelog_client-web-/context/specs/30-per-user-catalogs.md`. **This spec ships first** — but note the wire contract change is purely additive, so the clients are not blocked on it and can ship in either order afterwards.
 
@@ -521,7 +521,7 @@ With no test framework in this repo, the collection **is** the regression suite 
 ### PR1 checklist
 
 - [x] 1. `schema.prisma` — `ownerId String?` + `owner User?` (explicit `onDelete: Restrict`) + composite uniques + indexes + `requiresOilType` + `User` back-relations
-- [x] 2. Generate migration A via `migrate diff`; verify the SQL matches §C — `20261004061500_catalog_add_owner`. Generated **offline** with `--from-schema <pre-change copy> --to-schema prisma/schema.prisma`, which needs no shadow DB at all (and `--from-schema-datamodel` no longer exists in Prisma 7.10 — the flag was renamed to `--from-schema`). Output is statement-for-statement §C's migration A; only the statement *order* differs (Prisma emits DropIndex → AlterTable → CreateIndex → AddForeignKey), which is semantically identical and equally safe per §C's own per-statement table.
+- [x] 2. Generate migration A via `migrate diff`; verify the SQL matches §C — `20261004061500_catalog_add_owner`. Generated **offline** with `--from-schema <pre-change copy> --to-schema prisma/schema.prisma`, which needs no shadow DB at all (and `--from-schema-datamodel` no longer exists in Prisma 7.10 — the flag was renamed to `--from-schema`). Output is statement-for-statement §C's migration A; only the statement _order_ differs (Prisma emits DropIndex → AlterTable → CreateIndex → AddForeignKey), which is semantically identical and equally safe per §C's own per-statement table.
 - [x] 3. `src/scripts/backfillCatalogOwners.ts` — phases 0–4, three modes, all comments from §C. One deliberate divergence, commented in the file: phase 2 uses an explicit `findUnique`-then-`create` pair instead of `upsert({ ..., update: {} })`. Same effect, same idempotency guarantee, but it makes the created-vs-skipped counts reportable, which a no-op `upsert` cannot be.
 - [x] 4. `yarn build` + `yarn lint`; commit fresh `dist/` (H5)
 - [x] 5. Mark this spec **In Progress** in `context/progress-tracker.md`
@@ -684,11 +684,11 @@ After step 6: V2–V5, V7. After step 7: the V1 `diff`. After step 8's deploy: a
 
 ## Operator runbook — the part that is still open (added 2026-10-04)
 
-All the code above is committed. Everything below touches the live Neon database and **was not run**: the implementing session had no access to it, not even a read. So the repo is currently *ahead of* the database — the committed `schema.prisma` declares `ownerId` as required while production still has it nullable and all-`NULL`.
+All the code above is committed. Everything below touches the live Neon database and **was not run**: the implementing session had no access to it, not even a read. So the repo is currently _ahead of_ the database — the committed `schema.prisma` declares `ownerId` as required while production still has it nullable and all-`NULL`.
 
 ### Read this first: both migrations are now in the repo at once
 
-§0 H3 assumed PR1 and PR2 would land as two separate merges, with the backfill run in between. They landed back-to-back instead, so `prisma migrate deploy` now sees **both** A and C pending. A plain `yarn db:migrate` therefore applies A *and then* C, and C fails with Postgres `23502` on the all-`NULL` column.
+§0 H3 assumed PR1 and PR2 would land as two separate merges, with the backfill run in between. They landed back-to-back instead, so `prisma migrate deploy` now sees **both** A and C pending. A plain `yarn db:migrate` therefore applies A _and then_ C, and C fails with Postgres `23502` on the all-`NULL` column.
 
 That failure is the gate doing its job — A is applied, C's SQL is atomic so nothing of it lands, and **no data is touched or lost**. But it leaves C marked as a failed migration, which then needs `npx prisma migrate resolve --rolled-back 20261004061600_catalog_owner_not_null` before it can be retried. Avoid the detour by holding C back for the one command that applies A:
 
@@ -706,25 +706,25 @@ Moving the folder changes nothing about the repo's committed state — put it ba
 
 Rehearse the whole thing on a Neon branch of production first (§Test plan stage 2); only then repeat it against production. `neon` CLI is **not installed** on this machine — install it, or create the branch from the Neon console and copy both connection strings into `.env` (`DATABASE_URL` pooled, `DATABASE_URL_UNPOOLED` direct).
 
-| # | Command / action | Notes |
-| --- | --- | --- |
-| 1 | Create Neon branch `spec46-dryrun` from production; point `.env` at it | Reversible — delete the branch |
-| 2 | Take the **V1** before-snapshot | The proof of zero loss. `psql "$DATABASE_URL_UNPOOLED" -f v1.sql > before.txt` |
-| 3 | Hold C back (above), then `yarn db:migrate` | Applies **A only**. Confirm with `\d maintenance_types` |
-| 4 | `npx ts-node --transpile-only src/scripts/backfillCatalogOwners.ts` | Dry run. Settles **H7** — read the `requiresOilType:` line it prints for the real production row name |
-| 5 | `... backfillCatalogOwners.ts --apply` | Copies + re-points. Originals untouched, fully reversible |
-| 6 | Run **V2–V5, V7**; re-take V1 and `diff` | Pass criterion: the V1 diff is **byte-empty** |
-| 7 | Run `--apply` a second time | Idempotency proof: must report 0 created, 0 re-pointed |
-| 8 | **Break it deliberately once** — on a throwaway branch, skip step 5 and run `--finalize` | The H1 regression test, and the single most valuable thing in the dry run. It must abort on the assertion, not destroy data |
-| 9 | `... backfillCatalogOwners.ts --finalize` | **Irreversible.** Asserts, then deletes the originals |
-| 10 | Restore the C folder, then `yarn db:migrate` | Applies **C**. If it raises `23502`, a `NULL`-owner row was created in the window — inspect, assign or delete it, re-run. Do **not** weaken the migration |
-| 11 | V5 returns 0/0; a throwaway create + delete succeeds | |
-| 12 | Point `.env` back at production and repeat 2–11 there | Then §Test plan stage 3's 18-request multi-user pass |
+| #   | Command / action                                                                         | Notes                                                                                                                                                     |
+| --- | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Create Neon branch `spec46-dryrun` from production; point `.env` at it                   | Reversible — delete the branch                                                                                                                            |
+| 2   | Take the **V1** before-snapshot                                                          | The proof of zero loss. `psql "$DATABASE_URL_UNPOOLED" -f v1.sql > before.txt`                                                                            |
+| 3   | Hold C back (above), then `yarn db:migrate`                                              | Applies **A only**. Confirm with `\d maintenance_types`                                                                                                   |
+| 4   | `npx ts-node --transpile-only src/scripts/backfillCatalogOwners.ts`                      | Dry run. Settles **H7** — read the `requiresOilType:` line it prints for the real production row name                                                     |
+| 5   | `... backfillCatalogOwners.ts --apply`                                                   | Copies + re-points. Originals untouched, fully reversible                                                                                                 |
+| 6   | Run **V2–V5, V7**; re-take V1 and `diff`                                                 | Pass criterion: the V1 diff is **byte-empty**                                                                                                             |
+| 7   | Run `--apply` a second time                                                              | Idempotency proof: must report 0 created, 0 re-pointed                                                                                                    |
+| 8   | **Break it deliberately once** — on a throwaway branch, skip step 5 and run `--finalize` | The H1 regression test, and the single most valuable thing in the dry run. It must abort on the assertion, not destroy data                               |
+| 9   | `... backfillCatalogOwners.ts --finalize`                                                | **Irreversible.** Asserts, then deletes the originals                                                                                                     |
+| 10  | Restore the C folder, then `yarn db:migrate`                                             | Applies **C**. If it raises `23502`, a `NULL`-owner row was created in the window — inspect, assign or delete it, re-run. Do **not** weaken the migration |
+| 11  | V5 returns 0/0; a throwaway create + delete succeeds                                     |                                                                                                                                                           |
+| 12  | Point `.env` back at production and repeat 2–11 there                                    | Then §Test plan stage 3's 18-request multi-user pass                                                                                                      |
 
 Two notes on the window between steps 3 and 9 on production:
 
 - After step 5 the tables hold `users × rows` entries while the **deployed** code still has no owner filter, so every user sees every name repeated once per user — with several users and ~11 types, roughly 55 rows of visible duplication. Creates/updates/deletes still work. This is the main cosmetic hazard and the reason to run the sequence in one sitting.
-- **CORRECTION (2026-10-04, during the actual rollout):** the bullet below is wrong. The spec 46 commits were **never pushed or deployed** — production Vercel serves `master`, which does not contain them. So after step 5 the deployed, owner-blind code returned all 173 rows (12 originals + 161 copies) to every user, each name repeated 17 times, and §0 H2's ordering hazard **does** apply: the deploy must happen before `--finalize` and migration C. Read the bullet below as the condition the rollout was *supposed* to meet, not as a fact about it.
+- **CORRECTION (2026-10-04, during the actual rollout):** the bullet below is wrong. The spec 46 commits were **never pushed or deployed** — production Vercel serves `master`, which does not contain them. So after step 5 the deployed, owner-blind code returned all 173 rows (12 originals + 161 copies) to every user, each name repeated 17 times, and §0 H2's ordering hazard **does** apply: the deploy must happen before `--finalize` and migration C. Read the bullet below as the condition the rollout was _supposed_ to meet, not as a fact about it.
 - The ordering hazard §0 H2 warns about does **not** apply here, because the new code is already merged and deployed — this sequence is `A → backfill → finalize → C` against code that already filters by `ownerId`, which means the ownerless originals are invisible to everyone from the moment migration A lands. That is the safe ordering, not the dangerous one.
 
 ### Unverified claims
