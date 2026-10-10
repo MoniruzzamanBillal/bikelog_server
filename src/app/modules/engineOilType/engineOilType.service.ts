@@ -4,7 +4,11 @@ import AppError from "../../Error/AppError";
 import { prisma } from "../../lib/prisma";
 import { generateObjectId } from "../../util/generateObjectId";
 import { TEngineOilType } from "./engineOilType.interface";
-import { findOwnedEngineOilTypeOrThrow } from "./engineOilType.utils";
+import {
+  findLiveNameConflict,
+  findOwnedEngineOilTypeOrThrow,
+  findSoftDeletedNameMatches,
+} from "./engineOilType.utils";
 
 // ! Spec 46: this catalog is per-user, not global. Every query below must carry BOTH
 // ! `ownerId` and `isDeleted: false`. `ownerId` is never read from the request body (it is
@@ -15,19 +19,37 @@ const createEngineOilTypeIntoDB = async (
   userId: string,
   payload: Partial<TEngineOilType>,
 ) => {
+  // ! Spec 50 §C: a LIVE row whose name differs only by case is a duplicate too — the
+  // ! (ownerId, name) unique can't see that, so check it before anything else.
+  if (await findLiveNameConflict(userId, payload.name as string)) {
+    throw new AppError(
+      httpStatus.CONFLICT,
+      "An engine oil type with this name already exists",
+    );
+  }
+
   // ! Spec 41 §I/§F, re-scoped by spec 46 §B: the unique is now `(ownerId, name)` and still
   // ! covers soft-deleted rows, so re-adding a name THIS USER deleted would otherwise hit
   // ! P2002 and claim it "already exists" about a row they can no longer see. Revive their
   // ! row, preserving its id so their historical logs stay correctly labelled.
-  const softDeleted = await prisma.engineOilType.findFirst({
-    where: { ownerId: userId, name: payload.name as string, isDeleted: true },
-  });
+  // ! Spec 50 §C: the revive match ignores case as well; prefer an exact-name row if several
+  // ! match. The row takes the casing the user just typed. That cannot collide on
+  // ! (ownerId, name): an exact match would have been preferred, and a live case-variant was
+  // ! refused above.
+  const softDeletedMatches = await findSoftDeletedNameMatches(
+    userId,
+    payload.name as string,
+  );
+  const softDeleted =
+    softDeletedMatches.find((row) => row.name === payload.name) ??
+    softDeletedMatches[0];
 
   if (softDeleted) {
     const revived = await prisma.engineOilType.update({
       where: { id: softDeleted.id },
       data: {
         isDeleted: false,
+        name: payload.name as string,
         suggestedIntervalKm: payload.suggestedIntervalKm,
       },
     });
@@ -77,6 +99,18 @@ const updateEngineOilTypeInDB = async (
   // ! Spec 41 §G + spec 46 §D/§E: one lookup covers unknown id, soft-deleted row and
   // ! another user's row — all as a 404.
   await findOwnedEngineOilTypeOrThrow(id, userId);
+
+  // ! Spec 50 §C: renaming onto a case-variant of another live row is a duplicate; excluding
+  // ! this row's own id still lets it change the casing of its own name.
+  if (
+    payload.name !== undefined &&
+    (await findLiveNameConflict(userId, payload.name, id))
+  ) {
+    throw new AppError(
+      httpStatus.CONFLICT,
+      "An engine oil type with this name already exists",
+    );
+  }
 
   try {
     const result = await prisma.engineOilType.update({

@@ -360,7 +360,7 @@
                 "bikes"
               ]
             },
-            "description": "`owner` is taken from the JWT, never send it. `currentOdometer` here seeds the bike's immutable `initialOdometer` too; it's optional (defaults to 0).",
+            "description": "`owner` is taken from the JWT, never send it. `currentOdometer` here seeds the bike's immutable `initialOdometer` too; it's optional (defaults to 0). `purchaseDate` can't be more than a day in the future (400, spec 50).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"nickname\": \"Red Beast\",\n  \"brand\": \"Yamaha\",\n  \"model\": \"FZS V3\",\n  \"registrationNumber\": \"DHAKA-METRO-GA-11-2233\",\n  \"purchaseDate\": \"2024-01-15\",\n  \"fuelTankCapacityLiters\": 12,\n  \"currentOdometer\": 1500\n}",
@@ -473,7 +473,7 @@
                 "{{bikeId}}"
               ]
             },
-            "description": "All fields optional. `owner` and `currentOdometer` are silently stripped server-side even if you send them here.",
+            "description": "All fields optional. `owner` and `currentOdometer` are silently stripped server-side even if you send them here. `purchaseDate`, if sent, can't be more than a day in the future (400, spec 50).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"nickname\": \"Red Beast MK2\",\n  \"fuelTankCapacityLiters\": 13\n}",
@@ -1093,7 +1093,7 @@
                 "maintenance-types"
               ]
             },
-            "description": "Creates a maintenance type owned by the authenticated user. `requiresOilType: true` is what makes the clients show the engine-oil dropdown on a maintenance log (spec 46 \u00a7G) \u2014 it replaced the old client-side `name === \"Engine Oil\"` match, which only ever worked because the global catalog happened to be seeded with that row.\n\nRe-creating a name **you** soft-deleted revives your original row (and its id) instead of inserting a duplicate. A name another user already owns is not a conflict \u2014 it creates your own separate row with its own id.\n\n**Per-user catalog (spec 46).** This catalog is private to the authenticated user: `ownerId` is taken from the JWT, never from the body. A cross-user id returns **404** (\"Maintenance type not found\"), not 403 \u2014 the same code as a non-existent or soft-deleted id, so the endpoint never discloses that another user's row exists. A brand-new user's list is legitimately **empty** (200 + `[]`): there is no seeding.",
+            "description": "Creates a maintenance type owned by the authenticated user. `requiresOilType: true` is what makes the clients show the engine-oil dropdown on a maintenance log (spec 46 \u00a7G) \u2014 it replaced the old client-side `name === \"Engine Oil\"` match, which only ever worked because the global catalog happened to be seeded with that row.\n\nRe-creating a name **you** soft-deleted revives your original row (and its id) instead of inserting a duplicate. A name another user already owns is not a conflict \u2014 it creates your own separate row with its own id.\n\n**Per-user catalog (spec 46).** This catalog is private to the authenticated user: `ownerId` is taken from the JWT, never from the body. A cross-user id returns **404** (\"Maintenance type not found\"), not 403 \u2014 the same code as a non-existent or soft-deleted id, so the endpoint never discloses that another user's row exists. A brand-new user's list is legitimately **empty** (200 + `[]`): there is no seeding. `name` is trimmed and can't be empty (400); a name that differs from one of your live types only by letter case returns 409 (spec 50). Re-adding a name you deleted \u2014 in any casing \u2014 revives that row.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": \"Suspension Check\",\n  \"defaultIntervalKm\": 5000,\n  \"defaultIntervalDays\": null\n}",
@@ -1385,7 +1385,7 @@
                 "engine-oil-types"
               ]
             },
-            "description": "Creates an engine oil type owned by the authenticated user. Re-creating a name **you** soft-deleted revives your original row and its id; a name another user already owns is not a conflict.\n\n**Per-user catalog (spec 46).** This catalog is private to the authenticated user: `ownerId` is taken from the JWT, never from the body. A cross-user id returns **404** (\"Engine oil type not found\"), not 403 \u2014 the same code as a non-existent or soft-deleted id, so the endpoint never discloses that another user's row exists. A brand-new user's list is legitimately **empty** (200 + `[]`): there is no seeding.",
+            "description": "Creates an engine oil type owned by the authenticated user. Re-creating a name **you** soft-deleted revives your original row and its id; a name another user already owns is not a conflict.\n\n**Per-user catalog (spec 46).** This catalog is private to the authenticated user: `ownerId` is taken from the JWT, never from the body. A cross-user id returns **404** (\"Engine oil type not found\"), not 403 \u2014 the same code as a non-existent or soft-deleted id, so the endpoint never discloses that another user's row exists. A brand-new user's list is legitimately **empty** (200 + `[]`): there is no seeding. `name` is trimmed and can't be empty (400); a case-variant of one of your live oil types returns 409 (spec 50).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": \"Fully Synthetic 10W-40\",\n  \"suggestedIntervalKm\": 1200\n}",
@@ -1583,7 +1583,7 @@
                 "maintenance-logs"
               ]
             },
-            "description": "Run 'Create Maintenance Type' and 'Create Engine Oil Type' first so {{maintenanceTypeId}}/{{engineOilTypeId}} are populated (or replace with real ids from the List requests, e.g. a seeded catalog id). `oilType` is optional. Never send `nextDueOdometer` \u2014 it's computed server-side from odometerReading + intervalKmUsed.",
+            "description": "Run 'Create Maintenance Type' and 'Create Engine Oil Type' first so {{maintenanceTypeId}}/{{engineOilTypeId}} are populated (or replace with real ids from the List requests, e.g. a seeded catalog id). `oilType` is optional. Never send `nextDueOdometer` \u2014 it's computed server-side from odometerReading + intervalKmUsed. `serviceDate` can't be before the bike's `purchaseDate` (400); `odometerReading` must be 0\u2013999,999 (spec 50).",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"maintenanceType\": \"{{maintenanceTypeId}}\",\n  \"odometerReading\": 1800,\n  \"oilType\": \"{{engineOilTypeId}}\",\n  \"intervalKmUsed\": 3000,\n  \"nextDueDate\": \"2026-10-01\",\n  \"cost\": 1500,\n  \"serviceDate\": \"2026-07-15\",\n  \"serviceCenter\": \"City Bike Care\",\n  \"partsReplaced\": [\n    \"Oil Filter\",\n    \"Engine Oil\"\n  ],\n  \"notes\": \"Routine service\"\n}",

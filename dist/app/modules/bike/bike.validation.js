@@ -2,6 +2,11 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.bikeValidations = void 0;
 const zod_1 = require("zod");
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+// ! up to 24h ahead, not "<= now": "YYYY-MM-DD" parses as midnight UTC, so a user east of UTC
+// ! entering today's date just after their local midnight is still "tomorrow" in UTC. 2099 is
+// ! refused. Evaluated per request because refine runs at parse time (spec 50)
+const notInTheFuture = (d) => d.getTime() <= Date.now() + ONE_DAY_MS;
 const createBikeSchema = zod_1.z.object({
     body: zod_1.z.object({
         nickname: zod_1.z.string({ required_error: "Nickname is required" }),
@@ -10,9 +15,9 @@ const createBikeSchema = zod_1.z.object({
         registrationNumber: zod_1.z.string({
             required_error: "Registration number is required",
         }),
-        purchaseDate: zod_1.z.coerce.date({
-            required_error: "Purchase date is required",
-        }),
+        purchaseDate: zod_1.z.coerce
+            .date({ required_error: "Purchase date is required" })
+            .refine(notInTheFuture, "Purchase date can't be in the future"),
         fuelTankCapacityLiters: zod_1.z
             .number({ required_error: "Fuel tank capacity is required" })
             .positive(),
@@ -25,7 +30,10 @@ const updateBikeSchema = zod_1.z.object({
         brand: zod_1.z.string().optional(),
         model: zod_1.z.string().optional(),
         registrationNumber: zod_1.z.string().optional(),
-        purchaseDate: zod_1.z.coerce.date().optional(),
+        purchaseDate: zod_1.z.coerce
+            .date()
+            .refine(notInTheFuture, "Purchase date can't be in the future")
+            .optional(),
         fuelTankCapacityLiters: zod_1.z.number().positive().optional(),
         currentOdometer: zod_1.z.number().nonnegative().optional(),
     }),

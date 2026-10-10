@@ -88,6 +88,8 @@ Registers/updates this device's Expo push token on the logged-in user — called
 
 **Never send** `owner` — it's taken from the JWT (`req.user.userId`), not the body.
 
+**`purchaseDate` can't be in the future (spec 50).** More than a day ahead → `400` ("Purchase date can't be in the future"), on create and update. The one-day slack exists because `"YYYY-MM-DD"` parses as midnight UTC, so "today" for a user east of UTC can already be tomorrow in UTC. Any past date is accepted.
+
 ### `GET /api/bikes` — auth required
 
 Lists bikes owned by the logged-in user. No params.
@@ -198,6 +200,8 @@ All mileage records are auto-created when a full-tank fuel log closes a period �
 | Registration/Tax | – | 365 |
 | Other | – | – |
 
+**Names (spec 50):** `name` is trimmed and can't be empty or whitespace (`400`, also on `PATCH`). A name that differs from one of your *live* types only by letter case (`engine oil change` vs `Engine Oil Change`) is a duplicate → `409`; renaming a type to a different casing of its own name is fine. Re-adding a name you deleted — in any casing — revives the deleted row (same `_id`, new casing). Other users' types are never compared.
+
 ### `GET /api/maintenance-types` — auth required
 
 Lists the **authenticated user's own** live maintenance types, sorted by name (spec 46 — not scoped to a bike, but scoped to the rider). An empty array is correct for a new account. Another user's id on the `PATCH`/`DELETE` routes returns 404, never 403.
@@ -223,6 +227,8 @@ Both fields required; `suggestedIntervalKm` positive.
 | Mineral | 800 |
 | Semi-Synthetic | 1000 |
 | Synthetic | 1250 |
+
+**Names (spec 50):** same rules as maintenance types — trimmed, non-empty, case-insensitive duplicate → `409`, revive keeps the `_id`.
 
 ### `GET /api/engine-oil-types` — auth required
 
@@ -260,6 +266,8 @@ Both fields required; `suggestedIntervalKm` positive.
 `maintenanceType`/`oilType` are real Mongo ObjectIds referencing other collections — they can't be made up. The Postman collection uses `{{maintenanceTypeId}}` / `{{engineOilTypeId}}`, auto-filled by the `Create Maintenance Type`/`Create Engine Oil Type` requests (or paste in a seeded catalog id from the `List` requests).
 
 **Never send `nextDueOdometer`** — always computed server-side as `odometerReading + intervalKmUsed`; any client value is dropped. When `intervalKmUsed` is omitted, `nextDueOdometer` is left unset too (no default interval is assumed), and `GET .../reminders` falls back to that log's `nextDueDate` alone — a log with neither `intervalKmUsed` nor `nextDueDate` set never produces a reminder.
+
+**Sanity checks (spec 50).** `serviceDate` before the bike's `purchaseDate` → `400` ("Maintenance date cannot be before the bike's purchase date (YYYY-MM-DD)"), on create and `PATCH`; equal to the purchase date, or omitted (defaults to now), is fine. `odometerReading` must be a finite number 0–999,999 (`400` otherwise, create and `PATCH`).
 
 ### `GET .../maintenance-logs` — auth required
 

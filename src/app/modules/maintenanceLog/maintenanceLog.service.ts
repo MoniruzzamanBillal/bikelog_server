@@ -58,6 +58,16 @@ const toApiShape = <
   cost: Number(log.cost),
 });
 
+// ! mirrors fuelLog.service.ts: a service can't predate owning the bike (spec 50)
+const assertNotBeforePurchase = (serviceDate: Date, purchaseDate: Date) => {
+  if (serviceDate < purchaseDate) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      `Maintenance date cannot be before the bike's purchase date (${purchaseDate.toISOString().split("T")[0]})`,
+    );
+  }
+};
+
 const computeNextDueOdometer = (odometerReading: number, intervalKmUsed: number): number => {
   return odometerReading + intervalKmUsed;
 };
@@ -68,6 +78,9 @@ const createMaintenanceLogIntoDB = async (
   payload: Partial<TMaintenanceLog>,
 ) => {
   const bike = await findOwnedBikeOrThrow(bikeId, userId);
+
+  // ! same default the insert below uses, so an omitted serviceDate ("now") is checked too
+  assertNotBeforePurchase(payload.serviceDate ?? new Date(), bike.purchaseDate);
 
   // ! Spec 41 §G: findFirst, not findUnique — `isDeleted` is not a unique field, so
   // ! findUnique will not accept it in `where`. A soft-deleted catalog row must be
@@ -208,6 +221,10 @@ const updateMaintenanceLogInDB = async (
     if (!oilType) {
       throw new AppError(httpStatus.NOT_FOUND, "Engine oil type not found");
     }
+  }
+
+  if (payload.serviceDate) {
+    assertNotBeforePurchase(payload.serviceDate, bike.purchaseDate);
   }
 
   const updateData: Record<string, unknown> = { ...payload };

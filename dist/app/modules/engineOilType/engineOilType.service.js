@@ -24,18 +24,28 @@ const engineOilType_utils_1 = require("./engineOilType.utils");
 // ! deliberately absent from the Zod schemas and from TEngineOilType); it always comes
 // ! from the verified JWT.
 const createEngineOilTypeIntoDB = (userId, payload) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    // ! Spec 50 §C: a LIVE row whose name differs only by case is a duplicate too — the
+    // ! (ownerId, name) unique can't see that, so check it before anything else.
+    if (yield (0, engineOilType_utils_1.findLiveNameConflict)(userId, payload.name)) {
+        throw new AppError_1.default(http_status_1.default.CONFLICT, "An engine oil type with this name already exists");
+    }
     // ! Spec 41 §I/§F, re-scoped by spec 46 §B: the unique is now `(ownerId, name)` and still
     // ! covers soft-deleted rows, so re-adding a name THIS USER deleted would otherwise hit
     // ! P2002 and claim it "already exists" about a row they can no longer see. Revive their
     // ! row, preserving its id so their historical logs stay correctly labelled.
-    const softDeleted = yield prisma_1.prisma.engineOilType.findFirst({
-        where: { ownerId: userId, name: payload.name, isDeleted: true },
-    });
+    // ! Spec 50 §C: the revive match ignores case as well; prefer an exact-name row if several
+    // ! match. The row takes the casing the user just typed. That cannot collide on
+    // ! (ownerId, name): an exact match would have been preferred, and a live case-variant was
+    // ! refused above.
+    const softDeletedMatches = yield (0, engineOilType_utils_1.findSoftDeletedNameMatches)(userId, payload.name);
+    const softDeleted = (_a = softDeletedMatches.find((row) => row.name === payload.name)) !== null && _a !== void 0 ? _a : softDeletedMatches[0];
     if (softDeleted) {
         const revived = yield prisma_1.prisma.engineOilType.update({
             where: { id: softDeleted.id },
             data: {
                 isDeleted: false,
+                name: payload.name,
                 suggestedIntervalKm: payload.suggestedIntervalKm,
             },
         });
@@ -74,6 +84,12 @@ const updateEngineOilTypeInDB = (userId, id, payload) => __awaiter(void 0, void 
     // ! Spec 41 §G + spec 46 §D/§E: one lookup covers unknown id, soft-deleted row and
     // ! another user's row — all as a 404.
     yield (0, engineOilType_utils_1.findOwnedEngineOilTypeOrThrow)(id, userId);
+    // ! Spec 50 §C: renaming onto a case-variant of another live row is a duplicate; excluding
+    // ! this row's own id still lets it change the casing of its own name.
+    if (payload.name !== undefined &&
+        (yield (0, engineOilType_utils_1.findLiveNameConflict)(userId, payload.name, id))) {
+        throw new AppError_1.default(http_status_1.default.CONFLICT, "An engine oil type with this name already exists");
+    }
     try {
         const result = yield prisma_1.prisma.engineOilType.update({
             where: { id },

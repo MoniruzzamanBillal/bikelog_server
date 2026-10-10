@@ -24,20 +24,30 @@ const maintenanceType_utils_1 = require("./maintenanceType.utils");
 // ! `ownerId` is never read from the request body (it is deliberately absent from the Zod
 // ! schemas and from TMaintenanceType); it always comes from the verified JWT.
 const createMaintenanceTypeIntoDB = (userId, payload) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    // ! Spec 50 §C: a LIVE row whose name differs only by case is a duplicate too — the
+    // ! (ownerId, name) unique can't see that, so check it before anything else.
+    if (yield (0, maintenanceType_utils_1.findLiveNameConflict)(userId, payload.name)) {
+        throw new AppError_1.default(http_status_1.default.CONFLICT, "A maintenance type with this name already exists");
+    }
     // ! Spec 41 §F, re-scoped by spec 46 §B: the unique is now `(ownerId, name)` and still
     // ! covers soft-deleted rows, so re-adding a name THIS USER deleted would otherwise hit
     // ! P2002 and claim it "already exists" about a row they can no longer see. Revive their
     // ! row instead of inserting a second one — keeping the original id means their
     // ! historical maintenance logs stay correctly labelled. Another user's row with the
     // ! same name is a different row with a different id and is never consulted.
-    const softDeleted = yield prisma_1.prisma.maintenanceType.findFirst({
-        where: { ownerId: userId, name: payload.name, isDeleted: true },
-    });
+    // ! Spec 50 §C: the revive match ignores case as well; prefer an exact-name row if several
+    // ! match. The row takes the casing the user just typed. That cannot collide on
+    // ! (ownerId, name): an exact match would have been preferred, and a live case-variant was
+    // ! refused above.
+    const softDeletedMatches = yield (0, maintenanceType_utils_1.findSoftDeletedNameMatches)(userId, payload.name);
+    const softDeleted = (_a = softDeletedMatches.find((row) => row.name === payload.name)) !== null && _a !== void 0 ? _a : softDeletedMatches[0];
     if (softDeleted) {
         const revived = yield prisma_1.prisma.maintenanceType.update({
             where: { id: softDeleted.id },
             data: {
                 isDeleted: false,
+                name: payload.name,
                 defaultIntervalKm: payload.defaultIntervalKm,
                 defaultIntervalDays: payload.defaultIntervalDays,
                 requiresOilType: payload.requiresOilType,
@@ -82,6 +92,12 @@ const updateMaintenanceTypeInDB = (userId, id, payload) => __awaiter(void 0, voi
     // ! Spec 41 §G + spec 46 §D/§E: one lookup covers all three refusals — unknown id,
     // ! soft-deleted row, and another user's row — all as a 404.
     yield (0, maintenanceType_utils_1.findOwnedMaintenanceTypeOrThrow)(id, userId);
+    // ! Spec 50 §C: renaming onto a case-variant of another live row is a duplicate; excluding
+    // ! this row's own id still lets it change the casing of its own name.
+    if (payload.name !== undefined &&
+        (yield (0, maintenanceType_utils_1.findLiveNameConflict)(userId, payload.name, id))) {
+        throw new AppError_1.default(http_status_1.default.CONFLICT, "A maintenance type with this name already exists");
+    }
     try {
         const result = yield prisma_1.prisma.maintenanceType.update({
             where: { id },

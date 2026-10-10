@@ -52,12 +52,20 @@ const toApiShape = (log) => (Object.assign(Object.assign({}, log), { _id: log.id
     oilType: log.oilType
         ? { _id: log.oilType.id, name: log.oilType.name }
         : log.oilTypeId, cost: Number(log.cost) }));
+// ! mirrors fuelLog.service.ts: a service can't predate owning the bike (spec 50)
+const assertNotBeforePurchase = (serviceDate, purchaseDate) => {
+    if (serviceDate < purchaseDate) {
+        throw new AppError_1.default(http_status_1.default.BAD_REQUEST, `Maintenance date cannot be before the bike's purchase date (${purchaseDate.toISOString().split("T")[0]})`);
+    }
+};
 const computeNextDueOdometer = (odometerReading, intervalKmUsed) => {
     return odometerReading + intervalKmUsed;
 };
 const createMaintenanceLogIntoDB = (bikeId, userId, payload) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b;
+    var _a, _b, _c;
     const bike = yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
+    // ! same default the insert below uses, so an omitted serviceDate ("now") is checked too
+    assertNotBeforePurchase((_a = payload.serviceDate) !== null && _a !== void 0 ? _a : new Date(), bike.purchaseDate);
     // ! Spec 41 §G: findFirst, not findUnique — `isDeleted` is not a unique field, so
     // ! findUnique will not accept it in `where`. A soft-deleted catalog row must be
     // ! unreachable to new writes, otherwise the FK succeeds and a log points at a type the
@@ -93,9 +101,9 @@ const createMaintenanceLogIntoDB = (bikeId, userId, payload) => __awaiter(void 0
             nextDueOdometer,
             nextDueDate: payload.nextDueDate,
             cost: payload.cost,
-            serviceDate: (_a = payload.serviceDate) !== null && _a !== void 0 ? _a : new Date(),
+            serviceDate: (_b = payload.serviceDate) !== null && _b !== void 0 ? _b : new Date(),
             serviceCenter: payload.serviceCenter,
-            partsReplaced: (_b = payload.partsReplaced) !== null && _b !== void 0 ? _b : [],
+            partsReplaced: (_c = payload.partsReplaced) !== null && _c !== void 0 ? _c : [],
             notes: payload.notes,
         },
         include: catalogInclude,
@@ -169,6 +177,9 @@ const updateMaintenanceLogInDB = (bikeId, userId, id, payload) => __awaiter(void
         if (!oilType) {
             throw new AppError_1.default(http_status_1.default.NOT_FOUND, "Engine oil type not found");
         }
+    }
+    if (payload.serviceDate) {
+        assertNotBeforePurchase(payload.serviceDate, bike.purchaseDate);
     }
     const updateData = Object.assign({}, payload);
     delete updateData.nextDueOdometer;
