@@ -32,6 +32,16 @@
       "type": "string"
     },
     {
+      "key": "refreshToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refreshTokenB",
+      "value": "",
+      "type": "string"
+    },
+    {
       "key": "bikeId",
       "value": "",
       "type": "string"
@@ -166,7 +176,7 @@
                 "login"
               ]
             },
-            "description": "Logs in and returns a JWT at the top-level `token` field (not under `data`). The test script below saves it into the `token` collection variable automatically, so every other request in this collection (which use Bearer {{token}}) will work right after this runs.",
+            "description": "Logs in and returns a JWT at the top-level `token` field (not under `data`). The test script below saves it into the `token` collection variable automatically, so every other request in this collection (which use Bearer {{token}}) will work right after this runs.\n\nSpec 51: the response now ALSO carries a top-level `refreshToken` (15-day). `token` still means the ACCESS token (15 minutes), which is what keeps pre-spec-51 clients working. The script captures `{{refreshToken}}` for the Refresh Access Token request below.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"rider@example.com\",\n  \"password\": \"test1234\"\n}",
@@ -196,6 +206,11 @@
                   "        pm.collectionVariables.set(\"token\", value);",
                   "        console.log(\"Captured token =\", value);",
                   "    }",
+                  "    const refreshValue = body.refreshToken;",
+                  "    if (refreshValue) {",
+                  "        pm.collectionVariables.set(\"refreshToken\", refreshValue);",
+                  "        console.log(\"Captured refreshToken =\", refreshValue);",
+                  "    }",
                   "}"
                 ]
               }
@@ -223,7 +238,7 @@
                 "login"
               ]
             },
-            "description": "Spec 46 \u00a7I. A second account, so the per-user catalog scoping can actually be exercised. Register this user first (Auth > Register with a different email), then run this \u2014 it captures `{{tokenB}}` without disturbing `{{token}}`. The two negative requests at the end of Maintenance Types use it.\n\nWith no test framework in this repo, those two requests ARE the regression suite for the cross-tenant fix.",
+            "description": "Spec 46 \u00a7I. A second account, so the per-user catalog scoping can actually be exercised. Register this user first (Auth > Register with a different email), then run this \u2014 it captures `{{tokenB}}` without disturbing `{{token}}`. The two negative requests at the end of Maintenance Types use it.\n\nWith no test framework in this repo, those two requests ARE the regression suite for the cross-tenant fix.\n\nSpec 51: the response now ALSO carries a top-level `refreshToken` (15-day). `token` still means the ACCESS token (15 minutes), which is what keeps pre-spec-51 clients working. The script captures `{{refreshTokenB}}` for the Refresh Access Token request below.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"riderB@example.com\",\n  \"password\": \"test1234\"\n}",
@@ -253,7 +268,126 @@
                   "        pm.collectionVariables.set(\"tokenB\", value);",
                   "        console.log(\"Captured tokenB =\", value);",
                   "    }",
+                  "    const refreshValue = body.refreshToken;",
+                  "    if (refreshValue) {",
+                  "        pm.collectionVariables.set(\"refreshTokenB\", refreshValue);",
+                  "        console.log(\"Captured refreshTokenB =\", refreshValue);",
+                  "    }",
                   "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh Access Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh-token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "refresh-token"
+              ]
+            },
+            "description": "Spec 51. Exchanges the 15-day refresh token for a fresh 15-minute access token.\n\nNo Authorization header \u2014 deliberately. The caller reaches this route precisely because its access token has expired, so requiring one would make it unusable; the refresh token in the body IS the credential.\n\nThe new token comes back at the top-level `token` field. The refresh token is NOT echoed back: it is unchanged and never rotated, so there is nothing for the client to re-store. The script below updates `{{token}}` in place, so every other request in this collection keeps working.\n\nRun Auth > Login first to populate `{{refreshToken}}`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});",
+                  "pm.test(\"Returns a new access token\", function () {",
+                  "    pm.expect(pm.response.json().token).to.be.a(\"string\").and.not.empty;",
+                  "});",
+                  "pm.test(\"Does NOT echo the refresh token back (spec 51 \u00a7A)\", function () {",
+                  "    pm.expect(pm.response.json().refreshToken).to.be.undefined;",
+                  "});",
+                  "if (pm.response.code < 300) {",
+                  "    const value = pm.response.json().token;",
+                  "    if (value) {",
+                  "        pm.collectionVariables.set(\"token\", value);",
+                  "        console.log(\"Refreshed access token =\", value);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh Access Token with a garbage token (expect 401)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh-token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "refresh-token"
+              ]
+            },
+            "description": "Spec 51 \u00a7G V6. Every failure cause \u2014 malformed, bad signature, expired, wrong token type, unknown user, soft-deleted user \u2014 answers with the SAME 401 and the same message, so the response cannot be used to probe which it was.\n\nTwo things this request is the regression test for, neither covered anywhere else:\n\n1. An ACCESS token must fail here (spec 51 \u00a70 H4). Paste `{{token}}` into the body to check: it is signed with a different secret AND carries `type: \"access\"`. If it ever succeeded, a 15-minute token could be replayed for new access tokens forever.\n2. Spec 51 \u00a7E.1 \u2014 this 401 must write NO row to `error_logs`, because the request body holds a live 15-day credential and that table is read back over HTTP by the admin dashboard and kept 30 days. Verify with Admin > List Error Logs: no row for this path should ever appear.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"garbage.token.value\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 401\", function () {",
+                  "    pm.expect(pm.response.code).to.eql(401);",
+                  "});",
+                  "pm.test(\"Message gives nothing away\", function () {",
+                  "    pm.expect(pm.response.json().message).to.eql(\"Invalid or expired refresh token\");",
+                  "});"
                 ]
               }
             }

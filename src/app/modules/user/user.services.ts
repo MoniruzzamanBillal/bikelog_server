@@ -6,7 +6,7 @@ import AppError from "../../Error/AppError";
 import config from "../../config";
 import { prisma } from "../../lib/prisma";
 import { generateObjectId } from "../../util/generateObjectId";
-import { TUser, TJwtPayload } from "./user.interface";
+import { TUser, TJwtPayload, TRefreshPayload } from "./user.interface";
 
 // every field except `password`, so a newly-added sensitive field never leaks by accident
 const safeUserSelect = {
@@ -19,6 +19,40 @@ const safeUserSelect = {
   createdAt: true,
   updatedAt: true,
 } as const;
+
+// ! Spec 51 — the two token minters. Kept as the ONLY places either token is signed, so the
+// ! sign-time and verify-time shapes cannot drift apart silently (the same reasoning spec 02
+// ! used when it typed the login payload).
+const signAccessToken = (user: {
+  id: string;
+  email: string;
+  userRole: string;
+}) => {
+  const jwtPayload: TJwtPayload = {
+    userId: user?.id,
+    userEmail: user?.email,
+    userRole: user?.userRole as TJwtPayload["userRole"],
+    type: "access",
+  };
+
+  return Jwt.sign(jwtPayload, config.jwt_secret as string, {
+    expiresIn: config.jwt_access_expires_in as Jwt.SignOptions["expiresIn"],
+  });
+};
+
+// ! Signed with a DIFFERENT secret from the access token, which is not optional: under one
+// ! shared secret an access token would verify here and could be replayed for a fresh access
+// ! token forever (spec 51 §0 H4). The `type` claim is the second half of that defence.
+const signRefreshToken = (user: { id: string }) => {
+  const jwtPayload: TRefreshPayload = {
+    userId: user?.id,
+    type: "refresh",
+  };
+
+  return Jwt.sign(jwtPayload, config.jwt_refresh_secret as string, {
+    expiresIn: config.jwt_refresh_expires_in as Jwt.SignOptions["expiresIn"],
+  });
+};
 
 // ! for creating a user
 const createUser = async (payload: TUser) => {
@@ -60,7 +94,12 @@ const loginFromDb = async (payload: Tlogin) => {
     where: { email: payload?.email },
   });
 
-  if (!userData) {
+  // ! Spec 51 §0 H6: a soft-deleted user could log in — this query never looked at
+  // ! `isDeleted`, so the flag did nothing for auth (the SQA report's DEF-07). Collapsed into
+  // ! the same 404 as a missing user on purpose, so the response can't tell "deleted" from
+  // ! "never existed". Checked in JS rather than in the `where` because `findUnique` only
+  // ! accepts unique fields.
+  if (!userData || userData?.isDeleted) {
     throw new AppError(
       httpStatus.NOT_FOUND,
       "User dont exist with this email !!!",
@@ -76,17 +115,56 @@ const loginFromDb = async (payload: Tlogin) => {
     throw new AppError(httpStatus.FORBIDDEN, "Password don't match !!");
   }
 
-  const jwtPayload: TJwtPayload = {
-    userId: userData?.id,
-    userEmail: userData?.email,
-    userRole: userData?.userRole as TJwtPayload["userRole"],
+  // ! Spec 51: two tokens now. `token` on the wire stays the ACCESS token (see the controller)
+  // ! so pre-spec-51 clients, which read `result.token` and know nothing about refreshing,
+  // ! keep working untouched.
+  return {
+    accessToken: signAccessToken(userData),
+    refreshToken: signRefreshToken(userData),
   };
+};
 
-  const token = Jwt.sign(jwtPayload, config.jwt_secret as string, {
-    expiresIn: config.jwt_expires_in as Jwt.SignOptions["expiresIn"],
+// ! Spec 51 — exchanges a valid refresh token for a new access token. The refresh token is
+// ! neither rotated nor echoed back: it stays the same until it expires, so there is nothing
+// ! for the client to re-store. No token is stored server-side anywhere, by design — which is
+// ! also why nothing here can revoke one (spec 51 §0 H3).
+const refreshAccessToken = async (refreshToken: string) => {
+  // ! One shared message for every failure cause — malformed, bad signature, expired, wrong
+  // ! token type, unknown user, deleted user. The response must not let a caller probe which
+  // ! it was, and globalErrorHandler skips logging this route's 401s entirely (§E.1), so this
+  // ! string is also the only thing an operator ever sees for a refused refresh.
+  const rejectRefresh = () =>
+    new AppError(httpStatus.UNAUTHORIZED, "Invalid or expired refresh token");
+
+  let decoded: TRefreshPayload;
+  try {
+    decoded = Jwt.verify(
+      refreshToken,
+      config.jwt_refresh_secret as string,
+    ) as TRefreshPayload;
+  } catch {
+    throw rejectRefresh();
+  }
+
+  // ! H4's second half. Required (not optional like the access token's `type` — H8), because
+  // ! no refresh token has ever been issued without it, so there is no legacy shape here.
+  if (decoded?.type !== "refresh") {
+    throw rejectRefresh();
+  }
+
+  // ! The one unavoidable DB read on this path, and what makes soft delete and role changes
+  // ! actually take effect — the new access token is minted from this row, not from the
+  // ! refresh token's claims. Don't "optimise" it away.
+  const userData = await prisma.user.findUnique({
+    where: { id: decoded?.userId },
+    select: { id: true, email: true, userRole: true, isDeleted: true },
   });
 
-  return token;
+  if (!userData || userData?.isDeleted) {
+    throw rejectRefresh();
+  }
+
+  return { accessToken: signAccessToken(userData) };
 };
 
 const getMeFromDb = async (userId: string) => {
@@ -123,6 +201,7 @@ const updatePushToken = async (userId: string, expoPushToken: string) => {
 export const userServices = {
   createUser,
   loginFromDb,
+  refreshAccessToken,
   getMeFromDb,
   updatePushToken,
 };

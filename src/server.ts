@@ -20,6 +20,33 @@ import { prisma } from "./app/lib/prisma";
 
 // Main();
 
+// ! Spec 51 §B — fail at boot, not per request. A missing refresh secret would otherwise
+// ! make every login throw from `Jwt.sign(payload, undefined)`, and a refresh secret EQUAL to
+// ! the access secret would make an access token a structurally valid refresh token, replayable
+// ! for a new access token forever (§0 H4). Both are configuration mistakes with no safe
+// ! runtime behaviour, and this is the only cheap place to notice them.
+// ! Deliberately OUTSIDE Main()'s try/catch, which swallows everything into a console.log —
+// ! a throw in there would leave the process alive and silently not listening.
+// ! DEPLOY NOTE: JWT_REFRESH_SECRET must exist in the environment BEFORE this code is
+// ! deployed. On Vercel a throw at module scope fails the function's initialisation, so every
+// ! request 500s until the variable is set — which is the intended loud failure, but it does
+// ! mean the variable comes first. See §H's "Before merge".
+function assertJwtSecrets() {
+  if (!config.jwt_refresh_secret) {
+    throw new Error(
+      "JWT_REFRESH_SECRET is not set. Refresh tokens cannot be signed or verified without it (spec 51 §B).",
+    );
+  }
+
+  if (config.jwt_refresh_secret === config.jwt_secret) {
+    throw new Error(
+      "JWT_REFRESH_SECRET must differ from JWT_ACCESS_SECRET — with one shared secret an access token is a valid refresh token (spec 51 §0 H4).",
+    );
+  }
+}
+
+assertJwtSecrets();
+
 async function Main() {
   try {
     await prisma.$connect();

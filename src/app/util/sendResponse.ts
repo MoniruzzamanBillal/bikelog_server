@@ -5,7 +5,11 @@ type Tresponse<T> = {
   success: boolean;
   message: string;
   data: T;
+  // ! `token` is the ACCESS token (spec 51 kept the name for client back-compat). Both are
+  // ! optional and serialise to absent for every endpoint that doesn't set them, exactly as
+  // ! `token` already did before refresh tokens existed.
   token?: string;
+  refreshToken?: string;
 };
 
 const sendResponse = <T>(res: Response, data: Tresponse<T>) => {
@@ -14,6 +18,7 @@ const sendResponse = <T>(res: Response, data: Tresponse<T>) => {
     message: data.message,
     data: data.data,
     token: data.token,
+    refreshToken: data.refreshToken,
   });
 };
 

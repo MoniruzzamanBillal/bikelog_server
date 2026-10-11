@@ -6,6 +6,7 @@ const sendResponse = (res, data) => {
         message: data.message,
         data: data.data,
         token: data.token,
+        refreshToken: data.refreshToken,
     });
 };
 exports.default = sendResponse;
