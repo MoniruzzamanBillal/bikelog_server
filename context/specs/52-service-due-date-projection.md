@@ -11,7 +11,7 @@ Scope: `maintenanceLog.service.ts` only — `getRemindersFromDB` and one new mod
 ## §0 Hazards — read before writing code
 
 **H1 — The 50 km gate is the feature. The date is the garnish.**
-`maintenanceLog.service.ts:333` reads `const kmUpcoming = !kmOverdue && kmRemaining <= 50;`. Until that distance is reached, `getRemindersFromDB` emits **nothing** for the type — the reminder is not in the array at all. So no amount of client work can project a date onto it. At ~43 km/day, 50 km is barely one day of riding: the reminder arrives after the decision it was meant to inform. Replacing that threshold is the substance of this spec; the two extra response fields are the cheap part.
+`maintenanceLog.service.ts:329` reads `const kmUpcoming = !kmOverdue && kmRemaining <= 50;`. Until that distance is reached, `getRemindersFromDB` emits **nothing** for the type — the reminder is not in the array at all. So no amount of client work can project a date onto it. At ~43 km/day, 50 km is barely one day of riding: the reminder arrives after the decision it was meant to inform. Replacing that threshold is the substance of this spec; the two extra response fields are the cheap part.
 
 **H2 — Dividing by the window length instead of the covered span biases the date LATE.**
 Odometer data only advances when a log is written. If the window is 28 days but the newest fuel log is 4 days old, the real covered span is 24 days — dividing the distance by 28 understates km/day by ~14% and pushes the projected date later. **Late is the one direction a service reminder must not err in.** Always divide by the span between the two fuel logs actually used, never by the nominal window.
@@ -40,7 +40,7 @@ A new bike, or one with a single fuel log, cannot support a km/day figure. If `k
 `maintenanceLog.service.ts:108-111` computes it only when `payload.intervalKmUsed !== undefined`. Services logged without an interval have no distance reminder and nothing to project — they are invisible to this entire feature. Not fixable here; `bikelog_app` spec 54 covers it, and that spec is the real prerequisite for anyone noticing this one.
 
 **H8 — Do not feed the clamped `kmRemaining` into the projection.**
-`:370` emits `Math.max(0, kmRemaining)`. Compute the projection from the raw local `kmRemaining`, before clamping, and only for `upcoming`. Overdue rows get no projection at all (decision D4).
+`:375` emits `Math.max(0, kmRemaining)`. Compute the projection from the raw local `kmRemaining`, before clamping, and only for `upcoming`. Overdue rows get no projection at all (decision D4).
 
 **H9 — The threshold change is visible in `bikelog_client-web-` whether or not it is updated.**
 Its `components/(main)/MaintenanceLog/RemindersBanner.tsx` carries the same `getDistanceLine` logic the app mirrors. Once this ships, that banner starts surfacing reminders ~8× earlier (50 km of warning becomes ~430 km), printing `420 km left` with no date beside it. Nothing breaks — no field is renamed, removed or reshaped — so cascade step 3 is **not** triggered and no web spec is written. It is a cosmetic lag, and the parity fix there is the same handful of lines as spec 53 §C/§D.
@@ -51,7 +51,7 @@ Its `components/(main)/MaintenanceLog/RemindersBanner.tsx` carries the same `get
 
 - **D1 — The measurement window is 4 weeks (28 days); the alert horizon is 10 days. These are different knobs.** The window is how far back we look to learn km/day. The horizon is how early a reminder appears. Conflating them is easy and wrong. Both numbers were **settled by the developer on 2026-10-11** — see Settled questions at the end for what was weighed.
 - **D2 — 10 days for the horizon** (settled 2026-10-11). At ~43 km/day that converts 50 km of warning into **~430 km** — about 8× today's notice, and enough to book a workshop for the coming week without the banner becoming permanent furniture on a short-interval type like chain lube.
-  - **Accept the asymmetry this creates, deliberately.** The date branch at `:343` still fires at `daysRemaining <= 14` and this spec does not touch it, so a calendar-due service warns two weeks out while a distance-due one warns ~10 projected days out. That is a real inconsistency in the status rule and it is the price of the shorter distance horizon; if the two should ever be unified, move the *date* rule to 10, not the projection back to 14.
+  - **Accept the asymmetry this creates, deliberately.** The date branch at `:344` still fires at `daysRemaining <= 14` and this spec does not touch it, so a calendar-due service warns two weeks out while a distance-due one warns ~10 projected days out. That is a real inconsistency in the status rule and it is the price of the shorter distance horizon; if the two should ever be unified, move the *date* rule to 10, not the projection back to 14.
 - **D3 — The projection lives on the server, not the client.** The plan file's §Decisions said "start client-side"; that was written before the 50 km gate was read, and is **wrong**. The threshold is server-side, so the arithmetic that replaces it must be too. Being server-side also means the web client inherits it for free if it ever wants it.
 - **D4 — Overdue gets no projection.** It is already past; the existing "past due" line is the correct and complete thing to say.
 - **D5 — km/day comes from `FuelLog` rows directly, not from `MileageRecord`.** Mileage records only close on **full-tank** fills (`fuelLog.service.ts:163`), so they cover an unknown subset of riding. Every fuel log, full tank or not, carries `date` and `odometerReading` — which is the entire input. `@@index([bikeId])` already exists, so this is one indexed query per reminders request (not per reminder).
@@ -145,7 +145,7 @@ const getRemindersFromDB = async (bikeId: string, userId: string) => {
   const rate = await computeKmPerDay(bikeId);
 ```
 
-Inside the `nextDueOdometer !== null` branch, replacing `:325-333`:
+Inside the `nextDueOdometer !== null` branch, replacing `:326-335`:
 
 ```ts
 if (log.nextDueOdometer !== null) {
@@ -181,7 +181,7 @@ if (log.nextDueOdometer !== null) {
 
 ## §D Response shape — additive only
 
-Extend the inline reminder type (both copies — the array's type at `:307-318` and the local `reminder` literal's type at `:352-362`; they are duplicated in the current code and must stay in step):
+Extend the inline reminder type (both copies — the array's type at `:307-320` and the local `reminder` literal's type at `:354-363`; they are duplicated in the current code and must stay in step):
 
 ```ts
   projectedDaysRemaining?: number;
@@ -251,6 +251,6 @@ All three of this spec's open questions were answered before implementation star
 1. **Horizon — 10 projected days.** (Was: 14, 21 or 30?) 14 was the draft default only because `nextDueDate` already uses it; 21 and 30 were rejected as wallpaper risks — at ~43 km/day a 30-day horizon is ~1,290 km of warning, which on a 1,000 km chain-lube interval means the reminder reappears the moment you clear it and never leaves. **10 days ≈ 430 km**, still ~8× today's 50 km, and it cannot outrun any interval above ~450 km. Implemented as `PROJECTED_UPCOMING_DAYS = 10` (D2); changing it later is one constant and no client work.
 2. **Window — 4 weeks (28 days).** (Was: 8 weeks or 4?) The 5-vs-6-riding-day variance costs about `9% / sqrt(weeks)` of km/day accuracy — ±4.5% over 4 weeks vs ±3% over 8, which on a 430 km reminder is a difference of roughly half a day and is **not** the dominant error (H2 and H5 are). 4 weeks was chosen for **responsiveness**: it tracks a changed commute in a month instead of two. The accepted cost is noise from a single long highway trip, which an 8-week window would have diluted, plus the narrowed anchor band described in §B. Implemented as `PROJECTION_WINDOW_DAYS = 28` (D1).
 3. **Both `nextDueOdometer` and `nextDueDate` on one type — the earlier date wins.** (Was: keep today's distance-first precedence?) Today's `getDistanceLine`, in both clients, prints the km line and never looks at `daysRemaining` whenever `nextDueOdometer` exists, so a service that is 5 calendar days from due but 400 km from due reads as `400 km left` and the nearer deadline is invisible. The decision is to show whichever of the two clocks comes first.
-   - **This needs no server change and no change to this spec's code.** The server already sends `nextDueDate` and `daysRemaining` alongside the distance fields whenever both exist (`:378-380`), and `status` already honours the worse of the two clocks (`:344-349`). The comparison is a display decision and lives entirely in the client: **`bikelog_app` spec 53 §C/§F** carries it.
+   - **This needs no server change and no change to this spec's code.** The server already sends `nextDueDate` and `daysRemaining` alongside the distance fields whenever both exist (`:378-380`), and `status` already honours the worse of the two clocks (`:343-349`). The comparison is a display decision and lives entirely in the client: **`bikelog_app` spec 53 §A D6 and §C** carry it.
    - Note the horizon asymmetry in D2 interacts here: the calendar clock can surface a reminder 14 days out while the distance clock needs ~10 projected days, so for a dual-clock type the calendar branch will usually be the earlier one at first sight. That is correct behaviour, not a bug to tune away.
    - The web client is **not** updated for this (H9 reasoning is unchanged — nothing breaks), so the two clients' reminder copy diverges by one line until web chooses to follow.
