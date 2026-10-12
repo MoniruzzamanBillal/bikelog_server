@@ -1,6 +1,6 @@
 # 52: Service due-date projection — server half
 
-Status: ⛔ **Not Started.** Written 2026-10-11 from `../../../new Features/02-service-due-dates.md`.
+Status: ✅ **Complete.** Implemented 2026-10-12; `yarn build` + `yarn lint` clean, 38 arithmetic assertions green against the shipped source text. The live Postman pass (V1–V11, V13) is still open — see `52a-anchor-selection-findings.md` for exactly what was and was not verified. Written 2026-10-11 from `../../../new Features/02-service-due-dates.md`.
 Paired with `bikelog_app` spec 53 (the display) and `bikelog_app` spec 54 (the prerequisite that makes distance reminders exist at all).
 Scope: `maintenanceLog.service.ts` only — `getRemindersFromDB` and one new module-local helper. No schema change, no migration, no new endpoint, no new dependency.
 
@@ -127,9 +127,11 @@ const computeKmPerDay = async (bikeId: string): Promise<TRidingRate | null> => {
 
 **One consequence of the 4-week window worth knowing before you read the loop.** With `PROJECTION_WINDOW_DAYS = 28` and `MIN_PROJECTION_SPAN_DAYS = 14`, every usable anchor sits in a **14-day band** (14–28 days old), so there are at most two near-exact-week spans to choose between (21 and 28) instead of the four an 8-week window offered. The H3 snapping still works — a rider filling up every 4–7 days has several candidates in that band — but a rider who fills rarely can now land on a span like 17 days, where `offWeek` is 3 and the weekday bias is only partly removed. That is a tolerated loss of precision, not a bug: `MIN_PROJECTION_SPAN_DAYS` must **not** be lowered to widen the band, because a sub-2-week span is exactly the "one odd week dominates" case it exists to reject.
 
-- [ ] Constants added
-- [ ] `TRidingRate` added
-- [ ] `computeKmPerDay` added, with the H2 and H3 comments kept verbatim — they are the only record of why the loop exists
+> **Corrected during implementation — see `52a-anchor-selection-findings.md`.** Two things in the paragraph above are optimistic. A span of **exactly 28 days is unreachable**: `since` is computed at request time, so a log dated exactly 28 days back falls outside `gte` by the milliseconds that elapsed before the query ran. And the 14-day band describes candidate *age*, while `spanDays` is measured to the **latest log, not to now** — so the reachable span is capped at `28 − (age of the newest fuel log)`, which with a 3-day-old newest log leaves only 21 and 14 as near-whole-week options. The snapping still works; the choice is just narrower than written. No code change followed.
+
+- [x] Constants added — all five, including `PROJECTED_UPCOMING_DAYS` (§C asks for it and this is the natural home)
+- [x] `TRidingRate` added
+- [x] `computeKmPerDay` added, with the H2 and H3 comments kept verbatim — they are the only record of why the loop exists
 
 ## §C Rewire the threshold in `getRemindersFromDB`
 
@@ -174,10 +176,10 @@ if (log.nextDueOdometer !== null) {
 
 `projectedDays` is declared beside `kmRemaining` at the top of the loop body, `let projectedDays: number | undefined;`.
 
-- [ ] `const rate = await computeKmPerDay(bikeId)` added once, before the loop
-- [ ] `PROJECTED_UPCOMING_DAYS = 10` added
-- [ ] `kmUpcoming` replaced, with the fallback intact
-- [ ] `projectedDays` declared per-iteration, not hoisted outside the loop (it must reset per type)
+- [x] `const rate = await computeKmPerDay(bikeId)` added once, before the loop (immediately above the `latestPerType` map build)
+- [x] `PROJECTED_UPCOMING_DAYS = 10` added (with the §B constants)
+- [x] `kmUpcoming` replaced, with the fallback intact
+- [x] `projectedDays` declared per-iteration, not hoisted outside the loop (it must reset per type) — asserted directly: a date-only reminder sitting beside two distance reminders picks up no projection, and two distance types in one response keep their own distinct values
 
 ## §D Response shape — additive only
 
@@ -207,9 +209,9 @@ if (log.nextDueOdometer !== null) {
 
 Nothing is renamed, removed or retyped, so every existing consumer keeps working — that is what keeps the web client out of this (H9) and lets the app ship in either order (§E).
 
-- [ ] Both inline types extended
-- [ ] Fields populated under the `upcoming` guard only
-- [ ] `kmPerDay` rounded to 1dp — a raw `42.857142857142854` in a payload is noise
+- [x] Both inline types extended
+- [x] Fields populated under the `upcoming` guard only
+- [x] `kmPerDay` rounded to 1dp — a raw `42.857142857142854` in a payload is noise
 
 ## §E Deploy ordering
 
@@ -234,15 +236,17 @@ Needs a local server and Postman. `GET /api/bikes/:bikeId/reminders` throughout.
 | V4  | Bike with logs across 28 days, service 400 km out at ~43 km/day            | `upcoming`, `projectedDaysRemaining` ≈ 9, `projectedDueDate` ≈ today + 9. Note the fixture must sit **inside** 28 days now — logs older than that are no longer read                                            |
 | V5  | Same bike, service **2,400 km** out                                        | **Absent from the array** — 56 projected days exceeds the 10-day horizon. This is the correct new behaviour and the thing most likely to be mistaken for a bug                                                  |
 | V6  | Same bike, service 420 km out                                              | Boundary: ~10 days at 43 km/day is ~430 km. Confirm 420 km appears and 500 km does not                                                                                                                          |
-| V7  | Anchor selection: logs at T-28, T-22, T-21, T-0                            | Both T-28 and T-21 give `offWeek = 0`; oldest-first with strict `<` keeps the **first** zero found, so T-28 wins (the longer span, per the §B comment). Assert it and write the answer into the table once seen |
+| V7  | Anchor selection: logs at T-28, T-22, T-21, T-0                            | **Answered 2026-10-12 — the prediction below was wrong. The anchor is T-21, span 21 days.** The T-28 log is never read: it sits outside `gte` because `since` is computed at request time. Candidates are T-22 (`offWeek` 1) and T-21 (`offWeek` 0), so T-21 wins outright with no tie involved. The strict-`<` rule is still correct and was verified separately on spans of 27.9 vs 20.9 (both `offWeek` 0.1 → the longer wins). Full reasoning in `52a`. ~~Both T-28 and T-21 give `offWeek = 0`; oldest-first with strict `<` keeps the **first** zero found, so T-28 wins (the longer span, per the §B comment).~~ |
 | V8  | Overdue distance reminder                                                  | No projected fields, `kmRemaining` clamped to 0, unchanged otherwise                                                                                                                                            |
 | V9  | Date-based reminder (`nextDueDate`, no interval)                           | Completely unchanged — no projected fields                                                                                                                                                                      |
 | V10 | A log whose odometer was corrected downward, making span distance negative | No projection (distance floor), fallback applies, no `-Infinity`/`NaN` in the payload                                                                                                                           |
 | V11 | Bike with a service due and `intervalKmUsed` never set                     | Still absent entirely (H7) — confirms spec 54 is the real prerequisite                                                                                                                                          |
-| V12 | `yarn build` + `yarn lint`                                                 | Clean; no _new_ lint errors (repo carries pre-existing ones outside Bike Log modules)                                                                                                                           |
+| V12 | `yarn build` + `yarn lint`                                                 | ✅ **Done 2026-10-12.** `tsc` clean; lint reports 0 errors / 23 pre-existing `no-console` warnings, none in `maintenanceLog.service.ts`                                                                          |
 | V13 | Web client against this server, same bike as V4                            | Banner shows `400 km left` with no date and no layout break (H9)                                                                                                                                                |
 
-V7 is deliberately written as "assert and record" rather than asserting a value — work the tie rule through on paper during implementation and fix the expected answer in the spec then.
+V7 is deliberately written as "assert and record" rather than asserting a value — work the tie rule through on paper during implementation and fix the expected answer in the spec then. **Done: the answer is in the V7 row above and the reasoning is in `52a`. Paper reasoning got it wrong, which is the argument for having written it this way.**
+
+**Verification status, 2026-10-12.** V1–V11 were verified at the *function* level — the verbatim shipped text of `computeKmPerDay` and the reminder loop, evaluated against synthetic fixtures with `prisma.fuelLog.findMany` stubbed (38 assertions, all green). V12 is done. **Not verified:** anything over HTTP or against a real database — the compiled Prisma query, the `Float`→`number` round-trip, `projectedDueDate`'s JSON serialisation, and V13's web banner. The Postman pass in this table is still the thing that settles those; `52a` records why the WebSocket-proxy harness used for specs 46/48–50 could not be rebuilt here.
 
 ## Settled questions (developer, 2026-10-11)
 
