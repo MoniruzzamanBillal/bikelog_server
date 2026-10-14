@@ -19,13 +19,29 @@ const createUser = catchAsync(async (req, res) => {
 const signIn = catchAsync(async (req, res) => {
   const result = await userServices.loginFromDb(req.body);
 
-
   sendResponse(res, {
     status: httpStatus.OK,
     success: true,
     message: "User logged in successfully!!!",
-    data: null ,
-    token: result,
+    data: null,
+    // ! Spec 51: `token` keeps meaning the ACCESS token. That is the whole back-compat story
+    // ! (its §0 H1) — pre-spec-51 clients read `result.token` and ignore the new sibling.
+    token: result?.accessToken,
+    refreshToken: result?.refreshToken,
+  });
+});
+
+// ! Spec 51 — for exchanging a valid refresh token for a new access token. The refresh token
+// ! is NOT echoed back: it is unchanged, so there is nothing for the client to re-store.
+const refreshToken = catchAsync(async (req, res) => {
+  const result = await userServices.refreshAccessToken(req.body?.refreshToken);
+
+  sendResponse(res, {
+    status: httpStatus.OK,
+    success: true,
+    message: "Access token refreshed successfully!!!",
+    data: null,
+    token: result?.accessToken,
   });
 });
 
@@ -60,6 +76,7 @@ const updatePushToken = catchAsync(async (req, res) => {
 export const userController = {
   createUser,
   signIn,
+  refreshToken,
   getMe,
   updatePushToken,
 };

@@ -25,7 +25,7 @@
 ## Auth & Password Hashing
 
 - Password hashing uses **`argon2`** (`argon2.hash`/`argon2.verify`), not `bcrypt` — despite `bcrypt` also being listed in `package.json` dependencies (a boilerplate leftover), `argon2` is what's actually wired up in `user.model.ts`'s `pre("save")` hook. Follow `argon2` for any new password-handling code.
-- JWTs are verified via `authCheck` with no role argument (see `architecture.md`) — Bike Log has one role. Authorization is ownership-based: check the resource's owner matches `req.user`'s id inside the service, not via a role check.
+- JWTs are verified via `authCheck` with no role argument (see `architecture.md`) — Bike Log has one role. Since spec 51 there are two token kinds: `authCheck` only ever accepts an **access** token, and the only code allowed to sign either kind is the pair of helpers in `user.services.ts` (`signAccessToken`/`signRefreshToken`). Don't call `Jwt.sign` anywhere else — keeping the mint sites in one place is what stops the sign-time and verify-time claim shapes drifting apart. Authorization is ownership-based: check the resource's owner matches `req.user`'s id inside the service, not via a role check.
 
 ## Linting
 

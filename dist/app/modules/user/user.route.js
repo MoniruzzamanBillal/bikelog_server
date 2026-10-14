@@ -14,6 +14,13 @@ const router = (0, express_1.Router)();
 router.post("/register", (0, validateRequest_1.default)(user_validation_1.userValidations.createUserSchema), user_controller_1.userController.createUser);
 // ! for login
 router.post("/login", (0, validateRequest_1.default)(user_validation_1.userValidations.loginValidationSchema), user_controller_1.userController.signIn);
+// ! for exchanging a refresh token for a new access token (spec 51).
+// ! No authCheck, and that omission is deliberate — the caller reaches this route precisely
+// ! because its access token is expired, so requiring one would make the route unusable. The
+// ! refresh token in the body IS the credential, verified in the service against its own
+// ! secret. Same convention as notification.route.ts's cron routes, which document their own
+// ! authCheck omission.
+router.post("/refresh-token", (0, validateRequest_1.default)(user_validation_1.userValidations.refreshTokenSchema), user_controller_1.userController.refreshToken);
 // ! for getting current user
 router.get("/me", authCheck_1.default, user_controller_1.userController.getMe);
 // ! for registering/updating this device's Expo push token

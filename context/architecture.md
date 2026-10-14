@@ -7,7 +7,7 @@
 | **Runtime/Framework** | Node.js + Express 4 | HTTP server and routing. |
 | **Language** | TypeScript | Static typing across routes/services/models. |
 | **Database** | MongoDB via Mongoose | Persistence for all domain models. |
-| **Auth** | `jsonwebtoken` | Access-token issuance/verification (`config.jwt_secret`). Password hashing via `argon2` (see `code-standards.md`). |
+| **Auth** | `jsonwebtoken` | Access-token issuance/verification (`config.jwt_secret`) **plus refresh tokens since spec 51** (`config.jwt_refresh_secret` — a deliberately separate secret). Password hashing via `argon2` (see `code-standards.md`). |
 | **Validation** | Zod | Request-body schema validation via `validateRequest`. |
 | **Deployment** | Vercel serverless (`@vercel/node`) | See Deployment Notes below. |
 
@@ -30,25 +30,28 @@ No file upload, payment, or email dependencies are needed for Bike Log — `clou
 - `src/app/util/` — `catchAsync.ts`, `sendResponse.ts`.
 - `src/app/Error/` — `AppError.ts` plus `handleZodError.ts` / `handleValidationError.ts` / `handleCatError.ts` (Mongoose `CastError`) / `handleDuplicateError.ts` (Mongo duplicate-key `11000`), consumed by `globalErrorHandler`.
 - `src/app/builder/Queryuilder.ts` — generic Mongoose query builder (`search`/`filter`/`sort`/`pagination`/`field`), inherited from the boilerplate; reusable for any future paginated/filterable list endpoint (e.g. fuel-log or maintenance-log history), not yet wired into any Bike Log route.
-- `src/app/config/index.ts` — the single place `process.env` is read (`node_env`, `port`, `database_url`, `jwt_secret`, plus a leftover `openRouterApiKey` not used by Bike Log). New code should import `config` rather than reading `process.env` directly.
+- `src/app/config/index.ts` — the single place `process.env` is read (`node_env`, `port`, `database_url`, `jwt_secret`, `jwt_refresh_secret` + the two expiry windows since spec 51, plus `openRouterApiKey` — which, contrary to this line's original claim, the `ai` module very much does use). New code should import `config` rather than reading `process.env` directly.
 - `src/app/helper/openRouter.ts` — leftover from the boilerplate (AI/LLM helper); not part of Bike Log's design, don't build on it without a real reason to.
 
 ## Middleware
 
-- `authCheck` (`src/app/middleware/authCheck.ts`) — verifies the `Authorization: Bearer <token>` JWT via `config.jwt_secret`, attaches the decoded payload to `req.user`. Takes no role arguments — this only ever checks "is there a valid token," never a permission level.
+- `authCheck` (`src/app/middleware/authCheck.ts`) — verifies the `Authorization: Bearer <token>` **access** JWT via `config.jwt_secret`, attaches the decoded payload to `req.user`. Takes no role arguments — this only ever checks "is there a valid token," never a permission level. Since spec 51 it distinguishes an **expired** token (`401 "Access token expired"`) from an invalid one (`401 "Invalid access token"`) — same status, but the clients' refresh logic and the error log read better for it — and it rejects a **refresh** token presented as a bearer token outright (spec 51 §0 H4). A token with no `type` claim at all is accepted as an access token, which is what keeps pre-spec-51 tokens working until they expire (H8).
 - `adminCheck` (`src/app/middleware/adminCheck.ts`, added spec 24) — must run **after** `authCheck` (reads `req.user`); 403s unless `req.user.userRole === "admin"`. The first real consumer of `TUserRole`/`userRole`, which existed on `TUser`/`TJwtPayload` since spec 02 as forward-compatible scaffolding but was never read anywhere until spec 24's admin-only error-log endpoints. No promotion endpoint exists — the first admin account is created via a direct DB write, and since `userRole` is embedded into the JWT at login time, a promoted account must log in again before its token reflects the change.
 - `validateRequest(schema)` (`src/app/middleware/validateRequest.ts`) — runs `schema.parseAsync({ body: req.body })`, throwing a `ZodError` on failure (normalized by `globalErrorHandler`). Only validates `req.body` — not query params or route params.
 - `globalErrorHandler` (`src/app/middleware/globalErrorHandler.ts`) — normalizes `ZodError`, Mongoose `ValidationError`/`CastError`, MongoDB duplicate-key (`code: 11000`), and `AppError` into one JSON error shape (`{ success: false, message, errorSources, stack }`). Falls back to `error.status`/`error.message`/500 for anything unrecognized.
 
 ## Auth Model
 
-- Users authenticate via `POST /api/auth/login`, receiving a JWT signed with `config.jwt_secret`.
+- Users authenticate via `POST /api/auth/login`, receiving **two** JWTs (spec 51): a short-lived **access** token signed with `config.jwt_secret` (15 minutes, `type: "access"`, carrying `userId`/`userEmail`/`userRole`) and a long-lived **refresh** token signed with `config.jwt_refresh_secret` (15 days, `type: "refresh"`, carrying *only* `userId`). On the wire the access token keeps the field name `token`, which is what let both clients keep working unchanged.
+- **Neither token is stored anywhere server-side** — no session table, no denylist, no "current refresh token" column. Consequences, stated plainly: logout is client-side only, a leaked refresh token stays valid for its full 15 days, and a password change does not end other sessions. The one lever that does work is `isDeleted`, because refresh re-reads the `User` row.
+- `POST /api/auth/refresh-token` exchanges a valid refresh token for a new access token. It carries **no `authCheck`** by design (the caller is there precisely because its access token expired) and is the second route in the codebase to skip it deliberately, after the `x-cron-secret` cron routes. The refresh token is neither rotated nor echoed back. Every failure cause answers with one identical `401`, and the new access token is minted from the freshly-read `User` row rather than from the refresh token's claims — so a role change propagates within one access-token lifetime and a soft delete takes effect at the next refresh.
+- A refresh token must never authenticate a request and an access token must never refresh: enforced by the two separate secrets **and** by the `type` claim, checked on both sides.
 - Every protected route calls `authCheck`. Almost all routes are ownership-gated, not role-gated (see next bullet) — the one exception is spec 24's admin-only `/admin/error-logs` routes, which additionally require `adminCheck`.
 - Ownership, not roles, gates access to every user-owned resource (`Bike`/`FuelLog`/`MaintenanceLog`/`MaintenanceType`/`EngineOilType`/etc.): a route handler must confirm the requested resource actually belongs to `req.user`'s id before returning or mutating it — there's no separate authorization middleware for this, so each service function is responsible for that check itself. This is unrelated to `adminCheck`, which gates a handful of non-user-owned, admin-facing resources instead (currently just error logs).
 
 ## Invariants
 
-1. **Response envelope:** every controller responds via `sendResponse<T>(res, { status, success, message, data, token? })` (note the key is `status`, not `statusCode`) — don't hand-roll `res.json(...)` in new controllers.
+1. **Response envelope:** every controller responds via `sendResponse<T>(res, { status, success, message, data, token?, refreshToken? })` (note the key is `status`, not `statusCode`; `token` means the **access** token, and both token fields are set only by the two auth routes) — don't hand-roll `res.json(...)` in new controllers.
 2. **Async error propagation:** every controller/middleware handler that can throw is wrapped in `catchAsync` so errors reach `next(error)` and the global handler, rather than crashing the process or being swallowed.
 3. **Validation before controller:** any route accepting a body goes through `validateRequest(schema)` before the controller runs.
 4. **Config centralization:** all environment variables are read once in `src/app/config/index.ts` and imported from there.

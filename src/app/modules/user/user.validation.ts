@@ -21,6 +21,17 @@ const loginValidationSchema = z.object({
   }),
 });
 
+// ! Spec 51 — validation schema for the refresh-token exchange. A missing or non-string
+// ! `refreshToken` is a 400 from validateRequest, never the 401 that means "your session is
+// ! over": the client must not log the user out over its own malformed request.
+const refreshTokenSchema = z.object({
+  body: z.object({
+    refreshToken: z
+      .string({ required_error: "refreshToken is required" })
+      .min(1, { message: "refreshToken cannot be empty" }),
+  }),
+});
+
 // Validation schema for registering/updating this device's Expo push token
 const pushTokenSchema = z.object({
   body: z.object({
@@ -34,5 +45,6 @@ const pushTokenSchema = z.object({
 export const userValidations = {
   createUserSchema,
   loginValidationSchema,
+  refreshTokenSchema,
   pushTokenSchema,
 };

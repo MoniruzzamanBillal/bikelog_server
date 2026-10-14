@@ -32,6 +32,32 @@ const safeUserSelect = {
     createdAt: true,
     updatedAt: true,
 };
+// ! Spec 51 — the two token minters. Kept as the ONLY places either token is signed, so the
+// ! sign-time and verify-time shapes cannot drift apart silently (the same reasoning spec 02
+// ! used when it typed the login payload).
+const signAccessToken = (user) => {
+    const jwtPayload = {
+        userId: user === null || user === void 0 ? void 0 : user.id,
+        userEmail: user === null || user === void 0 ? void 0 : user.email,
+        userRole: user === null || user === void 0 ? void 0 : user.userRole,
+        type: "access",
+    };
+    return jsonwebtoken_1.default.sign(jwtPayload, config_1.default.jwt_secret, {
+        expiresIn: config_1.default.jwt_access_expires_in,
+    });
+};
+// ! Signed with a DIFFERENT secret from the access token, which is not optional: under one
+// ! shared secret an access token would verify here and could be replayed for a fresh access
+// ! token forever (spec 51 §0 H4). The `type` claim is the second half of that defence.
+const signRefreshToken = (user) => {
+    const jwtPayload = {
+        userId: user === null || user === void 0 ? void 0 : user.id,
+        type: "refresh",
+    };
+    return jsonwebtoken_1.default.sign(jwtPayload, config_1.default.jwt_refresh_secret, {
+        expiresIn: config_1.default.jwt_refresh_expires_in,
+    });
+};
 // ! for creating a user
 const createUser = (payload) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -59,22 +85,59 @@ const loginFromDb = (payload) => __awaiter(void 0, void 0, void 0, function* () 
     const userData = yield prisma_1.prisma.user.findUnique({
         where: { email: payload === null || payload === void 0 ? void 0 : payload.email },
     });
-    if (!userData) {
+    // ! Spec 51 §0 H6: a soft-deleted user could log in — this query never looked at
+    // ! `isDeleted`, so the flag did nothing for auth (the SQA report's DEF-07). Collapsed into
+    // ! the same 404 as a missing user on purpose, so the response can't tell "deleted" from
+    // ! "never existed". Checked in JS rather than in the `where` because `findUnique` only
+    // ! accepts unique fields.
+    if (!userData || (userData === null || userData === void 0 ? void 0 : userData.isDeleted)) {
         throw new AppError_1.default(http_status_1.default.NOT_FOUND, "User dont exist with this email !!!");
     }
     const isPasswordMatch = yield argon2_1.default.verify(userData === null || userData === void 0 ? void 0 : userData.password, payload === null || payload === void 0 ? void 0 : payload.password);
     if (!isPasswordMatch) {
         throw new AppError_1.default(http_status_1.default.FORBIDDEN, "Password don't match !!");
     }
-    const jwtPayload = {
-        userId: userData === null || userData === void 0 ? void 0 : userData.id,
-        userEmail: userData === null || userData === void 0 ? void 0 : userData.email,
-        userRole: userData === null || userData === void 0 ? void 0 : userData.userRole,
+    // ! Spec 51: two tokens now. `token` on the wire stays the ACCESS token (see the controller)
+    // ! so pre-spec-51 clients, which read `result.token` and know nothing about refreshing,
+    // ! keep working untouched.
+    return {
+        accessToken: signAccessToken(userData),
+        refreshToken: signRefreshToken(userData),
     };
-    const token = jsonwebtoken_1.default.sign(jwtPayload, config_1.default.jwt_secret, {
-        expiresIn: config_1.default.jwt_expires_in,
+});
+// ! Spec 51 — exchanges a valid refresh token for a new access token. The refresh token is
+// ! neither rotated nor echoed back: it stays the same until it expires, so there is nothing
+// ! for the client to re-store. No token is stored server-side anywhere, by design — which is
+// ! also why nothing here can revoke one (spec 51 §0 H3).
+const refreshAccessToken = (refreshToken) => __awaiter(void 0, void 0, void 0, function* () {
+    // ! One shared message for every failure cause — malformed, bad signature, expired, wrong
+    // ! token type, unknown user, deleted user. The response must not let a caller probe which
+    // ! it was, and globalErrorHandler skips logging this route's 401s entirely (§E.1), so this
+    // ! string is also the only thing an operator ever sees for a refused refresh.
+    const rejectRefresh = () => new AppError_1.default(http_status_1.default.UNAUTHORIZED, "Invalid or expired refresh token");
+    let decoded;
+    try {
+        decoded = jsonwebtoken_1.default.verify(refreshToken, config_1.default.jwt_refresh_secret);
+    }
+    catch (_a) {
+        throw rejectRefresh();
+    }
+    // ! H4's second half. Required (not optional like the access token's `type` — H8), because
+    // ! no refresh token has ever been issued without it, so there is no legacy shape here.
+    if ((decoded === null || decoded === void 0 ? void 0 : decoded.type) !== "refresh") {
+        throw rejectRefresh();
+    }
+    // ! The one unavoidable DB read on this path, and what makes soft delete and role changes
+    // ! actually take effect — the new access token is minted from this row, not from the
+    // ! refresh token's claims. Don't "optimise" it away.
+    const userData = yield prisma_1.prisma.user.findUnique({
+        where: { id: decoded === null || decoded === void 0 ? void 0 : decoded.userId },
+        select: { id: true, email: true, userRole: true, isDeleted: true },
     });
-    return token;
+    if (!userData || (userData === null || userData === void 0 ? void 0 : userData.isDeleted)) {
+        throw rejectRefresh();
+    }
+    return { accessToken: signAccessToken(userData) };
 });
 const getMeFromDb = (userId) => __awaiter(void 0, void 0, void 0, function* () {
     const result = yield prisma_1.prisma.user.findUnique({
@@ -103,6 +166,7 @@ const updatePushToken = (userId, expoPushToken) => __awaiter(void 0, void 0, voi
 exports.userServices = {
     createUser,
     loginFromDb,
+    refreshAccessToken,
     getMeFromDb,
     updatePushToken,
 };

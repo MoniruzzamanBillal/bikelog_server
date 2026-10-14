@@ -8,7 +8,7 @@ Companion doc for `bikelog-api.postman_collection.json`. Every example body belo
 2. Check the collection variable `baseUrl` (collection → Variables tab) — defaults to `http://localhost:5000/api`. Change the port if your `.env`'s `PORT` isn't `5000`.
 3. Run requests in this order the first time, top to bottom — each one's test script auto-captures an id into a collection variable that later requests depend on:
    1. **Auth → Register** (only once — a second run 409s since the email already exists)
-   2. **Auth → Login** — captures `token`
+   2. **Auth → Login** — captures `token` (access, 15 min) and `refreshToken` (15 days)
    3. **Bikes → Create Bike** — captures `bikeId`
    4. **Maintenance Types → Create Maintenance Type** — captures `maintenanceTypeId`
    5. **Engine Oil Types → Create Engine Oil Type** — captures `engineOilTypeId`
@@ -45,7 +45,25 @@ There is no way to seed the two catalogs: the seed scripts were removed in spec 
 }
 ```
 
-**Response shape is different from every other endpoint**: `{ success, message, data: null, token: "<jwt>" }` — the JWT is a top-level `token` field, not `data.token`. The collection's test script reads it from there.
+**Response shape is different from every other endpoint**: `{ success, message, data: null, token: "<jwt>", refreshToken: "<jwt>" }` — both JWTs are top-level fields, not under `data`. The collection's test script reads them from there.
+
+Since spec 51 there are **two** tokens. `token` is the **access** token (15 minutes) and is what every authenticated request sends as `Authorization: Bearer`. `refreshToken` (15 days) is exchanged for a new access token at the route below; it is the only thing that keeps a session alive beyond 15 minutes. `token` kept its name and meaning on purpose, so clients written before spec 51 keep working unchanged.
+
+### `POST /api/auth/refresh-token` — no auth
+
+```json
+{
+  "refreshToken": "<the refreshToken from login>"
+}
+```
+
+Returns `{ success, message, data: null, token: "<new 15-minute access token>" }`. The refresh token is **not** echoed back and **not** rotated — it stays valid until it expires, so the client has nothing to re-store.
+
+`authCheck` is deliberately absent: the caller is here precisely because its access token expired, so requiring one would make the route unusable. The refresh token in the body is the credential.
+
+Every failure — malformed, bad signature, expired, an **access** token presented here, unknown user, soft-deleted user — returns the same `401 "Invalid or expired refresh token"`, so the response cannot be used to probe which it was. A missing or non-string `refreshToken` is a `400` from `validateRequest` instead, never a `401`: the client must not log the user out over its own malformed request.
+
+Two things worth knowing when testing it: a `401` from this route writes **no** `error_logs` row (the request body holds a live 15-day credential), and no token is stored server-side at all — so nothing here can revoke one, and logout is purely client-side.
 
 ### `GET /api/auth/me` — auth required
 
