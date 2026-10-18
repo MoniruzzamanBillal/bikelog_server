@@ -426,6 +426,8 @@ Three non-error states, each with a defined shape rather than a `null` to guess 
 
 Same query support as fuel logs: `page`, `limit`, `sort` (default `-changeDate`, with `createdAt desc` appended so two changes entered on the same calendar day have a total order). `bike`/`isDeleted` query keys are ignored server-side for the same IDOR-hardening reason as fuel logs. Don't invent other filters — leftover query params land in the Prisma `where` with no coercion and a non-string value 500s.
 
+**Two derived fields per row, read-only (never send them).** `kmOnThisOil` is the **next** change's odometer minus this row's — how far this oil actually ran — and `costPerKm` is `cost / kmOnThisOil`. The newest change has no following change, so both are `null`; two changes at the same odometer give `costPerKm: null`, never `Infinity`. The server computes them because the neighbouring change sits on the previous page at every page boundary, so `?page=2`'s first row still carries a real figure. `GET .../engine-oil-logs/:id` returns both as `null` — the key is always present, the lookup just isn't run.
+
 ### `GET .../engine-oil-logs/:id`, `PATCH .../engine-oil-logs/:id`, `DELETE .../engine-oil-logs/:id` — auth required
 
 Update body: same fields as create, all optional. `oilType` may be re-pointed but never cleared. There is **no** closed-period lock here, unlike fuel logs — nothing downstream closes over an oil log, so an oil log is always editable and `DELETE` is a plain soft delete.

@@ -2354,7 +2354,7 @@
                 }
               ]
             },
-            "description": "Same query support as fuel logs: `page`, `limit`, `sort` (default `-changeDate`, with `createdAt desc` appended so same-day entries have a total order \u2014 H13). `bike`/`isDeleted` query keys are ignored server-side (IDOR hardening).\n\n! Do not invent other filters: leftover query params go straight into the Prisma `where` with no coercion, so a non-string value 500s through a `globalErrorHandler` that has no Prisma branch (\u00a70 H14)."
+            "description": "Same query support as fuel logs: `page`, `limit`, `sort` (default `-changeDate`, with `createdAt desc` appended so same-day entries have a total order \u2014 H13). `bike`/`isDeleted` query keys are ignored server-side (IDOR hardening).\n\n! Do not invent other filters: leftover query params go straight into the Prisma `where` with no coercion, so a non-string value 500s through a `globalErrorHandler` that has no Prisma branch (\u00a70 H14).\n\nEach row carries two **derived** fields (D12): `kmOnThisOil` (the NEXT change's odometer minus this one's \u2014 how far this oil actually ran) and `costPerKm` (`cost / kmOnThisOil`). The **newest** change has no following change, so both are `null`; two changes at the same odometer give `costPerKm: null`, never `Infinity`. They are computed here rather than in the client because the neighbouring change sits on the previous page at every page boundary \u2014 check `?page=2`'s first row, which still carries a real figure. `GET /:id` returns both as `null`."
           },
           "event": [
             {

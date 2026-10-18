@@ -96,6 +96,24 @@ const createEngineOilLogIntoDB = (bikeId, userId, payload) => __awaiter(void 0, 
         bikeNickname: bike.nickname,
     };
 });
+// ! D12: the two derived fields the list endpoint adds per row. A row's period is closed
+// ! by its NEWER neighbour, so `kmOnThisOil` is that neighbour's reading minus this one's.
+// ! Computed server-side on purpose: a client deriving it from the page it happens to be
+// ! holding gets a figure that appears and vanishes with pagination, because the
+// ! neighbouring change sits on the previous page at every boundary
+// ! (`bikelog_client-web-` spec 33 H-W12).
+const withPeriodFields = (row, newerNeighbour) => {
+    const kmOnThisOil = newerNeighbour
+        ? newerNeighbour.odometerReading - row.odometerReading
+        : null;
+    return Object.assign(Object.assign({}, row), { kmOnThisOil, 
+        // ! null, never Infinity — two changes can legitimately share an odometer reading
+        // ! (the sequence check allows equal readings), and `cost / 0` would serialise as
+        // ! `null` through JSON anyway while breaking any arithmetic on the way there
+        costPerKm: kmOnThisOil !== null && kmOnThisOil > 0
+            ? row.cost / kmOnThisOil
+            : null });
+};
 const getEngineOilLogsFromDB = (bikeId, userId, query) => __awaiter(void 0, void 0, void 0, function* () {
     yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
     // ! strip client-controlled "bike"/"isDeleted" keys before they reach
@@ -119,7 +137,44 @@ const getEngineOilLogsFromDB = (bikeId, userId, query) => __awaiter(void 0, void
         }),
         prisma_1.prisma.engineOilLog.count({ where }),
     ]);
-    return { result: result.map(toApiShape), meta };
+    const shaped = result.map(toApiShape);
+    // ! D12. Pair each row with its newer neighbour. Ordering the page myself rather than
+    // ! trusting "the previous element" keeps this correct even if a caller passes
+    // ! `?sort=changeDate` — same pairing under the default `-changeDate`, which is the only
+    // ! sort anything actually uses. H13's tie-break is applied here too, so two changes on
+    // ! one calendar day pair in the same order the list shows them in.
+    const newestFirst = [...shaped].sort((a, b) => b.changeDate.getTime() - a.changeDate.getTime() ||
+        b.createdAt.getTime() - a.createdAt.getTime());
+    // ! Only the page's newest row has an off-page neighbour, so ONE extra query covers
+    // ! every page boundary — two queries per list request in total, both served by
+    // ! `@@index([bikeId, changeDate])`. Without it, page 2's first row would read `—` and
+    // ! the page boundary would look like a bug (spec 33 V15).
+    const pageNewest = newestFirst[0];
+    const offPageNeighbour = pageNewest
+        ? yield prisma_1.prisma.engineOilLog.findFirst({
+            where: {
+                bikeId,
+                isDeleted: false,
+                OR: [
+                    { changeDate: { gt: pageNewest.changeDate } },
+                    {
+                        changeDate: pageNewest.changeDate,
+                        createdAt: { gt: pageNewest.createdAt },
+                    },
+                ],
+            },
+            orderBy: [{ changeDate: "asc" }, { createdAt: "asc" }],
+            select: { odometerReading: true },
+        })
+        : null;
+    const neighbourById = new Map();
+    newestFirst.forEach((row, index) => {
+        neighbourById.set(row.id, index === 0 ? offPageNeighbour : newestFirst[index - 1]);
+    });
+    return {
+        result: shaped.map((row) => { var _a; return withPeriodFields(row, (_a = neighbourById.get(row.id)) !== null && _a !== void 0 ? _a : null); }),
+        meta,
+    };
 });
 const getEngineOilLogByIdFromDB = (bikeId, userId, id) => __awaiter(void 0, void 0, void 0, function* () {
     yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
@@ -130,7 +185,10 @@ const getEngineOilLogByIdFromDB = (bikeId, userId, id) => __awaiter(void 0, void
     if (!log) {
         throw new AppError_1.default(http_status_1.default.NOT_FOUND, "Engine oil log not found");
     }
-    return toApiShape(log);
+    // ! D12: present but always `null` here rather than running the neighbour lookup —
+    // ! nothing consumes the figure on a single read, and a key that exists on the list
+    // ! shape but not this one is the kind of difference a client discovers at runtime.
+    return Object.assign(Object.assign({}, toApiShape(log)), { kmOnThisOil: null, costPerKm: null });
 });
 const updateEngineOilLogInDB = (bikeId, userId, id, payload) => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b, _c, _d, _e;
