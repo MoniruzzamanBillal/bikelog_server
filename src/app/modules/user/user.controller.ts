@@ -57,6 +57,48 @@ const getMe = catchAsync(async (req, res) => {
   });
 });
 
+// ! Spec 53 — for updating the logged-in user's own display name
+const updateProfile = catchAsync(async (req, res) => {
+  const result = await userServices.updateProfile(
+    req.user.userId,
+    req.body.name,
+  );
+
+  sendResponse(res, {
+    status: httpStatus.OK,
+    success: true,
+    message: "Profile updated successfully!!!",
+    data: result,
+  });
+});
+
+// ! Spec 53 — for setting/replacing the logged-in user's profile picture
+const updateProfilePicture = catchAsync(async (req, res) => {
+  const result = await userServices.updateProfilePicture(
+    req.user.userId,
+    req.file,
+  );
+
+  sendResponse(res, {
+    status: httpStatus.OK,
+    success: true,
+    message: "Profile picture uploaded successfully",
+    data: result,
+  });
+});
+
+// ! Spec 53 — for removing the logged-in user's profile picture
+const deleteProfilePicture = catchAsync(async (req, res) => {
+  const result = await userServices.deleteProfilePicture(req.user.userId);
+
+  sendResponse(res, {
+    status: httpStatus.OK,
+    success: true,
+    message: "Profile picture deleted successfully",
+    data: result,
+  });
+});
+
 // ! for registering/updating this device's Expo push token
 const updatePushToken = catchAsync(async (req, res) => {
   const result = await userServices.updatePushToken(
@@ -78,5 +120,8 @@ export const userController = {
   signIn,
   refreshToken,
   getMe,
+  updateProfile,
+  updateProfilePicture,
+  deleteProfilePicture,
   updatePushToken,
 };

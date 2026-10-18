@@ -14,6 +14,7 @@ Companion doc for `bikelog-api.postman_collection.json`. Every example body belo
    5. **Engine Oil Types → Create Engine Oil Type** — captures `engineOilTypeId`
    6. **Fuel Logs → Create Fuel Log** — captures `fuelLogId`
    7. **Maintenance Logs → Create Maintenance Log** — captures `maintenanceLogId`
+   8. **Engine Oil Logs → Create Engine Oil Log** — captures `engineOilLogId`
 4. After that, every other request (list/get/update/delete, mileage, reminders, spending) works as-is. Re-run any `Create` request any time to refresh its captured id.
 5. Auth is Bearer `{{token}}` at the collection level — you don't need to set headers manually on each request.
 6. `Bikes → Delete Bike` soft-deletes the bike everything else chains off of — run it last, if at all.
@@ -67,7 +68,61 @@ Two things worth knowing when testing it: a `401` from this route writes **no** 
 
 ### `GET /api/auth/me` — auth required
 
-No body. Returns the logged-in user (password excluded).
+No body. Returns the logged-in user (password excluded). Since spec 53 the response also carries
+`profilePicture` — either `{ url, publicId }` or `null` — and so do the `register`, `update-profile`,
+`profile-picture` and `push-token` responses: they all share one `safeUserSelect`.
+
+### `PATCH /api/auth/update-profile` — auth required
+
+```json
+{
+  "name": "Moniruzzaman Billal"
+}
+```
+
+| Field  | Required | Rules |
+| ------ | -------- | ----- |
+| `name` | **yes**  | string, **trimmed**, 1–60 chars. Whitespace-only is a `400` — `trim()` runs before `min(1)` |
+
+The only editable user field besides the picture and the push token (spec 53). There is **no user id in
+the path**: the route acts on the token's `userId`, so there is nothing to tamper with. Email and
+password are deliberately not editable — email is the unique login key and needs a verification flow,
+and a password change needs the current password; both are their own future spec.
+
+### `PUT /api/auth/profile-picture` — auth required
+
+`multipart/form-data`, **one part named `image`**.
+
+| Part    | Required | Rules |
+| ------- | -------- | ----- |
+| `image` | **yes**  | `image/*` only, **4 MB max** |
+
+4 MB, not the 5 MB the other image routes allow: Vercel refuses a request body over ~4.5 MB before it
+reaches multer, so a 5 MB cap would make the clean `400` unreachable in production. The asset is stored
+under Cloudinary folder `bikelog/avatars`, transformed to 512×512 `crop: fill, gravity: face` — the app
+does no client-side resize, so normalising happens server-side.
+
+Four distinct `400`s, each from a different layer, which is worth knowing when a test fails:
+
+| Cause | Where it comes from | Message |
+| ----- | ------------------- | ------- |
+| Part named anything but `image` | multer | `Unexpected field` |
+| Over 4 MB | multer | `File too large` |
+| Not an image | the `fileFilter` | `Only image files are allowed` |
+| No file part at all | the service | `Image file is required` |
+
+All four arrive as a clean `400` only because the route wraps the upload in `handleAvatarUpload` — a
+`MulterError` is not an `AppError` and has no `.status`, so without it the first two would surface as a
+`500`. Replacing an existing picture deletes the old Cloudinary asset **after** the DB write, so the row
+never points at a deleted asset; the worst case is one orphaned asset.
+
+### `DELETE /api/auth/profile-picture` — auth required
+
+No body. Responds with the same user shape and `profilePicture: null`. Running it twice is a `404`
+(`Profile picture not found`) — the column is cleared with `Prisma.JsonNull`, which reads back as JS
+`null`, so the guard correctly sees it as absent. `PUT .../profile-picture` is **not** `PATCH
+/auth/update-profile` with an extra field: an image is multipart and the name is Zod-validated JSON, and
+keeping them separate is what lets the app upload a photo immediately while **Save** means the name only.
 
 ### `POST /api/auth/push-token` — auth required
 
@@ -308,6 +363,91 @@ No body, no query params. Computed on read by comparing the bike's `currentOdome
 
 ---
 
+## Engine Oil Logs (`/api/bikes/:bikeId/engine-oil-logs`)
+
+Spec 54. An oil change is its own record now, not a maintenance log with an oil type bolted on. The historical entries were carried over by `src/scripts/importOilMaintenanceLogsToEngineOilLogs.ts`, which copies them and then soft-deletes the originals — so an imported row has `importedFromMaintenanceLogId` set and the maintenance log it came from no longer appears in the Maintenance Logs list.
+
+### `GET .../engine-oil-logs/status` — auth required
+
+No body, no query params. The whole oil screen in one request, computed on read — **nothing is stored**. `bike.currentOdometer` is read live on every call, which is what makes a Settings odometer update (`PATCH /api/bikes/:id/odometer`) show up here immediately.
+
+| Field                                | Always? | Notes                                                                                          |
+| ------------------------------------ | ------- | ---------------------------------------------------------------------------------------------- |
+| `status`                             | yes     | `"ok"` / `"upcoming"` / `"overdue"` / `"unknown"`                                             |
+| `currentOdometer`                    | yes     | the bike's live reading                                                                        |
+| `lastChange`                         | yes     | `null` when there is no oil log yet; otherwise `{ _id, changeDate, odometerReading, oilType, intervalKm?, nextDueOdometer?, oilFilterChanged }` |
+| `kmSinceChange`                      | no      | absent only in the no-log state; floored at 0                                                 |
+| `kmRemaining`                        | no      | **signed** — negative means past due. Absent when the log carries no interval                 |
+| `percentUsed`                        | no      | integer percent; absent with `kmRemaining`                                                     |
+| `projectedDaysRemaining`, `projectedDueDate` | no | absent when there is no usable riding rate, and when already overdue                          |
+| `kmPerDay`, `rateBasis`              | no      | present whenever a rate exists (1dp; `rateBasis` is `{ spanDays, distanceKm }`)               |
+
+Three non-error states, each with a defined shape rather than a `null` to guess at:
+
+- **No oil log yet** → `status: "unknown"`, `lastChange: null`, `currentOdometer` only.
+- **An imported log with no interval** → `lastChange` + `kmSinceChange` present, everything interval-derived omitted, `status: "unknown"`.
+- **No usable riding rate** (fewer than 2 fuel logs in the last 28 days, a span under 14 days, or under 100 km covered) → the distance fields stay, the projection is omitted, and `status` falls back to the pre-spec-52 "within 50 km" rule.
+
+### `POST .../engine-oil-logs` — auth required
+
+```json
+{
+  "oilType": "<a real EngineOilType _id>",
+  "odometerReading": 18400,
+  "intervalKmUsed": 2400,
+  "quantityLiters": 1.2,
+  "oilFilterChanged": true,
+  "cost": 1250,
+  "changeDate": "2026-08-12",
+  "serviceCenter": "City Bike Care",
+  "notes": "Motul 7100, filter changed too"
+}
+```
+
+| Field                       | Required | Notes                                                                                              |
+| --------------------------- | -------- | -------------------------------------------------------------------------------------------------- |
+| `oilType`                   | yes      | ObjectId ref to one of **your own** `EngineOilType` rows — another user's id is a 404, not a 403   |
+| `odometerReading`           | yes      | finite number 0–999,999                                                                            |
+| `cost`                      | yes      | finite, nonnegative, ≤ 9,999,999.99                                                                |
+| `intervalKmUsed`            | no       | positive, ≤ 100,000. The client normally sends it, pre-filled from the oil type's `suggestedIntervalKm` and editable by the rider; omitted, the server falls back to that same catalog value |
+| `quantityLiters`            | no       | positive, ≤ 20                                                                                     |
+| `oilFilterChanged`          | no       | boolean, defaults `false`                                                                          |
+| `changeDate`                | no       | date; defaults to now                                                                              |
+| `serviceCenter`             | no       | string, ≤ 100 chars                                                                                |
+| `notes`                     | no       | string, ≤ 500 chars                                                                                |
+
+**Never send `nextDueOdometer`** — always server-derived as `odometerReading + intervalKmUsed`, and absent from both the create and the update schema. Whatever interval is resolved at write time is **frozen on the row**: editing the oil type's `suggestedIntervalKm` later never moves a past change's due point, and only the next log entered picks up the new suggestion.
+
+**Odometer ordering.** The reading must be ≥ the newest earlier oil log's and ≤ the oldest later one's, across this bike's live oil logs (400 otherwise, naming the offending reading). It is **not** compared against `currentOdometer`, so backdating the oil change you already made — the first thing you will do on this screen — works.
+
+**Sanity checks.** `changeDate` before the bike's `purchaseDate` → 400 ("Engine oil change date cannot be before the bike's purchase date (YYYY-MM-DD)"), on create and `PATCH`; equal, or omitted, is fine.
+
+### `GET .../engine-oil-logs` — auth required
+
+Same query support as fuel logs: `page`, `limit`, `sort` (default `-changeDate`, with `createdAt desc` appended so two changes entered on the same calendar day have a total order). `bike`/`isDeleted` query keys are ignored server-side for the same IDOR-hardening reason as fuel logs. Don't invent other filters — leftover query params land in the Prisma `where` with no coercion and a non-string value 500s.
+
+**Two derived fields per row, read-only (never send them).** `kmOnThisOil` is the **next** change's odometer minus this row's — how far this oil actually ran — and `costPerKm` is `cost / kmOnThisOil`. The newest change has no following change, so both are `null`; two changes at the same odometer give `costPerKm: null`, never `Infinity`. The server computes them because the neighbouring change sits on the previous page at every page boundary, so `?page=2`'s first row still carries a real figure. `GET .../engine-oil-logs/:id` returns both as `null` — the key is always present, the lookup just isn't run.
+
+### `GET .../engine-oil-logs/:id`, `PATCH .../engine-oil-logs/:id`, `DELETE .../engine-oil-logs/:id` — auth required
+
+Update body: same fields as create, all optional. `oilType` may be re-pointed but never cleared. There is **no** closed-period lock here, unlike fuel logs — nothing downstream closes over an oil log, so an oil log is always editable and `DELETE` is a plain soft delete.
+
+`nextDueOdometer` is recomputed when `odometerReading` or `intervalKmUsed` moves, and **only** then: a `PATCH` that changes `oilType` alone leaves the stored interval and the due point untouched.
+
+```json
+{
+  "cost": 1300,
+  "notes": "Corrected cost after receipt"
+}
+```
+
+### Reminders and spending both still see oil changes
+
+- `GET /api/bikes/:bikeId/reminders` keeps emitting an engine-oil reminder, now sourced from this table instead of `maintenance_logs` — same shape, same fields, so both clients' existing banners render it with no change.
+- Oil money appears in `GET .../spending-summary` as its own `Engine Oil` category, and in `.../spending-summary/details` as a `source: "oil"` record.
+
+---
+
 ## Spending Summary (`/api/bikes/:bikeId/spending-summary`)
 
 `GET` only, query params (no body):
@@ -324,20 +464,21 @@ Examples:
 - `GET .../spending-summary?period=year&targetYear=2026`
 - `GET .../spending-summary?period=lifetime`
 
-Response is totals only (`totalSpending`, `categoryBreakdown` per maintenance type + a `Fuel` bucket + an `Accessories` bucket) — averages are intentionally left for the frontend to compute.
+Response is totals only (`totalSpending`, `categoryBreakdown` per maintenance type + a `Fuel` bucket + an `Accessories` bucket + an `Engine Oil` bucket since spec 54) — averages are intentionally left for the frontend to compute.
 
-**Accessories count too (spec 25)**: a `bikeAccessory` only contributes to spending once its `status` is `"purchased"` — `pending`/`cancelled` wishlist entries never appear here. It's bucketed by `purchaseDate` (server-stamped the moment `status` became `"purchased"`, not `createdAt`), so it lands in whichever month/year it was actually marked purchased. `GET .../spending-summary/details` (spec 23's line-item export endpoint, undocumented elsewhere in this file — a pre-existing gap) includes it as its own `source: "accessory"` record, alongside `"fuel"` and `"maintenance"`.
+**Accessories count too (spec 25)**: a `bikeAccessory` only contributes to spending once its `status` is `"purchased"` — `pending`/`cancelled` wishlist entries never appear here. It's bucketed by `purchaseDate` (server-stamped the moment `status` became `"purchased"`, not `createdAt`), so it lands in whichever month/year it was actually marked purchased. `GET .../spending-summary/details` (spec 23's line-item export endpoint, undocumented elsewhere in this file — a pre-existing gap) includes it as its own `source: "accessory"` record, alongside `"fuel"`, `"maintenance"` and — since spec 54 — `"oil"`.
 
 ---
 
-## Image uploads (Cloudinary) — fuel logs, maintenance logs, accessories, issues
+## Image uploads (Cloudinary) — fuel logs, maintenance logs, engine oil logs, accessories, issues
 
-Four modules support attaching a Cloudinary-backed image; all upload/replace requests are `multipart/form-data`, not JSON, and all image fields are optional (older records simply have none).
+Five modules support attaching a Cloudinary-backed image; all upload/replace requests are `multipart/form-data`, not JSON, and all image fields are optional (older records simply have none).
 
 | Route                                                              | Field name(s)     | Cardinality              |
 | ------------------------------------------------------------------- | ------------------ | ------------------------- |
 | `PUT/DELETE .../fuel-logs/:id/image`                                | `receiptImage`      | one per fuel log          |
 | `PUT/DELETE .../maintenance-logs/:id/image`                         | `serviceImage`      | one per maintenance log   |
+| `PUT/DELETE .../engine-oil-logs/:id/image`                          | `receiptImage`      | one per engine oil log    |
 | `PUT/DELETE .../accessories/:id/image`                              | `productImage`      | one per accessory         |
 | `POST .../issues/:id/images`, `DELETE .../issues/:id/images/:imageId` | `images` (array)  | many per issue (up to 5 per POST request) |
 
@@ -347,6 +488,7 @@ Notes:
 - Only image mimetypes are accepted (5MB max per file) — anything else 400s before reaching Cloudinary.
 - Every stored image is `{ url, publicId }`, never a bare string — `publicId` is what lets the server actually delete the old Cloudinary asset when you replace or remove an image, instead of leaving it orphaned.
 - Replacing a single-image field (`PUT .../image`) deletes the old Cloudinary asset first, then uploads the new one.
+- **Imported engine oil logs share their asset with the maintenance log they came from** until the import's `--finalize` step soft-deletes that log: the import copies the `{ url, publicId }` reference, never the file. Deleting the image on such a row before finalize would break the maintenance log's thumbnail too.
 - Bike issue images are additive (`POST` appends, never replaces) — each image gets its own subdocument `_id`, used to delete just that one image via `DELETE .../images/:imageId`.
 - `bikeAccessoryId` **is** auto-captured now (spec 25 added a `Create Bike Accessory` request to the collection, closing this gap). `bikeIssueId` still isn't (no `Create`/`List` request exists for that module in this collection yet) — paste in a real id from that bike's `/issues` endpoint manually.
 
@@ -434,6 +576,7 @@ Returns one log document in full, including the complete `stack` trace. A nonexi
 | bike                     | `owner`                                  | derived from the JWT                                                                |
 | bike                     | `currentOdometer` (on `PATCH`)           | stripped server-side; only settable as the initial value on create                  |
 | fuelLog                  | `totalCost`                              | always recomputed from `litersAdded * pricePerLiter`                                |
-| fuelLog / maintenanceLog / bikeDocument | `bike`                    | comes from the URL's `:bikeId`, not the body                                        |
-| maintenanceLog           | `nextDueOdometer`                        | always recomputed from `odometerReading + intervalKmUsed`                           |
+| fuelLog / maintenanceLog / engineOilLog / bikeDocument | `bike`      | comes from the URL's `:bikeId`, not the body                                        |
+| maintenanceLog / engineOilLog | `nextDueOdometer`                   | always recomputed from `odometerReading + intervalKmUsed`                           |
+| engineOilLog             | `importedFromMaintenanceLogId`           | written only by the spec 54 import script, never over the wire                      |
 | mileageRecord            | everything                               | no write endpoints exist — records are only created by closing a full-tank fuel log |

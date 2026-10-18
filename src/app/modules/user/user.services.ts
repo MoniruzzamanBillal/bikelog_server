@@ -5,14 +5,24 @@ import Jwt from "jsonwebtoken";
 import AppError from "../../Error/AppError";
 import config from "../../config";
 import { prisma } from "../../lib/prisma";
+import { deleteCloudinaryImage } from "../../util/cloudinary";
 import { generateObjectId } from "../../util/generateObjectId";
-import { TUser, TJwtPayload, TRefreshPayload } from "./user.interface";
+import {
+  TUser,
+  TJwtPayload,
+  TRefreshPayload,
+  TUserProfilePicture,
+} from "./user.interface";
 
 // every field except `password`, so a newly-added sensitive field never leaks by accident
 const safeUserSelect = {
   id: true,
   name: true,
   email: true,
+  // ! Spec 53 D8: this one line is what puts the profile picture on `/auth/me`,
+  // ! `POST /auth/register` and `POST /auth/push-token` at once — purely additive, nothing
+  // ! renamed or retyped, so no client is forced to change.
+  profilePicture: true,
   isDeleted: true,
   userRole: true,
   expoPushToken: true,
@@ -180,6 +190,103 @@ const getMeFromDb = async (userId: string) => {
   return { ...result, _id: result.id };
 };
 
+// ! Spec 53 — for updating the logged-in user's own display name. Acts on the id from the
+// ! JWT only; there is deliberately no user id in the route, so there is no IDOR surface.
+const updateProfile = async (userId: string, name: string) => {
+  const existing = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, isDeleted: true },
+  });
+
+  if (!existing || existing?.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, "User not found");
+  }
+
+  const result = await prisma.user.update({
+    where: { id: userId },
+    // ! Already trimmed and non-empty by Zod (spec 53 H1) — never build this object with a
+    // ! possibly-undefined name, since `name` is NOT NULL in the schema.
+    data: { name },
+    select: safeUserSelect,
+  });
+
+  return { ...result, _id: result.id };
+};
+
+// ! Spec 53 — for setting or replacing the logged-in user's profile picture.
+const updateProfilePicture = async (
+  userId: string,
+  file: Express.Multer.File | undefined,
+) => {
+  // ! multer leaves `req.file` undefined when no "image" part was parsed at all — without
+  // ! this guard `file.path` below is a raw TypeError, i.e. a 500. A *wrong* field name never
+  // ! reaches here: multer rejects it itself with its own MulterError (spec 53 H4).
+  if (!file) {
+    throw new AppError(httpStatus.BAD_REQUEST, "Image file is required");
+  }
+
+  const existing = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, isDeleted: true, profilePicture: true },
+  });
+
+  if (!existing || existing?.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, "User not found");
+  }
+
+  const previous = existing?.profilePicture as TUserProfilePicture | null;
+
+  const result = await prisma.user.update({
+    where: { id: userId },
+    // ! `file.path` is the Cloudinary secure URL and `file.filename` the public_id — that is
+    // ! all CloudinaryStorage puts on `req.file` (it streams, so there are never local
+    // ! bytes). Same pair `bikeAccessory`'s image upload stores.
+    data: { profilePicture: { url: file.path, publicId: file.filename } },
+    select: safeUserSelect,
+  });
+
+  // ! AFTER the write, not before (spec 53 D7). multer has already uploaded the new asset by
+  // ! the time this function runs, so deleting the old one last means the row never points at
+  // ! a deleted asset; the worst case is one orphaned asset, which is invisible to the user.
+  // ! `bikeAccessory` deletes first — this is a deliberate improvement on it, not a slip.
+  if (previous?.publicId) {
+    await deleteCloudinaryImage(previous.publicId);
+  }
+
+  return { ...result, _id: result.id };
+};
+
+// ! Spec 53 — for removing the logged-in user's profile picture.
+const deleteProfilePicture = async (userId: string) => {
+  const existing = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, isDeleted: true, profilePicture: true },
+  });
+
+  if (!existing || existing?.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, "User not found");
+  }
+
+  const previous = existing?.profilePicture as TUserProfilePicture | null;
+
+  if (!previous) {
+    throw new AppError(httpStatus.NOT_FOUND, "Profile picture not found");
+  }
+
+  await deleteCloudinaryImage(previous.publicId);
+
+  const result = await prisma.user.update({
+    where: { id: userId },
+    // ! `Prisma.JsonNull`, NOT a bare `null` — Prisma rejects `null` for a Json field, and
+    // ! this is the same idiom `deleteBikeAccessoryImageFromDB` uses. It reads back as the JS
+    // ! value `null`, so every `if (!previous)` guard above behaves identically (spec 53 H2).
+    data: { profilePicture: Prisma.JsonNull },
+    select: safeUserSelect,
+  });
+
+  return { ...result, _id: result.id };
+};
+
 // ! registers/updates this device's Expo push token, feeding the weekly-summary cron job
 const updatePushToken = async (userId: string, expoPushToken: string) => {
   const existing = await prisma.user.findUnique({ where: { id: userId } });
@@ -203,5 +310,8 @@ export const userServices = {
   loginFromDb,
   refreshAccessToken,
   getMeFromDb,
+  updateProfile,
+  updateProfilePicture,
+  deleteProfilePicture,
   updatePushToken,
 };

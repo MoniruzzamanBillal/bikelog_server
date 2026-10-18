@@ -64,6 +64,36 @@ const getMe = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, 
         data: result,
     });
 }));
+// ! Spec 53 — for updating the logged-in user's own display name
+const updateProfile = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const result = yield user_services_1.userServices.updateProfile(req.user.userId, req.body.name);
+    (0, sendResponse_1.default)(res, {
+        status: http_status_1.default.OK,
+        success: true,
+        message: "Profile updated successfully!!!",
+        data: result,
+    });
+}));
+// ! Spec 53 — for setting/replacing the logged-in user's profile picture
+const updateProfilePicture = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const result = yield user_services_1.userServices.updateProfilePicture(req.user.userId, req.file);
+    (0, sendResponse_1.default)(res, {
+        status: http_status_1.default.OK,
+        success: true,
+        message: "Profile picture uploaded successfully",
+        data: result,
+    });
+}));
+// ! Spec 53 — for removing the logged-in user's profile picture
+const deleteProfilePicture = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const result = yield user_services_1.userServices.deleteProfilePicture(req.user.userId);
+    (0, sendResponse_1.default)(res, {
+        status: http_status_1.default.OK,
+        success: true,
+        message: "Profile picture deleted successfully",
+        data: result,
+    });
+}));
 // ! for registering/updating this device's Expo push token
 const updatePushToken = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const result = yield user_services_1.userServices.updatePushToken(req.user.userId, req.body.expoPushToken);
@@ -80,5 +110,8 @@ exports.userController = {
     signIn,
     refreshToken,
     getMe,
+    updateProfile,
+    updateProfilePicture,
+    deleteProfilePicture,
     updatePushToken,
 };

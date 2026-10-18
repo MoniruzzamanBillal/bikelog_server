@@ -9,6 +9,7 @@ const validateRequest_1 = __importDefault(require("../../middleware/validateRequ
 const user_controller_1 = require("./user.controller");
 const user_validation_1 = require("./user.validation");
 const authCheck_1 = __importDefault(require("../../middleware/authCheck"));
+const uploadAvatar_1 = require("../../middleware/uploadAvatar");
 const router = (0, express_1.Router)();
 // ! for registering a user
 router.post("/register", (0, validateRequest_1.default)(user_validation_1.userValidations.createUserSchema), user_controller_1.userController.createUser);
@@ -23,6 +24,16 @@ router.post("/login", (0, validateRequest_1.default)(user_validation_1.userValid
 router.post("/refresh-token", (0, validateRequest_1.default)(user_validation_1.userValidations.refreshTokenSchema), user_controller_1.userController.refreshToken);
 // ! for getting current user
 router.get("/me", authCheck_1.default, user_controller_1.userController.getMe);
+// ! Spec 53 — for updating the logged-in user's own name. No user id in the path: the route
+// ! acts on `req.user.userId`, so there is nothing to tamper with.
+router.patch("/update-profile", authCheck_1.default, (0, validateRequest_1.default)(user_validation_1.userValidations.updateProfileSchema), user_controller_1.userController.updateProfile);
+// ! Spec 53 — for setting/replacing the logged-in user's profile picture. Multipart, one part
+// ! named "image" (the house field name, as in bikeAccessory's image route).
+// ! `handleAvatarUpload` goes AFTER `authCheck` on purpose, so an unauthenticated request is
+// ! refused before anything is streamed to Cloudinary.
+router.put("/profile-picture", authCheck_1.default, uploadAvatar_1.handleAvatarUpload, user_controller_1.userController.updateProfilePicture);
+// ! Spec 53 — for removing the logged-in user's profile picture
+router.delete("/profile-picture", authCheck_1.default, user_controller_1.userController.deleteProfilePicture);
 // ! for registering/updating this device's Expo push token
 router.post("/push-token", authCheck_1.default, (0, validateRequest_1.default)(user_validation_1.userValidations.pushTokenSchema), user_controller_1.userController.updatePushToken);
 //

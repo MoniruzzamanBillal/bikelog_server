@@ -7,6 +7,16 @@ import { buildPrismaListQuery } from "../../builder/buildPrismaListQuery";
 import { findOwnedBikeOrThrow, bumpOdometerIfHigher } from "../bike/bike.utils";
 import { TMaintenanceLog } from "./maintenanceLog.interface";
 import { deleteCloudinaryImage } from "../../util/cloudinary";
+import {
+  computeKmPerDay,
+  DAY_MS,
+  KM_UPCOMING_FALLBACK,
+  PROJECTED_UPCOMING_DAYS,
+} from "../../util/ridingRate";
+import {
+  evaluateOilDue,
+  findLatestEngineOilLog,
+} from "../engineOilLog/engineOilLog.utils";
 
 // ! Spec 41 §B: every read that returns a log populates its two catalog relations, so the
 // ! display name travels with the log instead of being joined client-side against the
@@ -285,75 +295,10 @@ const deleteMaintenanceLogFromDB = async (bikeId: string, userId: string, id: st
   return toApiShape(updated);
 };
 
-// ! Spec 52 §B: distance-based reminders used to appear a flat 50 km before they were
-// ! due, which at ~43 km/day is barely a day of riding — the reminder arrived after the
-// ! decision it was meant to inform. The threshold is now a projected number of days,
-// ! which needs a km/day figure for the bike. `PROJECTED_UPCOMING_DAYS` is the alert
-// ! horizon (how early a reminder appears); `PROJECTION_WINDOW_DAYS` is the measurement
-// ! window (how far back we look to learn the rate). They are different knobs — D1.
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-const PROJECTION_WINDOW_DAYS = 28; // D1: 4 weeks of history to average over
-const MIN_PROJECTION_SPAN_DAYS = 14; // below this, one odd week dominates — refuse
-const MIN_PROJECTION_DISTANCE_KM = 100; // also catches odometer corrections (negative distance)
-const KM_UPCOMING_FALLBACK = 50; // H6: the pre-spec-52 rule, kept for bikes with no history
-const PROJECTED_UPCOMING_DAYS = 10; // D2: the alert horizon, ~430 km at ~43 km/day
-
-type TRidingRate = {
-  kmPerDay: number;
-  spanDays: number;
-  distanceKm: number;
-};
-
-// ! D5: the rate comes from `FuelLog` rows directly, not `MileageRecord` — mileage records
-// ! only close on full-tank fills, so they cover an unknown subset of the riding. Every
-// ! fuel log carries `date` + `odometerReading`, which is the whole input. One indexed
-// ! query (`@@index([bikeId])`) per reminders request, not per reminder.
-const computeKmPerDay = async (bikeId: string): Promise<TRidingRate | null> => {
-  const since = new Date(Date.now() - PROJECTION_WINDOW_DAYS * DAY_MS);
-
-  const logs = await prisma.fuelLog.findMany({
-    where: { bikeId, isDeleted: false, date: { gte: since } },
-    orderBy: { date: "asc" },
-    select: { date: true, odometerReading: true },
-  });
-
-  if (logs.length < 2) return null;
-
-  const latest = logs[logs.length - 1];
-
-  // ! H3: of all candidate anchors, take the one whose span to `latest` is nearest a whole
-  // ! number of weeks, so the rider's 5-or-6-day week cannot skew the average. Iterating
-  // ! oldest-first with a strict `<` means a tie resolves to the LONGER span — more data,
-  // ! less noise — without needing a second comparison.
-  let anchor: (typeof logs)[number] | null = null;
-  let bestOffWeek = Infinity;
-
-  for (const candidate of logs.slice(0, -1)) {
-    const spanDays =
-      (latest.date.getTime() - candidate.date.getTime()) / DAY_MS;
-    if (spanDays < MIN_PROJECTION_SPAN_DAYS) continue;
-
-    const remainder = spanDays % 7;
-    const offWeek = Math.min(remainder, 7 - remainder);
-
-    if (offWeek < bestOffWeek) {
-      bestOffWeek = offWeek;
-      anchor = candidate;
-    }
-  }
-
-  if (!anchor) return null;
-
-  // ! H2: the divisor is the span between the two logs actually used, NEVER
-  // ! PROJECTION_WINDOW_DAYS — the newest log is days old and that gap is not riding we know about.
-  const spanDays = (latest.date.getTime() - anchor.date.getTime()) / DAY_MS;
-  const distanceKm = latest.odometerReading - anchor.odometerReading;
-
-  if (distanceKm < MIN_PROJECTION_DISTANCE_KM) return null;
-
-  return { kmPerDay: distanceKm / spanDays, spanDays, distanceKm };
-};
+// ! Spec 54 §D6: `computeKmPerDay` and its constants moved to `src/app/util/ridingRate.ts`
+// ! — spec 52 D7 said to share the helper once a second consumer appeared, and
+// ! `engineOilLog`'s status endpoint is that consumer. A pure extraction: nothing about
+// ! the reminder arithmetic below changed. See that file for the H2/H3/D1/D5 rationale.
 
 const getRemindersFromDB = async (bikeId: string, userId: string) => {
   const bike = await findOwnedBikeOrThrow(bikeId, userId);
@@ -485,6 +430,55 @@ const getRemindersFromDB = async (bikeId: string, userId: string) => {
       if (log.nextDueDate) {
         reminder.nextDueDate = log.nextDueDate;
         reminder.daysRemaining = daysRemaining;
+      }
+
+      reminders.push(reminder);
+    }
+  }
+
+  // ! Spec 54 §E / H4 — engine oil left `maintenance_logs` for its own table, and the
+  // ! reminder must NOT leave with it. Reminders are derived entirely from this function,
+  // ! so once the import soft-deletes the source oil entries the engine-oil reminder would
+  // ! simply vanish from bikelog_client-web-'s RemindersBanner AND from bikelog_app's — an
+  // ! app spec 54 is not allowed to touch yet, on a device the developer actually rides
+  // ! with. So the reminder is RE-SOURCED, not removed: one more entry, in the existing
+  // ! shape, derived from the newest live engine oil log.
+  // !
+  // ! Nothing is renamed, removed or retyped, so no client needs a change to keep working:
+  // ! both clients key reminders off `maintenanceType._id` and resolve the display name
+  // ! from `maintenanceType.name` when it is an object, which this is.
+  // !
+  // ! Reuses the `rate` already computed above — do NOT call computeKmPerDay twice.
+  const latestOilLog = await findLatestEngineOilLog(bikeId);
+
+  if (latestOilLog && latestOilLog.nextDueOdometer !== null) {
+    const due = evaluateOilDue(latestOilLog, bike.currentOdometer, rate);
+
+    if (due.status === "overdue" || due.status === "upcoming") {
+      const reminder: (typeof reminders)[number] = {
+        maintenanceType: {
+          // ! the oil TYPE's id when there is one, so the client's list key is stable
+          // ! across consecutive changes of the same oil; the log's own id is the fallback
+          // ! for H7's imported row that never had a type
+          _id: latestOilLog.oilTypeId ?? latestOilLog.id,
+          name: latestOilLog.oilType?.name ?? "Engine oil",
+        },
+        lastServiceDate: latestOilLog.changeDate,
+        lastOdometerReading: latestOilLog.odometerReading,
+        nextDueOdometer: latestOilLog.nextDueOdometer,
+        // ! clamped here, unlike the status endpoint's signed figure — this is the
+        // ! pre-existing wire contract both banners already render (§D)
+        kmRemaining: Math.max(0, due.kmRemaining as number),
+        status: due.status,
+      };
+
+      // ! D4 again: upcoming only. An overdue row is already past; a projection for it is noise.
+      if (due.status === "upcoming" && due.projectedDays !== undefined && rate) {
+        reminder.projectedDaysRemaining = due.projectedDays;
+        reminder.projectedDueDate = new Date(
+          Date.now() + due.projectedDays * DAY_MS,
+        );
+        reminder.kmPerDay = Math.round(rate.kmPerDay * 10) / 10;
       }
 
       reminders.push(reminder);

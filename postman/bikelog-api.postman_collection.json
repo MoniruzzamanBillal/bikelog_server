@@ -67,6 +67,11 @@
       "type": "string"
     },
     {
+      "key": "engineOilLogId",
+      "value": "",
+      "type": "string"
+    },
+    {
       "key": "bikeAccessoryId",
       "value": "",
       "type": "string"
@@ -408,6 +413,211 @@
                 "me"
               ]
             }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Profile (name)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/update-profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "update-profile"
+              ]
+            },
+            "description": "Spec 53. Updates the logged-in user's own display name. Requires Bearer {{token}} (inherited from the collection). `name` is trimmed, 1-60 chars; a whitespace-only name is a 400, not a saved blank. There is no user id in the path \u2014 the route acts on the token's `userId`, so there is nothing to tamper with. Responds with the full safe-user shape, including `profilePicture`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Moniruzzaman Billal\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Profile with a blank name (expect 400)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/update-profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "update-profile"
+              ]
+            },
+            "description": "Spec 53 H1. Zod `trim()` runs before `min(1)`, so a whitespace-only name is refused with a 400 and the old name is never overwritten \u2014 `name` is NOT NULL in the schema and a blank one would render as an empty string in every screen that shows it.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"   \"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 400 (blank name refused)\", function () {",
+                  "    pm.expect([400]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Upload/Replace Profile Picture",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/profile-picture",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "profile-picture"
+              ]
+            },
+            "description": "Spec 53. multipart/form-data, field name `image`, image files only, **4MB max** \u2014 not 5MB like the other image routes, because Vercel refuses a request body over ~4.5MB before multer ever sees it, which would make the clean 400 unreachable in production. Cloudinary stores the asset under `bikelog/avatars`, transformed to 512x512 `crop: fill, gravity: face` (the app does no client-side resize, so normalising happens here). Replacing an existing picture deletes the old asset AFTER the DB write, so the row never points at a deleted asset. Pick any JPEG/PNG in the file field.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Upload Profile Picture with the wrong field name (expect 400)",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/profile-picture",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "profile-picture"
+              ]
+            },
+            "description": "Spec 53 H3/H4. A part named anything but `image` is rejected by multer itself with `Unexpected field`, and `handleAvatarUpload` normalizes that MulterError into a clean 400 instead of letting globalErrorHandler turn it into an unhelpful 500. The same wrapper is what turns the 4MB breach into a 400 \u2014 exercise that by sending an oversized image in the request above. A PDF instead of an image gives 400 \"Only image files are allowed\" from the fileFilter, and no file part at all gives 400 \"Image file is required\" from the service.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 400 (unexpected field)\", function () {",
+                  "    pm.expect([400]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Profile Picture",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/profile-picture",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "profile-picture"
+              ]
+            },
+            "description": "Spec 53. Removes the logged-in user's profile picture and destroys the Cloudinary asset. Responds with `profilePicture: null`. Running it twice returns 404 (\"Profile picture not found\") \u2014 the column is cleared with `Prisma.JsonNull`, which reads back as JS `null`, so the guard sees it as absent."
           },
           "event": [
             {
@@ -2003,6 +2213,338 @@
               ]
             },
             "description": "Computed on-read by comparing the bike's currentOdometer / today's date against each maintenance type's latest nextDueOdometer / nextDueDate. No body or query params."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Engine Oil Logs",
+      "item": [
+        {
+          "name": "Engine Oil Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/engine-oil-logs/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "engine-oil-logs",
+                "status"
+              ]
+            },
+            "description": "Spec 54 \u00a7D \u2014 the whole oil screen in one request, computed on read: nothing is stored. `currentOdometer` is read LIVE on every call, so a Settings odometer update (`PATCH /bikes/:id/odometer`) shows up here immediately with no recompute step.\n\n**This request is registered BEFORE `GET /:id` on purpose (\u00a70 H1)** \u2014 Express matches in registration order, so the other way round `/:id` swallows the literal path `status` and you get `404 Engine oil log not found` with no hint that routing is the problem.\n\nThree non-error states to expect: no oil log yet \u2192 `status: \"unknown\"`, `lastChange: null`; an imported log with no interval \u2192 `lastChange` + `kmSinceChange` only, `status: \"unknown\"`; no usable riding rate (<2 fuel logs in 28 days, span <14 days, or <100 km) \u2192 distance fields stay, `projectedDaysRemaining`/`projectedDueDate`/`kmPerDay` are all omitted and `status` falls back to the old 50 km rule. `kmRemaining` is **signed** \u2014 negative means past due."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Engine Oil Log",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/engine-oil-logs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "engine-oil-logs"
+              ]
+            },
+            "description": "`oilType` is **required here** even though the column is nullable \u2014 the column is nullable only so \u00a7H's import can carry historical logs that never had a type (\u00a70 H7).\n\n**Never send `nextDueOdometer`** \u2014 always server-derived as `odometerReading + intervalKmUsed`. `intervalKmUsed` is normally sent by the client (the form pre-fills the oil type's `suggestedIntervalKm` and the rider may edit it); omit it and the server falls back to that same catalog value. Either way it is **frozen on the row** \u2014 editing the oil type later never moves a past change's due point (H6).\n\n`odometerReading` must be 0\u2013999,999 and must sit between the neighbouring oil logs in date order (400 otherwise, H10) \u2014 compared against this bike's oil logs, never against `currentOdometer`, so backdating your last real oil change works. `changeDate` defaults to now and cannot predate the bike's `purchaseDate` (400). Another user's `oilType` id is a **404**, not a 403.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"oilType\": \"{{engineOilTypeId}}\",\n  \"odometerReading\": 18400,\n  \"intervalKmUsed\": 2400,\n  \"quantityLiters\": 1.2,\n  \"oilFilterChanged\": true,\n  \"cost\": 1250,\n  \"changeDate\": \"2026-08-12\",\n  \"serviceCenter\": \"City Bike Care\",\n  \"notes\": \"Motul 7100, filter changed too\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.expect([201]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code < 300) {",
+                  "    const body = pm.response.json();",
+                  "    const value = body.data._id;",
+                  "    if (value) {",
+                  "        pm.collectionVariables.set(\"engineOilLogId\", value);",
+                  "        console.log(\"Captured engineOilLogId =\", value);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Engine Oil Logs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/engine-oil-logs?page=1&limit=10&sort=-changeDate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "engine-oil-logs"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": false
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "disabled": false
+                },
+                {
+                  "key": "sort",
+                  "value": "-changeDate",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Same query support as fuel logs: `page`, `limit`, `sort` (default `-changeDate`, with `createdAt desc` appended so same-day entries have a total order \u2014 H13). `bike`/`isDeleted` query keys are ignored server-side (IDOR hardening).\n\n! Do not invent other filters: leftover query params go straight into the Prisma `where` with no coercion, so a non-string value 500s through a `globalErrorHandler` that has no Prisma branch (\u00a70 H14).\n\nEach row carries two **derived** fields (D12): `kmOnThisOil` (the NEXT change's odometer minus this one's \u2014 how far this oil actually ran) and `costPerKm` (`cost / kmOnThisOil`). The **newest** change has no following change, so both are `null`; two changes at the same odometer give `costPerKm: null`, never `Infinity`. They are computed here rather than in the client because the neighbouring change sits on the previous page at every page boundary \u2014 check `?page=2`'s first row, which still carries a real figure. `GET /:id` returns both as `null`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Engine Oil Log By Id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/engine-oil-logs/{{engineOilLogId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "engine-oil-logs",
+                "{{engineOilLogId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Engine Oil Log",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/engine-oil-logs/{{engineOilLogId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "engine-oil-logs",
+                "{{engineOilLogId}}"
+              ]
+            },
+            "description": "Every field optional; `oilType` may be re-pointed but never cleared. There is **no** closed-period lock here, unlike fuel logs \u2014 nothing downstream closes over an oil log.\n\n`nextDueOdometer` is recomputed when `odometerReading` or `intervalKmUsed` moves, and **only** then: a PATCH that changes `oilType` alone leaves the stored interval and due point untouched (D3), because re-seeding there would silently move the due point of a log you only meant to relabel.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cost\": 1300,\n  \"notes\": \"Corrected cost after receipt\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Engine Oil Log",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/engine-oil-logs/{{engineOilLogId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "engine-oil-logs",
+                "{{engineOilLogId}}"
+              ]
+            },
+            "description": "Soft delete \u2014 `isDeleted: true`, the row stays."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Upload/Replace Receipt Image",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/engine-oil-logs/{{engineOilLogId}}/image",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "engine-oil-logs",
+                "{{engineOilLogId}}",
+                "image"
+              ]
+            },
+            "description": "multipart/form-data, field name `image`, image files only (5MB max). Replacing an existing `receiptImage` deletes the old Cloudinary asset first.\n\n! On an **imported** row the stored `{ url, publicId }` was copied from the source maintenance log's `serviceImage` \u2014 the file was never re-uploaded. Until \u00a7H's `--finalize` runs, deleting it here also breaks that maintenance log's thumbnail (\u00a70 H8).",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Receipt Image",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/engine-oil-logs/{{engineOilLogId}}/image",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "engine-oil-logs",
+                "{{engineOilLogId}}",
+                "image"
+              ]
+            }
           },
           "event": [
             {

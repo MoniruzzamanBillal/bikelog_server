@@ -60,7 +60,7 @@ const computeSpendingForRange = async (
   categoryBreakdown: { category: string; total: number }[];
   records: TSpendingRecord[];
 }> => {
-  const [fuelLogs, maintenanceLogs, accessories] = await Promise.all([
+  const [fuelLogs, maintenanceLogs, accessories, engineOilLogs] = await Promise.all([
     prisma.fuelLog.findMany({
       where: {
         bikeId,
@@ -87,6 +87,21 @@ const computeSpendingForRange = async (
         ...(startDate && endDate ? { purchaseDate: { gte: startDate, lte: endDate } } : {}),
       },
     }),
+    // ! Spec 54 §F/D7: an oil change is its own record now, and the money is real — without
+    // ! this the bike hub's totals would drop by the cost of every oil change ever logged
+    // ! the moment the import soft-deletes the source maintenance logs.
+    // ! §0 H3: between the import's --apply and its --finalize, oil is counted TWICE here
+    // ! (once from the still-live maintenance log, once from the copy). That window is
+    // ! read-only and minutes long inside one operator session — run copy, verify, finalize
+    // ! in one sitting, and before the web client ships.
+    prisma.engineOilLog.findMany({
+      where: {
+        bikeId,
+        isDeleted: false,
+        ...(startDate && endDate ? { changeDate: { gte: startDate, lte: endDate } } : {}),
+      },
+      include: { oilType: { select: { name: true } } },
+    }),
   ]);
 
   // ! every Decimal(12,2) field read here MUST go through Number(...) before arithmetic —
@@ -109,6 +124,8 @@ const computeSpendingForRange = async (
     0,
   );
 
+  const oilTotal = engineOilLogs.reduce((sum, log) => sum + Number(log.cost), 0);
+
   const categoryBreakdown: { category: string; total: number }[] = [
     { category: "Fuel", total: fuelTotal },
     ...Object.entries(maintenanceByCategory).map(([category, total]) => ({
@@ -116,6 +133,8 @@ const computeSpendingForRange = async (
       total,
     })),
     ...(accessoryTotal > 0 ? [{ category: "Accessories", total: accessoryTotal }] : []),
+    // ! only when > 0, following the accessories precedent directly above
+    ...(oilTotal > 0 ? [{ category: "Engine Oil", total: oilTotal }] : []),
   ];
 
   categoryBreakdown.sort((a, b) => b.total - a.total);
@@ -124,7 +143,9 @@ const computeSpendingForRange = async (
     (sum, log) => sum + Number(log.cost),
     0,
   );
-  const totalSpending = fuelTotal + maintenanceTotal + accessoryTotal;
+  // ! easy to miss, because the category array above is built separately from this sum
+  const totalSpending =
+    fuelTotal + maintenanceTotal + accessoryTotal + oilTotal;
 
   const fuelRecords: TSpendingRecord[] = fuelLogs.map((log) => ({
     date: log.date,
@@ -159,7 +180,24 @@ const computeSpendingForRange = async (
     source: "accessory",
   }));
 
-  const records = [...fuelRecords, ...maintenanceRecords, ...accessoryRecords].sort(
+  const engineOilRecords: TSpendingRecord[] = engineOilLogs.map((log) => ({
+    date: log.changeDate,
+    category: "Engine Oil",
+    description:
+      (log.oilType?.name ?? "Engine oil") +
+      (log.oilFilterChanged ? " · filter changed" : ""),
+    amount: Number(log.cost),
+    vendor: log.serviceCenter ?? null,
+    remarks: log.notes ?? null,
+    source: "oil",
+  }));
+
+  const records = [
+    ...fuelRecords,
+    ...maintenanceRecords,
+    ...accessoryRecords,
+    ...engineOilRecords,
+  ].sort(
     (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
   );
 

@@ -8,6 +8,7 @@ const bikeAccessory_route_1 = require("../modules/bikeAccessory/bikeAccessory.ro
 const bikeDocument_route_1 = require("../modules/bikeDocument/bikeDocument.route");
 const bikeIssue_route_1 = require("../modules/bikeIssue/bikeIssue.route");
 const bikeManual_route_1 = require("../modules/bikeManual/bikeManual.route");
+const engineOilLog_route_1 = require("../modules/engineOilLog/engineOilLog.route");
 const engineOilType_route_1 = require("../modules/engineOilType/engineOilType.route");
 const errorLog_route_1 = require("../modules/errorLog/errorLog.route");
 const fuelLog_route_1 = require("../modules/fuelLog/fuelLog.route");
@@ -46,6 +47,10 @@ const routeArray = [
     {
         path: "/bikes/:bikeId/maintenance-logs",
         route: maintenanceLog_route_1.maintenanceLogRouter,
+    },
+    {
+        path: "/bikes/:bikeId/engine-oil-logs",
+        route: engineOilLog_route_1.engineOilLogRouter,
     },
     {
         path: "/bikes/:bikeId/reminders",
