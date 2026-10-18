@@ -32,6 +32,20 @@ const refreshTokenSchema = z.object({
   }),
 });
 
+// ! Spec 53 — validation schema for updating the logged-in user's own display name.
+// ! `trim()` runs BEFORE `min(1)`, so "   " is a 400 and never a saved blank name (its H1).
+// ! `name` is `String` NOT NULL in the schema, so a null/empty write would either throw a raw
+// ! Prisma error or leave a user with no name in every screen that renders one.
+const updateProfileSchema = z.object({
+  body: z.object({
+    name: z
+      .string({ required_error: "User name is required" })
+      .trim()
+      .min(1, { message: "Name cannot be empty" })
+      .max(60, { message: "Name must be 60 characters or fewer" }),
+  }),
+});
+
 // Validation schema for registering/updating this device's Expo push token
 const pushTokenSchema = z.object({
   body: z.object({
@@ -46,5 +60,6 @@ export const userValidations = {
   createUserSchema,
   loginValidationSchema,
   refreshTokenSchema,
+  updateProfileSchema,
   pushTokenSchema,
 };

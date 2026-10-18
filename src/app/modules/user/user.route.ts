@@ -3,6 +3,7 @@ import validateRequest from "../../middleware/validateRequest";
 import { userController } from "./user.controller";
 import { userValidations } from "./user.validation";
 import authCheck from "../../middleware/authCheck";
+import { handleAvatarUpload } from "../../middleware/uploadAvatar";
 
 const router = Router();
 
@@ -37,6 +38,33 @@ router.get(
   "/me",
   authCheck,
   userController.getMe,
+);
+
+// ! Spec 53 — for updating the logged-in user's own name. No user id in the path: the route
+// ! acts on `req.user.userId`, so there is nothing to tamper with.
+router.patch(
+  "/update-profile",
+  authCheck,
+  validateRequest(userValidations.updateProfileSchema),
+  userController.updateProfile,
+);
+
+// ! Spec 53 — for setting/replacing the logged-in user's profile picture. Multipart, one part
+// ! named "image" (the house field name, as in bikeAccessory's image route).
+// ! `handleAvatarUpload` goes AFTER `authCheck` on purpose, so an unauthenticated request is
+// ! refused before anything is streamed to Cloudinary.
+router.put(
+  "/profile-picture",
+  authCheck,
+  handleAvatarUpload,
+  userController.updateProfilePicture,
+);
+
+// ! Spec 53 — for removing the logged-in user's profile picture
+router.delete(
+  "/profile-picture",
+  authCheck,
+  userController.deleteProfilePicture,
 );
 
 // ! for registering/updating this device's Expo push token

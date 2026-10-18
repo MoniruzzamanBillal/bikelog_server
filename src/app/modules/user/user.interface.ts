@@ -34,6 +34,14 @@ export type TRefreshPayload = {
   exp?: number;
 };
 
+// ! Spec 53 — the shape stored in `User.profilePicture` (a `Json?` column). The same two
+// ! keys as `BikeAccessory.productImage`, and the same shape the app's `TCloudinaryImage`
+// ! already expects, which is why no client needed a new type for it.
+export type TUserProfilePicture = {
+  url: string;
+  publicId: string;
+};
+
 export type TUser = {
   name: string;
   email: string;

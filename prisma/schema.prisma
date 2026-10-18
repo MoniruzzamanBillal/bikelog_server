@@ -29,15 +29,17 @@ enum BikeIssueStatus {
 }
 
 model User {
-  id            String   @id
-  name          String
-  email         String   @unique
-  password      String
-  isDeleted     Boolean  @default(false)
-  userRole      Role     @default(user)
-  expoPushToken String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id             String   @id
+  name           String
+  email          String   @unique
+  password       String
+  // { url, publicId } — same shape as BikeAccessory.productImage (spec 53)
+  profilePicture Json?
+  isDeleted      Boolean  @default(false)
+  userRole       Role     @default(user)
+  expoPushToken  String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   bikes            Bike[]
   maintenanceTypes MaintenanceType[]

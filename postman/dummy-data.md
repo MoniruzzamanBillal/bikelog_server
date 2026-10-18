@@ -67,7 +67,61 @@ Two things worth knowing when testing it: a `401` from this route writes **no** 
 
 ### `GET /api/auth/me` — auth required
 
-No body. Returns the logged-in user (password excluded).
+No body. Returns the logged-in user (password excluded). Since spec 53 the response also carries
+`profilePicture` — either `{ url, publicId }` or `null` — and so do the `register`, `update-profile`,
+`profile-picture` and `push-token` responses: they all share one `safeUserSelect`.
+
+### `PATCH /api/auth/update-profile` — auth required
+
+```json
+{
+  "name": "Moniruzzaman Billal"
+}
+```
+
+| Field  | Required | Rules |
+| ------ | -------- | ----- |
+| `name` | **yes**  | string, **trimmed**, 1–60 chars. Whitespace-only is a `400` — `trim()` runs before `min(1)` |
+
+The only editable user field besides the picture and the push token (spec 53). There is **no user id in
+the path**: the route acts on the token's `userId`, so there is nothing to tamper with. Email and
+password are deliberately not editable — email is the unique login key and needs a verification flow,
+and a password change needs the current password; both are their own future spec.
+
+### `PUT /api/auth/profile-picture` — auth required
+
+`multipart/form-data`, **one part named `image`**.
+
+| Part    | Required | Rules |
+| ------- | -------- | ----- |
+| `image` | **yes**  | `image/*` only, **4 MB max** |
+
+4 MB, not the 5 MB the other image routes allow: Vercel refuses a request body over ~4.5 MB before it
+reaches multer, so a 5 MB cap would make the clean `400` unreachable in production. The asset is stored
+under Cloudinary folder `bikelog/avatars`, transformed to 512×512 `crop: fill, gravity: face` — the app
+does no client-side resize, so normalising happens server-side.
+
+Four distinct `400`s, each from a different layer, which is worth knowing when a test fails:
+
+| Cause | Where it comes from | Message |
+| ----- | ------------------- | ------- |
+| Part named anything but `image` | multer | `Unexpected field` |
+| Over 4 MB | multer | `File too large` |
+| Not an image | the `fileFilter` | `Only image files are allowed` |
+| No file part at all | the service | `Image file is required` |
+
+All four arrive as a clean `400` only because the route wraps the upload in `handleAvatarUpload` — a
+`MulterError` is not an `AppError` and has no `.status`, so without it the first two would surface as a
+`500`. Replacing an existing picture deletes the old Cloudinary asset **after** the DB write, so the row
+never points at a deleted asset; the worst case is one orphaned asset.
+
+### `DELETE /api/auth/profile-picture` — auth required
+
+No body. Responds with the same user shape and `profilePicture: null`. Running it twice is a `404`
+(`Profile picture not found`) — the column is cleared with `Prisma.JsonNull`, which reads back as JS
+`null`, so the guard correctly sees it as absent. `PUT .../profile-picture` is **not** `PATCH
+/auth/update-profile` with an extra field: an image is multipart and the name is Zod-validated JSON, and
+keeping them separate is what lets the app upload a photo immediately while **Save** means the name only.
 
 ### `POST /api/auth/push-token` — auth required
 
