@@ -52,7 +52,7 @@ const resolveSpendingDateRange = (period, targetMonth, targetYear) => {
     return {};
 };
 const computeSpendingForRange = (bikeId, startDate, endDate) => __awaiter(void 0, void 0, void 0, function* () {
-    const [fuelLogs, maintenanceLogs, accessories] = yield Promise.all([
+    const [fuelLogs, maintenanceLogs, accessories, engineOilLogs] = yield Promise.all([
         prisma_1.prisma.fuelLog.findMany({
             where: Object.assign({ bikeId, isDeleted: false }, (startDate && endDate ? { date: { gte: startDate, lte: endDate } } : {})),
         }),
@@ -65,6 +65,17 @@ const computeSpendingForRange = (bikeId, startDate, endDate) => __awaiter(void 0
         // ! entries are never included
         prisma_1.prisma.bikeAccessory.findMany({
             where: Object.assign({ bikeId, isDeleted: false, status: bikeAccessory_constant_1.AccessoryStatus.purchased }, (startDate && endDate ? { purchaseDate: { gte: startDate, lte: endDate } } : {})),
+        }),
+        // ! Spec 54 §F/D7: an oil change is its own record now, and the money is real — without
+        // ! this the bike hub's totals would drop by the cost of every oil change ever logged
+        // ! the moment the import soft-deletes the source maintenance logs.
+        // ! §0 H3: between the import's --apply and its --finalize, oil is counted TWICE here
+        // ! (once from the still-live maintenance log, once from the copy). That window is
+        // ! read-only and minutes long inside one operator session — run copy, verify, finalize
+        // ! in one sitting, and before the web client ships.
+        prisma_1.prisma.engineOilLog.findMany({
+            where: Object.assign({ bikeId, isDeleted: false }, (startDate && endDate ? { changeDate: { gte: startDate, lte: endDate } } : {})),
+            include: { oilType: { select: { name: true } } },
         }),
     ]);
     // ! every Decimal(12,2) field read here MUST go through Number(...) before arithmetic —
@@ -79,6 +90,7 @@ const computeSpendingForRange = (bikeId, startDate, endDate) => __awaiter(void 0
         return acc;
     }, {});
     const accessoryTotal = accessories.reduce((sum, a) => sum + (a.price ? Number(a.price) : 0), 0);
+    const oilTotal = engineOilLogs.reduce((sum, log) => sum + Number(log.cost), 0);
     const categoryBreakdown = [
         { category: "Fuel", total: fuelTotal },
         ...Object.entries(maintenanceByCategory).map(([category, total]) => ({
@@ -86,10 +98,13 @@ const computeSpendingForRange = (bikeId, startDate, endDate) => __awaiter(void 0
             total,
         })),
         ...(accessoryTotal > 0 ? [{ category: "Accessories", total: accessoryTotal }] : []),
+        // ! only when > 0, following the accessories precedent directly above
+        ...(oilTotal > 0 ? [{ category: "Engine Oil", total: oilTotal }] : []),
     ];
     categoryBreakdown.sort((a, b) => b.total - a.total);
     const maintenanceTotal = maintenanceLogs.reduce((sum, log) => sum + Number(log.cost), 0);
-    const totalSpending = fuelTotal + maintenanceTotal + accessoryTotal;
+    // ! easy to miss, because the category array above is built separately from this sum
+    const totalSpending = fuelTotal + maintenanceTotal + accessoryTotal + oilTotal;
     const fuelRecords = fuelLogs.map((log) => {
         var _a, _b;
         return ({
@@ -124,7 +139,25 @@ const computeSpendingForRange = (bikeId, startDate, endDate) => __awaiter(void 0
         remarks: null,
         source: "accessory",
     }));
-    const records = [...fuelRecords, ...maintenanceRecords, ...accessoryRecords].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const engineOilRecords = engineOilLogs.map((log) => {
+        var _a, _b, _c, _d;
+        return ({
+            date: log.changeDate,
+            category: "Engine Oil",
+            description: ((_b = (_a = log.oilType) === null || _a === void 0 ? void 0 : _a.name) !== null && _b !== void 0 ? _b : "Engine oil") +
+                (log.oilFilterChanged ? " · filter changed" : ""),
+            amount: Number(log.cost),
+            vendor: (_c = log.serviceCenter) !== null && _c !== void 0 ? _c : null,
+            remarks: (_d = log.notes) !== null && _d !== void 0 ? _d : null,
+            source: "oil",
+        });
+    });
+    const records = [
+        ...fuelRecords,
+        ...maintenanceRecords,
+        ...accessoryRecords,
+        ...engineOilRecords,
+    ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     return { totalSpending, categoryBreakdown, records };
 });
 const getSpendingSummaryFromDB = (bikeId, userId, period, targetMonth, targetYear) => __awaiter(void 0, void 0, void 0, function* () {

@@ -71,6 +71,7 @@ model Bike {
   owner           User              @relation(fields: [ownerId], references: [id])
   fuelLogs        FuelLog[]
   maintenanceLogs MaintenanceLog[]
+  engineOilLogs   EngineOilLog[]
   mileageRecords  MileageRecord[]
   issues          BikeIssue[]
   accessories     BikeAccessory[]
@@ -114,6 +115,7 @@ model EngineOilType {
 
   owner           User             @relation(fields: [ownerId], references: [id])
   maintenanceLogs MaintenanceLog[]
+  engineOilLogs   EngineOilLog[]
 
   // ! Same rationale as MaintenanceType — the unique covers soft-deleted rows so the
   // ! owner-scoped revive path in createEngineOilTypeIntoDB stays load-bearing (§B).
@@ -169,6 +171,51 @@ model MaintenanceLog {
 
   @@index([bikeId])
   @@map("maintenance_logs")
+}
+
+// Spec 54: an oil change is its own record now, not a maintenance log with an oil type
+// bolted on. Carries the two oil-specific fields that had nowhere to live in
+// `maintenance_logs` (quantityLiters, oilFilterChanged) plus the provenance column the
+// import writes.
+model EngineOilLog {
+  id                           String    @id
+  bikeId                       String
+  // ! H7/D2: nullable in the DB so the import can carry rows that never had a type
+  // ! (MaintenanceLog.oilType is optional today, so such rows legitimately exist);
+  // ! createEngineOilLogSchema REQUIRES it for everything entered from now on. The two
+  // ! rules differ on purpose — don't "fix" either one to match the other.
+  oilTypeId                    String?
+  odometerReading              Float
+  // ! H6/D3: normally client-seeded from the oil type and editable by the rider, then
+  // ! FROZEN on the row. Never re-derived from the catalog on read — editing a catalog
+  // ! row would otherwise retroactively move the due point of every past change.
+  intervalKmUsed               Float?
+  nextDueOdometer              Float?
+  quantityLiters               Float?
+  oilFilterChanged             Boolean   @default(false)
+  cost                         Decimal   @db.Decimal(12, 2)
+  changeDate                   DateTime
+  serviceCenter                String?
+  notes                        String?
+  receiptImage                 Json?
+  // ! D9: provenance for spec 54 §H's import. Unique, so a second --apply is a no-op.
+  // ! NULL is not unique-constrained in Postgres, so every hand-entered row (NULL here)
+  // ! is unaffected — the index only binds the imported ones.
+  importedFromMaintenanceLogId String?   @unique
+  isDeleted                    Boolean   @default(false)
+  createdAt                    DateTime  @default(now())
+  updatedAt                    DateTime  @updatedAt
+
+  bike Bike @relation(fields: [bikeId], references: [id])
+  // ! H2 — Restrict, deliberately NOT the SetNull that maintenance_logs.oilTypeId carries
+  // ! (init migration L259, spec 46 H1): there, hard-deleting a still-referenced oil type
+  // ! succeeds and silently nulls every log pointing at it. An optional Prisma relation
+  // ! defaults to SetNull, so this argument is what stops the new table inheriting that bug.
+  oilType EngineOilType? @relation(fields: [oilTypeId], references: [id], onDelete: Restrict)
+
+  @@index([bikeId])
+  @@index([bikeId, changeDate])
+  @@map("engine_oil_logs")
 }
 
 model MileageRecord {

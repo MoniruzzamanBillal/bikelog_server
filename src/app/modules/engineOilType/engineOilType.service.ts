@@ -146,18 +146,39 @@ const deleteEngineOilTypeFromDB = async (userId: string, id: string) => {
   // ! Spec 46 §D: deliberately NOT joined through to the bike's owner. `id` has just been
   // ! proven to belong to `userId`, so every log that can match is necessarily this
   // ! user's. An owner join here would be redundant, not a hardening. Don't add one.
-  const inUse = await prisma.maintenanceLog.count({
-    where: { oilTypeId: id, isDeleted: false },
-  });
+  // ! Spec 54 §G / H12: BOTH tables, not just maintenance logs. After spec 54 an oil type
+  // ! used only by engine oil logs would otherwise sail past this guard and soft-delete,
+  // ! leaving the current oil's type unresolvable on the status card. The engine_oil_logs
+  // ! FK is ON DELETE RESTRICT (unlike maintenance_logs', which is SET NULL) — but a soft
+  // ! delete is an UPDATE, so no FK is involved either way and this count is the only guard.
+  const [maintenanceInUse, oilLogInUse] = await Promise.all([
+    prisma.maintenanceLog.count({
+      where: { oilTypeId: id, isDeleted: false },
+    }),
+    prisma.engineOilLog.count({
+      where: { oilTypeId: id, isDeleted: false },
+    }),
+  ]);
+  const inUse = maintenanceInUse + oilLogInUse;
 
   if (inUse > 0) {
-    // ! User-facing copy — shown verbatim in the clients' warning toast. Byte-identical
-    // ! to pre-spec-46.
+    // ! User-facing copy — shown verbatim in the clients' warning toast. Widened from
+    // ! "maintenance log" to name both places it can be in use; the shape, status and
+    // ! closing sentence are unchanged.
+    const where = [
+      maintenanceInUse > 0
+        ? `${maintenanceInUse} maintenance log${maintenanceInUse === 1 ? "" : "s"}`
+        : null,
+      oilLogInUse > 0
+        ? `${oilLogInUse} engine oil log${oilLogInUse === 1 ? "" : "s"}`
+        : null,
+    ]
+      .filter(Boolean)
+      .join(" and ");
+
     throw new AppError(
       httpStatus.CONFLICT,
-      `"${existing.name}" is used by ${inUse} maintenance log${
-        inUse === 1 ? "" : "s"
-      } and can't be deleted. Remove or re-assign ${
+      `"${existing.name}" is used by ${where} and can't be deleted. Remove or re-assign ${
         inUse === 1 ? "it" : "them"
       } first.`,
     );
