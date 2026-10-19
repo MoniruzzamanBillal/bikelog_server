@@ -3153,7 +3153,7 @@
                 "spending-insight"
               ]
             },
-            "description": "Cached by log count, not TTL. First call for a bike with data generates and caches; repeat calls with no new logs return the cached value with no AI call. A bike with zero logs returns a fixed 'no data yet' message with generated: false, no AI call made."
+            "description": "Cached by log count, not TTL. Since spec 58 that count is fuel logs + maintenance logs + **engine oil logs** \u2014 all three tables the spending summary sums \u2014 so adding an oil change alone now invalidates the cache. First call for a bike with data generates and caches; repeat calls with no new logs return the cached value with no AI call. A bike with zero logs in all three tables returns a fixed 'no data yet' message with generated: false, no AI call made."
           },
           "event": [
             {
@@ -3186,7 +3186,7 @@
                 "mileage-insight"
               ]
             },
-            "description": "Cached by fuel-log count, not TTL. Same shape as Spending Insight."
+            "description": "Cached by fuel-log count, not TTL. Same shape as Spending Insight. Deliberately NOT invalidated by maintenance or engine oil logs (spec 58 HK4) \u2014 an oil change does not move km/l."
           },
           "event": [
             {
@@ -3225,7 +3225,7 @@
                 "chat"
               ]
             },
-            "description": "Stateless per request \u2014 resend the full message history each call. `messages` must be non-empty; any message with role \"system\" is rejected with 400 (the system prompt is always server-constructed from real bike data). Context is bounded to the 20 most recent fuel logs + 20 most recent maintenance logs plus lifetime spending totals.",
+            "description": "Stateless per request \u2014 resend the full message history each call. `messages` must be non-empty; any message with role \"system\" is rejected with 400 (the system prompt is always server-constructed from real bike data). Context is bounded to the 8 most recent fuel logs + 8 most recent maintenance logs + 8 most recent **engine oil logs** (spec 58), plus lifetime spending totals and, when the bike has a manual, up to 4 relevant excerpts from it. The engine oil block is sent even when empty, so a bike with no oil change gets an honest 'no oil history' answer rather than a guess. Oil changes live in their own table since spec 54, and its import soft-deleted the source maintenance logs \u2014 before spec 58 the assistant could not see a single one.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"How much have I spent on this bike so far?\" }\n  ]\n}",
