@@ -13,7 +13,7 @@ import {
 } from "./ai.interface";
 
 const NO_DATA_SPENDING_MESSAGE =
-  "No spending data yet for this bike — log a fuel-up or maintenance entry to get an AI-generated spending insight.";
+  "No spending data yet for this bike — log a fuel-up, a maintenance entry or an engine oil change to get an AI-generated spending insight.";
 
 const NO_DATA_MILEAGE_MESSAGE =
   "No mileage data yet for this bike — log a fuel-up to get an AI-generated mileage insight.";
@@ -35,11 +35,20 @@ const getSpendingInsightFromDB = async (
 ): Promise<TSpendingInsightResponse> => {
   const bike = await findOwnedBikeOrThrow(bikeId, userId);
 
-  const [fuelLogCount, maintenanceLogCount] = await Promise.all([
-    prisma.fuelLog.count({ where: { bikeId, isDeleted: false } }),
-    prisma.maintenanceLog.count({ where: { bikeId, isDeleted: false } }),
-  ]);
-  const currentLogCount = fuelLogCount + maintenanceLogCount;
+  // ! Spec 58 K1: all THREE spending tables, because getSpendingSummaryFromDB sums all
+  // ! three (spec 54 §F added the `Engine Oil` category). This sum is both the cache key
+  // ! and the no-data guard below, so omitting oil meant an oil change moved the numbers
+  // ! the insight is generated from without moving the count that decides whether to
+  // ! regenerate — a cached insight describing spending it was never told had changed.
+  // ! Do NOT copy this into getMileageInsightFromDB: an oil change does not move km/l (HK4).
+  const [fuelLogCount, maintenanceLogCount, engineOilLogCount] =
+    await Promise.all([
+      prisma.fuelLog.count({ where: { bikeId, isDeleted: false } }),
+      prisma.maintenanceLog.count({ where: { bikeId, isDeleted: false } }),
+      prisma.engineOilLog.count({ where: { bikeId, isDeleted: false } }),
+    ]);
+  const currentLogCount =
+    fuelLogCount + maintenanceLogCount + engineOilLogCount;
 
   if (currentLogCount === 0) {
     return {
@@ -156,6 +165,7 @@ const getBikeChatReply = async (
   const [
     rawRecentFuelLogs,
     rawRecentMaintenanceLogs,
+    rawRecentEngineOilLogs,
     lifetimeSpending,
     relevantManualChunks,
   ] = await Promise.all([
@@ -169,6 +179,18 @@ const getBikeChatReply = async (
       orderBy: { serviceDate: "desc" },
       take: CHAT_LOG_LIMIT,
       include: { maintenanceType: { select: { name: true } } },
+    }),
+    // ! Spec 58 K2: engine oil is its own table since spec 54, and that spec's `--finalize`
+    // ! soft-deleted the source maintenance logs — so without this query the model is told
+    // ! the bike has never had an oil change, and answers the app's first suggested chip
+    // ! ("When is my next oil change due?") confidently and wrongly.
+    prisma.engineOilLog.findMany({
+      where: { bikeId, isDeleted: false },
+      // ! the same `changeDate` tie-break the rest of the oil module uses, so two changes
+      // ! on one calendar day reach the prompt in the order the app's list shows them
+      orderBy: [{ changeDate: "desc" }, { createdAt: "desc" }],
+      take: CHAT_LOG_LIMIT,
+      include: { oilType: { select: { name: true } } },
     }),
     spendingServices.getSpendingSummaryFromDB(bikeId, userId, "lifetime"),
     manual
@@ -205,6 +227,23 @@ const getBikeChatReply = async (
     nextDueDate: log.nextDueDate,
     notes: log.notes,
   }));
+  // ! `cost` through Number() for the same Decimal reason as above — this projection is
+  // ! where it would be easiest to reintroduce the bug the comment above describes.
+  // ! `oilType` is `?? null` and never left undefined: JSON.stringify DROPS an undefined
+  // ! value from the object entirely, which would make a typeless imported row (spec 54 H7
+  // ! allows `oilTypeId: null`) indistinguishable from a field this prompt never sends.
+  const recentEngineOilLogs = rawRecentEngineOilLogs.map((log) => ({
+    changeDate: log.changeDate,
+    odometerReading: log.odometerReading,
+    oilType: log.oilType?.name ?? null,
+    intervalKmUsed: log.intervalKmUsed,
+    nextDueOdometer: log.nextDueOdometer,
+    quantityLiters: log.quantityLiters,
+    oilFilterChanged: log.oilFilterChanged,
+    cost: Number(log.cost),
+    serviceCenter: log.serviceCenter,
+    notes: log.notes,
+  }));
 
   // ! only non-empty when relevant chunks were actually found — otherwise the section
   // ! is omitted entirely rather than injecting an empty/misleading heading
@@ -224,6 +263,13 @@ const getBikeChatReply = async (
       `(${bike.brand} ${bike.model}). Current odometer: ${bike.currentOdometer} km.\n\n` +
       `Recent fuel logs (up to ${CHAT_LOG_LIMIT} most recent): ${JSON.stringify(recentFuelLogs)}\n\n` +
       `Recent maintenance logs (up to ${CHAT_LOG_LIMIT} most recent): ${JSON.stringify(recentMaintenanceLogs)}\n\n` +
+      // ! emitted even when empty, unlike manualSection below: an absent block would let the
+      // ! model guess about a bike it was told nothing about, where `[]` plus the closing
+      // ! "answer only using the data given above" makes it say it has no oil history.
+      // ! Deliberately the RAW rows, not `getEngineOilStatusFromDB`'s computed due date —
+      // ! that would be a second source of truth for a figure the app's oil screen renders,
+      // ! and the maintenance block above hands over nextDueOdometer raw too (spec 58 HK2).
+      `Recent engine oil changes (up to ${CHAT_LOG_LIMIT} most recent): ${JSON.stringify(recentEngineOilLogs)}\n\n` +
       `Lifetime spending: ${JSON.stringify(lifetimeSpending)}\n\n` +
       manualSection +
       `Answer only using the data given above. If asked something this data doesn't cover, ` +
