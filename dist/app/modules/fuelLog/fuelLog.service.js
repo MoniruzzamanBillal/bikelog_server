@@ -158,6 +158,32 @@ const createFuelLogIntoDB = (bikeId, userId, payload) => __awaiter(void 0, void 
         bikeNickname: bike.nickname,
     };
 });
+// ! Spec 57 D1 — the two derived fields the list endpoint adds per row, a direct port of
+// ! `engineOilLog.service.ts`'s `withPeriodFields` (server spec 54 D12) with "oil" swapped
+// ! for "fill". A tank is burned over the ride that FOLLOWS the fill, so a row's period is
+// ! closed by its NEWER neighbour: `kmOnThisFill` is that neighbour's odometer reading
+// ! minus this one's, and `costPerKm` is what this fill-up's money worked out to over that
+// ! distance.
+// !
+// ! Computed server-side on purpose. A client deriving it from the page it happens to be
+// ! holding gets a figure that appears and vanishes with pagination, because the
+// ! neighbouring fill-up sits on the previous page at every page boundary.
+// !
+// ! This is NOT mileage and must not be read as one: km/l comes from closed full-tank
+// ! MileageRecord periods and is unchanged by this spec. `costPerKm` here is a money
+// ! figure over one tank's distance, partial fills included.
+const withPeriodFields = (row, newerNeighbour) => {
+    const kmOnThisFill = newerNeighbour
+        ? newerNeighbour.odometerReading - row.odometerReading
+        : null;
+    return Object.assign(Object.assign({}, row), { kmOnThisFill, 
+        // ! null, never Infinity — two fill-ups can legitimately share an odometer reading (the
+        // ! sequence check above allows equal readings), and `cost / 0` would serialise as
+        // ! `null` through JSON anyway while breaking any arithmetic on the way there
+        costPerKm: kmOnThisFill !== null && kmOnThisFill > 0
+            ? row.totalCost / kmOnThisFill
+            : null });
+};
 const getFuelLogsFromDB = (bikeId, userId, query) => __awaiter(void 0, void 0, void 0, function* () {
     yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
     // ! strip client-controlled "bike"/"isDeleted" keys before they reach buildPrismaListQuery —
@@ -175,7 +201,42 @@ const getFuelLogsFromDB = (bikeId, userId, query) => __awaiter(void 0, void 0, v
         prisma_1.prisma.fuelLog.findMany({ where, orderBy, skip, take }),
         prisma_1.prisma.fuelLog.count({ where }),
     ]);
-    return { result: result.map(toApiShape), meta };
+    const shaped = result.map(toApiShape);
+    // ! Spec 57. Pair each row with its newer neighbour rather than trusting "the previous
+    // ! element", so the pairing survives a caller passing `?sort=date`. The tie-break is
+    // ! `createdAt` descending, matching what buildPrismaListQuery appends — two fill-ups on
+    // ! one calendar day pair in the same order the list shows them in.
+    const newestFirst = [...shaped].sort((a, b) => b.date.getTime() - a.date.getTime() ||
+        b.createdAt.getTime() - a.createdAt.getTime());
+    // ! Only the page's newest row can have an off-page neighbour, so ONE extra query covers
+    // ! every page boundary. Without it page 2's first row would show no cost/km at all and
+    // ! the boundary would look like a bug (the defect engine oil's spec 54 V15 caught).
+    const pageNewest = newestFirst[0];
+    const offPageNeighbour = pageNewest
+        ? yield prisma_1.prisma.fuelLog.findFirst({
+            where: {
+                bikeId,
+                isDeleted: false,
+                OR: [
+                    { date: { gt: pageNewest.date } },
+                    {
+                        date: pageNewest.date,
+                        createdAt: { gt: pageNewest.createdAt },
+                    },
+                ],
+            },
+            orderBy: [{ date: "asc" }, { createdAt: "asc" }],
+            select: { odometerReading: true },
+        })
+        : null;
+    const neighbourById = new Map();
+    newestFirst.forEach((row, index) => {
+        neighbourById.set(row.id, index === 0 ? offPageNeighbour : newestFirst[index - 1]);
+    });
+    return {
+        result: shaped.map((row) => { var _a; return withPeriodFields(row, (_a = neighbourById.get(row.id)) !== null && _a !== void 0 ? _a : null); }),
+        meta,
+    };
 });
 const getFuelLogByIdFromDB = (bikeId, userId, id) => __awaiter(void 0, void 0, void 0, function* () {
     yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
