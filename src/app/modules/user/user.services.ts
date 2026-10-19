@@ -206,6 +206,14 @@ const updateProfile = async (userId: string, name: string) => {
     where: { id: userId },
     // ! Already trimmed and non-empty by Zod (spec 53 H1) — never build this object with a
     // ! possibly-undefined name, since `name` is NOT NULL in the schema.
+    // !
+    // ! Spec 55: this literal `{ name }` is the load-bearing half of "the rider cannot change
+    // ! their own email". Do NOT widen it to a spread of the request body, and do not add an
+    // ! `email` key — `email` is the login identifier (`loginFromDb` does
+    // ! `findUnique({ where: { email } })`), it is `@unique`, and there is no mail sender in
+    // ! this project, so a change could not be verified and a typo would be unrecoverable.
+    // ! The schema refuses a submitted `email` with a 400; this is what makes the refusal
+    // ! true rather than merely polite.
     data: { name },
     select: safeUserSelect,
   });
