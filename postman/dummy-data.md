@@ -80,14 +80,24 @@ No body. Returns the logged-in user (password excluded). Since spec 53 the respo
 }
 ```
 
-| Field  | Required | Rules |
-| ------ | -------- | ----- |
-| `name` | **yes**  | string, **trimmed**, 1–60 chars. Whitespace-only is a `400` — `trim()` runs before `min(1)` |
+| Field   | Required | Rules |
+| ------- | -------- | ----- |
+| `name`  | **yes**  | string, **trimmed**, 1–60 chars. Whitespace-only is a `400` — `trim()` runs before `min(1)` |
+| `email` | —        | **refused.** Sending the key at all is a `400`: "Email can't be changed. It is the account's login identifier." (spec 55) |
 
-The only editable user field besides the picture and the push token (spec 53). There is **no user id in
-the path**: the route acts on the token's `userId`, so there is nothing to tamper with. Email and
-password are deliberately not editable — email is the unique login key and needs a verification flow,
-and a password change needs the current password; both are their own future spec.
+`name` is the only editable user field besides the picture and the push token (spec 53). There is **no user
+id in the path**: the route acts on the token's `userId`, so there is nothing to tamper with.
+
+**Spec 55 made the email refusal explicit rather than silent.** Before it, a plain Zod object stripped the
+extra key and the route answered `200 Profile updated successfully!!!` having changed nothing — which a
+client cannot tell apart from success. Three reasons the email stays locked: it is the login identifier
+(`loginFromDb` does `findUnique({ where: { email } })`), it is `@unique` so a collision is a hard failure,
+and there is **no mail sender in this project**, so a change could be neither verified nor undone — one typo
+and the account's own owner cannot sign in. Both clients render it as a read-only field. Two layers enforce
+it: the schema's `email: z.undefined()` (which produces the message) and the service's literal
+`data: { name }` (which makes it true). Changing a real user's address is a deliberate DB write, the same
+documented convention as promoting an admin. Password is not editable anywhere on this API either — that
+needs the current password and is its own future spec.
 
 ### `PUT /api/auth/profile-picture` — auth required
 
@@ -224,6 +234,8 @@ Response is `{ data: { fuelLog, mileageRecordClosed } }` — note the extra nest
 ### `GET .../fuel-logs` — auth required
 
 Query params (all optional): `page`, `limit` (pagination), `sort` (default `-date`), plus generic filter fields. `bike` and `isDeleted` query keys are explicitly ignored server-side — a fixed IDOR meant a client could once override the ownership filter through them; that's now blocked.
+
+**Two derived fields per row, read-only (never send them) — spec 57.** `kmOnThisFill` is the **next** fill-up's odometer reading minus this row's, i.e. how far this tank actually carried the bike, and `costPerKm` is `totalCost / kmOnThisFill`. The newest fill-up has no following fill-up, so both are `null`; two fills at the same odometer reading give `costPerKm: null`, never `Infinity`. The server computes them because the neighbouring fill-up sits on the previous page at every page boundary, so `?page=2`'s first row still carries a real figure — check it with `?page=2&limit=1`. `GET .../fuel-logs/:id` carries **neither** key. This is **money per km, not mileage**: km/l comes from the closed full-tank periods under `/mileage`, and unlike those, `costPerKm` counts partial fills too.
 
 ### `GET .../fuel-logs/:id`, `PATCH .../fuel-logs/:id`, `DELETE .../fuel-logs/:id` — auth required
 
@@ -379,14 +391,19 @@ No body, no query params. The whole oil screen in one request, computed on read 
 | `kmSinceChange`                      | no      | absent only in the no-log state; floored at 0                                                 |
 | `kmRemaining`                        | no      | **signed** — negative means past due. Absent when the log carries no interval                 |
 | `percentUsed`                        | no      | integer percent; absent with `kmRemaining`                                                     |
-| `projectedDaysRemaining`, `projectedDueDate` | no | absent when there is no usable riding rate, and when already overdue                          |
-| `kmPerDay`, `rateBasis`              | no      | present whenever a rate exists (1dp; `rateBasis` is `{ spanDays, distanceKm }`)               |
+| `projectedDaysRemaining`             | no      | absent when there is no rate at all, and **always absent when overdue** (it would have to go negative) |
+| `projectedDueDate`                   | no      | absent only when there is no rate at all. Since spec 56 it is also sent when **overdue**, where it is in the **past** — the day the oil is estimated to have hit its due point |
+| `overdueDays`                        | no      | spec 56; positive, only with `status: "overdue"` and a usable rate                             |
+| `kmPerDay`, `rateBasis`              | no      | present whenever any rate exists (1dp). `rateBasis` is `{ spanDays, distanceKm, source? }`, where `source` is `"recent"` \| `"history"` \| `"lifetime"` (spec 56) |
+| `estimate`                           | no      | spec 56; present only when `lastChange.intervalKm` is absent **and** the log resolves an oil type. `{ basis: "oilTypeSuggestion", status, intervalKm, nextDueOdometer, kmRemaining, percentUsed, projectedDaysRemaining?, projectedDueDate?, overdueDays? }` |
 
 Three non-error states, each with a defined shape rather than a `null` to guess at:
 
 - **No oil log yet** → `status: "unknown"`, `lastChange: null`, `currentOdometer` only.
-- **An imported log with no interval** → `lastChange` + `kmSinceChange` present, everything interval-derived omitted, `status: "unknown"`.
-- **No usable riding rate** (fewer than 2 fuel logs in the last 28 days, a span under 14 days, or under 100 km covered) → the distance fields stay, the projection is omitted, and `status` falls back to the pre-spec-52 "within 50 km" rule.
+- **An imported log with no interval** → `lastChange` + `kmSinceChange` present, everything interval-derived omitted, `status: "unknown"` — but since spec 56 an `estimate` object usually comes with it, derived from the oil type's current `suggestedIntervalKm`.
+- **No usable riding rate** (fewer than 2 fuel logs in the last 28 days, a span under 14 days, or under 100 km covered) → `status` still falls back to the pre-spec-52 "within 50 km" rule, but since spec 56 the **date** no longer disappears: a looser fallback rate (the bike's whole fuel history, else its lifetime odometer average) is used for the projection alone, tagged in `rateBasis.source`. The fallback never feeds the due evaluation, so no `status` value and no reminder threshold moves because of it.
+
+**Everything under `estimate` is provisional** — it is derived from the catalog's *current* suggestion, so editing the oil type moves it. A client must label it as an estimate; set a real interval on the change to make it exact.
 
 ### `POST .../engine-oil-logs` — auth required
 
