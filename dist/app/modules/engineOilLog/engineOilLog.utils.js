@@ -31,7 +31,13 @@ const findLatestEngineOilLog = (bikeId) => __awaiter(void 0, void 0, void 0, fun
         orderBy: [{ changeDate: "desc" }, { createdAt: "desc" }],
         // ! no `isDeleted` filter on the include — spec 41's rule: a historical log must still
         // ! resolve the name of a type that has since been soft-deleted
-        include: { oilType: { select: { id: true, name: true } } },
+        // ! `suggestedIntervalKm` is spec 56's addition: the status endpoint needs it to offer a
+        // ! PROVISIONAL due point for a change whose own `intervalKmUsed` is null (its §C). It is
+        // ! selected, never spread into a response — `getRemindersFromDB`, this function's other
+        // ! caller, reads `oilType?.name` only and is unaffected.
+        include: {
+            oilType: { select: { id: true, name: true, suggestedIntervalKm: true } },
+        },
     });
 });
 exports.findLatestEngineOilLog = findLatestEngineOilLog;

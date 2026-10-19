@@ -261,6 +261,26 @@ const deleteEngineOilLogFromDB = (bikeId, userId, id) => __awaiter(void 0, void 
     });
     return toApiShape(updated);
 });
+// ! Spec 56 §B — one place that turns a SIGNED `kmRemaining` plus a km/day figure into a
+// ! calendar date, used for both the real forecast and §C's provisional one. Negative
+// ! remaining is not an error here: the oil ran out in the past, and that past date is the
+// ! most useful thing the card can say about an overdue change ("was due ~ 3 Oct").
+// ! `projectedDaysRemaining` is left undefined in that case rather than going negative,
+// ! because `bikelog_client-web-`'s status card prints it straight into an audit line.
+const projectDueDate = (kmRemaining, kmPerDay) => {
+    if (kmRemaining > 0) {
+        const daysRemaining = Math.max(0, Math.floor(kmRemaining / kmPerDay));
+        return {
+            dueDate: new Date(Date.now() + daysRemaining * ridingRate_1.DAY_MS),
+            daysRemaining,
+        };
+    }
+    const overdueDays = Math.max(0, Math.floor(Math.abs(kmRemaining) / kmPerDay));
+    return {
+        dueDate: new Date(Date.now() - overdueDays * ridingRate_1.DAY_MS),
+        overdueDays,
+    };
+};
 // §D — the forecast. Nothing is stored: every figure is derived on read from the newest
 // live oil log, `bike.currentOdometer` read LIVE on this request, and the riding rate.
 // ! That is exactly what satisfies the developer's "based on the updated odometer reading
@@ -277,8 +297,16 @@ const getEngineOilStatusFromDB = (bikeId, userId) => __awaiter(void 0, void 0, v
             lastChange: null,
         };
     }
+    // ! The STRICT rate, and the only one `evaluateOilDue` is ever given: it decides `status`
+    // ! and therefore which reminders fire, so spec 56 left it exactly as it was (its H2).
     const rate = yield (0, ridingRate_1.computeKmPerDay)(bikeId);
     const due = (0, engineOilLog_utils_1.evaluateOilDue)(last, bike.currentOdometer, rate);
+    // ! Spec 56 §B — the DATE-only rate. When the strict one comes back null (which is the
+    // ! common case for a rider who fills up less than twice a month) the card used to have
+    // ! no date to show at all. This fallback answers "around when?" from the bike's whole
+    // ! fuel history, or failing that its lifetime odometer average, and `rateBasis.source`
+    // ! tells the client which it got so it can hedge the wording.
+    const projectionRate = rate !== null && rate !== void 0 ? rate : (yield (0, ridingRate_1.computeFallbackKmPerDay)(bike));
     const lastChange = {
         _id: last.id,
         changeDate: last.changeDate,
@@ -306,21 +334,69 @@ const getEngineOilStatusFromDB = (bikeId, userId) => __awaiter(void 0, void 0, v
         result.kmRemaining = due.kmRemaining;
         result.percentUsed = due.percentUsed;
     }
-    // state 3 — no usable riding rate (new bike, <2 fuel logs in 28 days, <100 km covered):
-    // the distance fields stay, the projection is omitted, and `status` already fell back to
-    // the 50 km rule inside evaluateOilDue.
-    if (rate) {
+    // state 3 — no usable riding rate at all, not even the fallback (a brand-new bike with
+    // no fuel history and under 100 km or 14 days of ownership): the distance fields stay and
+    // the projection is omitted. `status` already fell back to the 50 km rule inside
+    // evaluateOilDue regardless of which rate reached this line.
+    if (projectionRate) {
         // ! 1dp — a raw 42.857142857142854 in a payload is noise. Reported even when overdue:
         // ! spec 52 D6, without it a wrong date is undebuggable.
-        result.kmPerDay = Math.round(rate.kmPerDay * 10) / 10;
+        result.kmPerDay = Math.round(projectionRate.kmPerDay * 10) / 10;
         result.rateBasis = {
-            spanDays: rate.spanDays,
-            distanceKm: rate.distanceKm,
+            spanDays: projectionRate.spanDays,
+            distanceKm: projectionRate.distanceKm,
+            source: projectionRate.source,
         };
     }
-    if (due.projectedDays !== undefined) {
-        result.projectedDaysRemaining = due.projectedDays;
-        result.projectedDueDate = new Date(Date.now() + due.projectedDays * ridingRate_1.DAY_MS);
+    // ! Spec 56 §B. Both branches below are `Math.floor` for the reason spec 52 H5 gives —
+    // ! `currentOdometer` lags reality between logs, so every figure here is biased late, and
+    // ! late is the one direction an oil-change date must not err in. When `projectionRate`
+    // ! IS `rate`, the first branch reproduces `due.projectedDays` by construction (same
+    // ! dividend, same divisor, same floor), so nothing about today's answers changes.
+    if (due.kmRemaining !== undefined && projectionRate) {
+        const projected = projectDueDate(due.kmRemaining, projectionRate.kmPerDay);
+        result.projectedDueDate = projected.dueDate;
+        if (projected.daysRemaining !== undefined) {
+            result.projectedDaysRemaining = projected.daysRemaining;
+        }
+        if (projected.overdueDays !== undefined) {
+            result.overdueDays = projected.overdueDays;
+        }
+    }
+    // ! Spec 56 §C — the provisional forecast for a change with no interval of its own. The
+    // ! rider's real problem was not a missing rate but a missing interval: spec 54 seeds
+    // ! `intervalKmUsed` on new changes, and every change logged before it has none, so the
+    // ! card could only say "set an interval to get a due date". The oil type still carries a
+    // ! `suggestedIntervalKm`, which is a good enough answer to "around when?" as long as it
+    // ! is labelled an estimate — and it is kept in its own object so no existing field
+    // ! silently becomes a guess (H3).
+    if (last.nextDueOdometer === null && last.oilType) {
+        const intervalKm = last.oilType.suggestedIntervalKm;
+        const nextDueOdometer = (0, engineOilLog_utils_1.computeNextDueOdometer)(last.odometerReading, intervalKm);
+        const estimated = (0, engineOilLog_utils_1.evaluateOilDue)({ odometerReading: last.odometerReading, nextDueOdometer }, bike.currentOdometer, rate);
+        if (estimated.kmRemaining !== undefined) {
+            const estimate = {
+                basis: "oilTypeSuggestion",
+                // ! never "unknown" here: a synthetic `nextDueOdometer` is always non-null, so
+                // ! `evaluateOilDue`'s unknown branch is unreachable for it
+                status: estimated.status,
+                intervalKm,
+                nextDueOdometer,
+                kmRemaining: estimated.kmRemaining,
+                percentUsed: estimated.percentUsed,
+            };
+            if (projectionRate) {
+                const projected = projectDueDate(estimated.kmRemaining, projectionRate.kmPerDay);
+                estimate.projectedDueDate = projected.dueDate;
+                if (projected.daysRemaining !== undefined) {
+                    estimate.projectedDaysRemaining = projected.daysRemaining;
+                }
+                if (projected.overdueDays !== undefined) {
+                    estimate.overdueDays = projected.overdueDays;
+                }
+            }
+            result.estimate = estimate;
+        }
     }
     return result;
 });
