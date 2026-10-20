@@ -449,7 +449,7 @@
                 "update-profile"
               ]
             },
-            "description": "Spec 53. Updates the logged-in user's own display name. Requires Bearer {{token}} (inherited from the collection). `name` is trimmed, 1-60 chars; a whitespace-only name is a 400, not a saved blank. There is no user id in the path \u2014 the route acts on the token's `userId`, so there is nothing to tamper with. Responds with the full safe-user shape, including `profilePicture`.",
+            "description": "Spec 53 + spec 55. Updates the logged-in user's own display name, and **nothing else**. Requires Bearer {{token}} (inherited from the collection). `name` is trimmed, 1-60 chars; a whitespace-only name is a 400, not a saved blank. There is no user id in the path \u2014 the route acts on the token's `userId`, so there is nothing to tamper with. Responds with the full safe-user shape, including `profilePicture`.\n\n**`email` is NOT editable and sending one is a 400** (spec 55): it is the account's login identifier, it is `@unique`, and there is no mail sender in this project, so a change could neither be verified nor undone. Before spec 55 an extra `email` key was silently stripped and the route answered `200 Profile updated successfully!!!` having changed nothing \u2014 see the dedicated 400 request below. The service writes `data: { name }` only, so no other column on `users` is reachable here either.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": \"Moniruzzaman Billal\"\n}",
@@ -513,6 +513,52 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"Status code is 400 (blank name refused)\", function () {",
+                  "    pm.expect([400]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Profile with an email (expect 400)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/update-profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "update-profile"
+              ]
+            },
+            "description": "Spec 55. The rider cannot change their own email, and the API says so rather than ignoring the attempt: `email` is declared `z.undefined()` with a custom message, so a present key is a **400** (\"Email can't be changed. It is the account's login identifier.\"). A plain Zod object would have stripped the key and answered 200, which is indistinguishable from success. Run `GET /auth/me` afterwards and confirm the address is unchanged.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Moniruzzaman Billal\",\n  \"email\": \"someone-else@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 400 (email change refused)\", function () {",
                   "    pm.expect([400]).to.include(pm.response.code);",
                   "});"
                 ]
@@ -1018,7 +1064,7 @@
                 }
               ]
             },
-            "description": "Supports pagination (page/limit), sort, and field filters via QueryBuilder. `bike`/`isDeleted` query keys are ignored server-side (IDOR hardening) even if you set them."
+            "description": "Supports pagination (page/limit), sort, and field filters via QueryBuilder. `bike`/`isDeleted` query keys are ignored server-side (IDOR hardening) even if you set them.\n\n**Spec 57** adds two derived fields per row: `kmOnThisFill` (the NEXT fill-up's odometer reading minus this one's \u2014 the distance this tank covered) and `costPerKm` (`totalCost / kmOnThisFill`). Both are `null` on the newest fill-up, whose period is still open, and `costPerKm` is `null` whenever `kmOnThisFill` is 0 (two fills at the same reading) \u2014 never `Infinity`. The page's newest row is closed by ONE extra query against the row that sits on the previous page, so page 2's first row carries a figure too; check the boundary with `?page=2&limit=1`. `GET /:id` does NOT carry either field. This is money per km, NOT mileage \u2014 km/l still comes from the closed full-tank periods under `/mileage`."
           },
           "event": [
             {
@@ -2250,7 +2296,7 @@
                 "status"
               ]
             },
-            "description": "Spec 54 \u00a7D \u2014 the whole oil screen in one request, computed on read: nothing is stored. `currentOdometer` is read LIVE on every call, so a Settings odometer update (`PATCH /bikes/:id/odometer`) shows up here immediately with no recompute step.\n\n**This request is registered BEFORE `GET /:id` on purpose (\u00a70 H1)** \u2014 Express matches in registration order, so the other way round `/:id` swallows the literal path `status` and you get `404 Engine oil log not found` with no hint that routing is the problem.\n\nThree non-error states to expect: no oil log yet \u2192 `status: \"unknown\"`, `lastChange: null`; an imported log with no interval \u2192 `lastChange` + `kmSinceChange` only, `status: \"unknown\"`; no usable riding rate (<2 fuel logs in 28 days, span <14 days, or <100 km) \u2192 distance fields stay, `projectedDaysRemaining`/`projectedDueDate`/`kmPerDay` are all omitted and `status` falls back to the old 50 km rule. `kmRemaining` is **signed** \u2014 negative means past due."
+            "description": "Spec 54 \u00a7D \u2014 the whole oil screen in one request, computed on read: nothing is stored. `currentOdometer` is read LIVE on every call, so a Settings odometer update (`PATCH /bikes/:id/odometer`) shows up here immediately with no recompute step.\n\n**This request is registered BEFORE `GET /:id` on purpose (\u00a70 H1)** \u2014 Express matches in registration order, so the other way round `/:id` swallows the literal path `status` and you get `404 Engine oil log not found` with no hint that routing is the problem.\n\nThree non-error states to expect: no oil log yet \u2192 `status: \"unknown\"`, `lastChange: null`; an imported log with no interval \u2192 `lastChange` + `kmSinceChange` only, `status: \"unknown\"`; no usable riding rate (<2 fuel logs in 28 days, span <14 days, or <100 km) \u2192 distance fields stay, `projectedDaysRemaining`/`projectedDueDate`/`kmPerDay` are all omitted and `status` falls back to the old 50 km rule. `kmRemaining` is **signed** \u2014 negative means past due.\n\n**Spec 56 changes what the last two of those states answer**, because the card had no date to show in either. (1) When the strict rate is unavailable a FALLBACK rate is used for the date only \u2014 the bike's whole fuel history, else its lifetime odometer average \u2014 and `rateBasis.source` says which (`recent` | `history` | `lifetime`). The fallback never feeds `evaluateOilDue`, so no `status` value and no reminder threshold changes. (2) An overdue change now carries `projectedDueDate` in the PAST plus a positive `overdueDays`; `projectedDaysRemaining` stays omitted when overdue. (3) A change with no `intervalKmUsed` of its own gets an `estimate` object \u2014 `{ basis: \"oilTypeSuggestion\", status, intervalKm, nextDueOdometer, kmRemaining, percentUsed, projectedDueDate?, projectedDaysRemaining?, overdueDays? }` \u2014 derived from the oil type's CURRENT `suggestedIntervalKm`. It is provisional and moves if the catalog is edited, which is why it is not merged into the top-level fields; a client must label it as an estimate."
           },
           "event": [
             {
@@ -3107,7 +3153,7 @@
                 "spending-insight"
               ]
             },
-            "description": "Cached by log count, not TTL. First call for a bike with data generates and caches; repeat calls with no new logs return the cached value with no AI call. A bike with zero logs returns a fixed 'no data yet' message with generated: false, no AI call made."
+            "description": "Cached by log count, not TTL. Since spec 58 that count is fuel logs + maintenance logs + **engine oil logs** \u2014 all three tables the spending summary sums \u2014 so adding an oil change alone now invalidates the cache. First call for a bike with data generates and caches; repeat calls with no new logs return the cached value with no AI call. A bike with zero logs in all three tables returns a fixed 'no data yet' message with generated: false, no AI call made."
           },
           "event": [
             {
@@ -3140,7 +3186,7 @@
                 "mileage-insight"
               ]
             },
-            "description": "Cached by fuel-log count, not TTL. Same shape as Spending Insight."
+            "description": "Cached by fuel-log count, not TTL. Same shape as Spending Insight. Deliberately NOT invalidated by maintenance or engine oil logs (spec 58 HK4) \u2014 an oil change does not move km/l."
           },
           "event": [
             {
@@ -3179,7 +3225,7 @@
                 "chat"
               ]
             },
-            "description": "Stateless per request \u2014 resend the full message history each call. `messages` must be non-empty; any message with role \"system\" is rejected with 400 (the system prompt is always server-constructed from real bike data). Context is bounded to the 20 most recent fuel logs + 20 most recent maintenance logs plus lifetime spending totals.",
+            "description": "Stateless per request \u2014 resend the full message history each call. `messages` must be non-empty; any message with role \"system\" is rejected with 400 (the system prompt is always server-constructed from real bike data). Context is bounded to the 8 most recent fuel logs + 8 most recent maintenance logs + 8 most recent **engine oil logs** (spec 58), plus lifetime spending totals and, when the bike has a manual, up to 4 relevant excerpts from it. The engine oil block is sent even when empty, so a bike with no oil change gets an honest 'no oil history' answer rather than a guess. Oil changes live in their own table since spec 54, and its import soft-deleted the source maintenance logs \u2014 before spec 58 the assistant could not see a single one.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"How much have I spent on this bike so far?\" }\n  ]\n}",

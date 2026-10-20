@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.computeKmPerDay = exports.PROJECTED_UPCOMING_DAYS = exports.KM_UPCOMING_FALLBACK = exports.DAY_MS = void 0;
+exports.computeFallbackKmPerDay = exports.computeKmPerDay = exports.PROJECTED_UPCOMING_DAYS = exports.KM_UPCOMING_FALLBACK = exports.DAY_MS = void 0;
 const prisma_1 = require("../lib/prisma");
 // Spec 54 §D6: extracted verbatim out of `maintenanceLog.service.ts`, where spec 52 put it.
 // That spec's D7 said to move the helper somewhere shared "only when a second consumer
@@ -70,6 +70,74 @@ const computeKmPerDay = (bikeId) => __awaiter(void 0, void 0, void 0, function* 
     const distanceKm = latest.odometerReading - anchor.odometerReading;
     if (distanceKm < MIN_PROJECTION_DISTANCE_KM)
         return null;
-    return { kmPerDay: distanceKm / spanDays, spanDays, distanceKm };
+    return {
+        kmPerDay: distanceKm / spanDays,
+        spanDays,
+        distanceKm,
+        source: "recent",
+    };
 });
 exports.computeKmPerDay = computeKmPerDay;
+// ! Spec 56 §B. `computeKmPerDay` above is deliberately strict — two fuel logs inside a
+// ! 28-day window, ≥14 days apart, ≥100 km between them — because it decides whether a
+// ! reminder fires, and a reminder fired off three days of data is worse than no reminder.
+// ! That strictness is why the oil card had no date to show for the developer's own bike:
+// ! miss any one of those conditions and `projectedDueDate` is simply omitted.
+// !
+// ! This is the DATE-ONLY fallback, and the split matters: it never feeds `evaluateOilDue`,
+// ! so no reminder threshold and no `status` value anywhere changes because of it (H2). It
+// ! only lets the status endpoint answer "around when?" from a coarser figure, tagged with
+// ! `source` so the client can say so.
+//
+// Two attempts, in order of how well they describe recent riding:
+//   1. "history"  — the oldest and newest live fuel logs, whatever window they span.
+//   2. "lifetime" — the bike's own odometer since purchase, which needs no fuel log at all.
+const MAX_FALLBACK_STALENESS_DAYS = 365;
+const computeFallbackKmPerDay = (bike) => __awaiter(void 0, void 0, void 0, function* () {
+    const [oldest, newest] = yield Promise.all([
+        prisma_1.prisma.fuelLog.findFirst({
+            where: { bikeId: bike.id, isDeleted: false },
+            orderBy: { date: "asc" },
+            select: { date: true, odometerReading: true },
+        }),
+        prisma_1.prisma.fuelLog.findFirst({
+            where: { bikeId: bike.id, isDeleted: false },
+            orderBy: { date: "desc" },
+            select: { date: true, odometerReading: true },
+        }),
+    ]);
+    if (oldest && newest) {
+        const spanDays = (newest.date.getTime() - oldest.date.getTime()) / exports.DAY_MS;
+        const distanceKm = newest.odometerReading - oldest.odometerReading;
+        // ! A bike parked for two years would otherwise project off the riding it did before
+        // ! it was parked, which reads as a confident date and is pure fiction.
+        const ageDays = (Date.now() - newest.date.getTime()) / exports.DAY_MS;
+        if (spanDays >= MIN_PROJECTION_SPAN_DAYS &&
+            distanceKm >= MIN_PROJECTION_DISTANCE_KM &&
+            ageDays <= MAX_FALLBACK_STALENESS_DAYS) {
+            return {
+                kmPerDay: distanceKm / spanDays,
+                spanDays,
+                distanceKm,
+                source: "history",
+            };
+        }
+    }
+    // ! `currentOdometer` is raised by every log and by Settings' manual update (spec 44), so
+    // ! this works for a rider who logs maintenance but barely logs fuel. It is an average
+    // ! over the whole time they have owned the bike, so it is the bluntest of the three —
+    // ! hence last, and hence tagged.
+    const spanDays = (Date.now() - bike.purchaseDate.getTime()) / exports.DAY_MS;
+    const distanceKm = bike.currentOdometer - bike.initialOdometer;
+    if (spanDays >= MIN_PROJECTION_SPAN_DAYS &&
+        distanceKm >= MIN_PROJECTION_DISTANCE_KM) {
+        return {
+            kmPerDay: distanceKm / spanDays,
+            spanDays,
+            distanceKm,
+            source: "lifetime",
+        };
+    }
+    return null;
+});
+exports.computeFallbackKmPerDay = computeFallbackKmPerDay;

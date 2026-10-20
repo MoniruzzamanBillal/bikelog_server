@@ -42,6 +42,10 @@ router.get(
 
 // ! Spec 53 — for updating the logged-in user's own name. No user id in the path: the route
 // ! acts on `req.user.userId`, so there is nothing to tamper with.
+// ! Spec 55 — `name` is the ONLY writable field here. A submitted `email` is refused with a
+// ! 400 by the schema (it used to be stripped silently, which answered 200 and changed
+// ! nothing), and the service writes `data: { name }` only. The email is the login
+// ! identifier and is not editable by its owner through this API at all.
 router.patch(
   "/update-profile",
   authCheck,
