@@ -128,39 +128,31 @@ const createEngineOilLogIntoDB = async (
   };
 };
 
-// ! D12: the two derived fields the list endpoint adds per row. A change's reading marks
-// ! where that oil's life ENDED, so a row's period is the run of the oil it drained —
-// ! `kmOnThisOil` is this reading minus the OLDER neighbour's (the previous change). The
-// ! oldest change on record has no older neighbour, so it counts from odometer 0 and the
-// ! figure IS its reading. `costPerKm` is the cost of the oil that actually ran that
-// ! distance — i.e. the OLDER neighbour's cost, not this row's (this row's cost bought the
-// ! NEW oil) — so price and distance describe the same oil. The oldest change therefore has
-// ! a distance but no `costPerKm` (no earlier cost to divide).
+// ! D12: the two derived fields the list endpoint adds per row. A row's period is closed
+// ! by its NEWER neighbour, so `kmOnThisOil` is that neighbour's reading minus this one's.
 // ! Computed server-side on purpose: a client deriving it from the page it happens to be
 // ! holding gets a figure that appears and vanishes with pagination, because the
-// ! neighbouring change sits on the next page at every boundary
+// ! neighbouring change sits on the previous page at every boundary
 // ! (`bikelog_client-web-` spec 33 H-W12).
 const withPeriodFields = <
   T extends { odometerReading: number; cost: number },
 >(
   row: T,
-  olderNeighbour: { odometerReading: number; cost: number } | null,
+  newerNeighbour: { odometerReading: number } | null,
 ) => {
-  const kmOnThisOil = olderNeighbour
-    ? row.odometerReading - olderNeighbour.odometerReading
-    : row.odometerReading;
+  const kmOnThisOil = newerNeighbour
+    ? newerNeighbour.odometerReading - row.odometerReading
+    : null;
 
   return {
     ...row,
     kmOnThisOil,
     // ! null, never Infinity — two changes can legitimately share an odometer reading
     // ! (the sequence check allows equal readings), and `cost / 0` would serialise as
-    // ! `null` through JSON anyway while breaking any arithmetic on the way there. Also
-    // ! null for the oldest change: `olderNeighbour` is absent, so there is no prior oil's
-    // ! cost to spread over the distance.
+    // ! `null` through JSON anyway while breaking any arithmetic on the way there
     costPerKm:
-      olderNeighbour && kmOnThisOil > 0
-        ? olderNeighbour.cost / kmOnThisOil
+      kmOnThisOil !== null && kmOnThisOil > 0
+        ? row.cost / kmOnThisOil
         : null,
   };
 };
@@ -198,59 +190,45 @@ const getEngineOilLogsFromDB = async (
 
   const shaped = result.map(toApiShape);
 
-  // ! D12. Pair each row with its OLDER neighbour (the previous change, whose oil this one
-  // ! drained). Ordering the page myself rather than trusting "the next element" keeps this
-  // ! correct even if a caller passes `?sort=changeDate` — same pairing under the default
-  // ! `-changeDate`, which is the only sort anything actually uses. H13's tie-break is
-  // ! applied here too, so two changes on one calendar day pair in the same order the list
-  // ! shows them in.
+  // ! D12. Pair each row with its newer neighbour. Ordering the page myself rather than
+  // ! trusting "the previous element" keeps this correct even if a caller passes
+  // ! `?sort=changeDate` — same pairing under the default `-changeDate`, which is the only
+  // ! sort anything actually uses. H13's tie-break is applied here too, so two changes on
+  // ! one calendar day pair in the same order the list shows them in.
   const newestFirst = [...shaped].sort(
     (a, b) =>
       b.changeDate.getTime() - a.changeDate.getTime() ||
       b.createdAt.getTime() - a.createdAt.getTime(),
   );
 
-  // ! Only the page's OLDEST row has an off-page neighbour, so ONE extra query covers
+  // ! Only the page's newest row has an off-page neighbour, so ONE extra query covers
   // ! every page boundary — two queries per list request in total, both served by
-  // ! `@@index([bikeId, changeDate])`. Without it, the last row on a full page would read
-  // ! `—` and the page boundary would look like a bug (spec 33 V15). `cost` is selected too
-  // ! (as a Decimal) because `costPerKm` now divides the OLDER neighbour's cost; mirror
-  // ! `toApiShape`'s Number() conversion so it matches the in-page shaped rows.
-  const pageOldest = newestFirst[newestFirst.length - 1];
-  const offPageNeighbourRaw = pageOldest
+  // ! `@@index([bikeId, changeDate])`. Without it, page 2's first row would read `—` and
+  // ! the page boundary would look like a bug (spec 33 V15).
+  const pageNewest = newestFirst[0];
+  const offPageNeighbour = pageNewest
     ? await prisma.engineOilLog.findFirst({
         where: {
           bikeId,
           isDeleted: false,
           OR: [
-            { changeDate: { lt: pageOldest.changeDate } },
+            { changeDate: { gt: pageNewest.changeDate } },
             {
-              changeDate: pageOldest.changeDate,
-              createdAt: { lt: pageOldest.createdAt },
+              changeDate: pageNewest.changeDate,
+              createdAt: { gt: pageNewest.createdAt },
             },
           ],
         },
-        orderBy: [{ changeDate: "desc" }, { createdAt: "desc" }],
-        select: { odometerReading: true, cost: true },
+        orderBy: [{ changeDate: "asc" }, { createdAt: "asc" }],
+        select: { odometerReading: true },
       })
     : null;
-  const offPageNeighbour = offPageNeighbourRaw
-    ? {
-        odometerReading: offPageNeighbourRaw.odometerReading,
-        cost: Number(offPageNeighbourRaw.cost),
-      }
-    : null;
 
-  const neighbourById = new Map<
-    string,
-    { odometerReading: number; cost: number } | null
-  >();
+  const neighbourById = new Map<string, { odometerReading: number } | null>();
   newestFirst.forEach((row, index) => {
     neighbourById.set(
       row.id,
-      index === newestFirst.length - 1
-        ? offPageNeighbour
-        : newestFirst[index + 1],
+      index === 0 ? offPageNeighbour : newestFirst[index - 1],
     );
   });
 
