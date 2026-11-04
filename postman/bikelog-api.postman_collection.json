@@ -2820,6 +2820,46 @@
               }
             }
           ]
+        },
+        {
+          "name": "Spending Monthly Breakdown",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/spending-summary/monthly-breakdown?targetMonth=2026-07",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "spending-summary",
+                "monthly-breakdown"
+              ],
+              "query": [
+                {
+                  "key": "targetMonth",
+                  "value": "2026-07",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Spec 60: month-only category drill-down for the app's Spending > Month tab accordions. targetMonth (YYYY-MM) is required; there is no period param. Returns `{ period: \"month\", targetMonth, totalSpending, categories }`, where each category is `{ category, total, records }` with its line-item records nested inside (date, category, description, amount, vendor, remarks, source) sorted newest-first. Categories are sorted by total descending, and are derived from the records themselves — a zero-value bucket (e.g. Fuel with no logs this month) does not appear, unlike the plain Spending Summary which always emits a Fuel row. The per-category totals sum to totalSpending, which equals Spending Summary's totalSpending for period=month + the same targetMonth."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     },

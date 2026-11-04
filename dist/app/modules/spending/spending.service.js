@@ -175,6 +175,48 @@ const getSpendingDetailsFromDB = (bikeId, userId, period, targetMonth, targetYea
         categoryBreakdown,
         records });
 });
+// ! Spec 60: month-only category drill-down for the app's Month tab accordions.
+// ! Reuses computeSpendingForRange (so the date math and per-record shape can never
+// ! drift from the summary/details endpoints) and simply groups its flat records[] by
+// ! category. The categories are derived from the records themselves rather than from
+// ! categoryBreakdown: computeSpendingForRange always emits a `Fuel` breakdown row even
+// ! at ৳0, and a zero-value bucket here would render as an accordion that expands to
+// ! nothing. Grouping from records drops any category with no line items, and the per-
+// ! category totals still sum to totalSpending because every cost lives in exactly one
+// ! record.
+const getMonthlyCategoryBreakdownFromDB = (bikeId, userId, targetMonth) => __awaiter(void 0, void 0, void 0, function* () {
+    yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
+    const { startDate, endDate } = resolveSpendingDateRange("month", targetMonth);
+    const { totalSpending, records } = yield computeSpendingForRange(bikeId, startDate, endDate);
+    const groups = new Map();
+    for (const record of records) {
+        const existing = groups.get(record.category);
+        if (existing) {
+            existing.total += record.amount;
+            existing.records.push(record);
+        }
+        else {
+            groups.set(record.category, {
+                category: record.category,
+                total: record.amount,
+                records: [record],
+            });
+        }
+    }
+    const categories = [...groups.values()]
+        .map((group) => (Object.assign(Object.assign({}, group), { 
+        // ! newest-first inside a category: computeSpendingForRange sorts records
+        // ! oldest-first (right for the PDF's chronological read, backwards for a
+        // ! drill-down where the most recent spend is what the rider wants first)
+        records: [...group.records].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) })))
+        .sort((a, b) => b.total - a.total);
+    return {
+        period: "month",
+        targetMonth,
+        totalSpending,
+        categories,
+    };
+});
 const getSpendingTrendFromDB = (bikeId, userId, months) => __awaiter(void 0, void 0, void 0, function* () {
     yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
     const now = new Date();
@@ -196,4 +238,5 @@ exports.spendingServices = {
     getSpendingSummaryFromDB,
     getSpendingTrendFromDB,
     getSpendingDetailsFromDB,
+    getMonthlyCategoryBreakdownFromDB,
 };

@@ -3,7 +3,7 @@ import AppError from "../../Error/AppError";
 import { prisma } from "../../lib/prisma";
 import { findOwnedBikeOrThrow } from "../bike/bike.utils";
 import { AccessoryStatus } from "../bikeAccessory/bikeAccessory.constant";
-import { TSpendingRecord } from "./spending.interface";
+import { TSpendingCategoryGroup, TSpendingRecord } from "./spending.interface";
 
 // ! shared by getSpendingSummaryFromDB and getSpendingDetailsFromDB so the two endpoints'
 // ! date-range math can never drift apart from each other
@@ -257,6 +257,65 @@ const getSpendingDetailsFromDB = async (
   };
 };
 
+// ! Spec 60: month-only category drill-down for the app's Month tab accordions.
+// ! Reuses computeSpendingForRange (so the date math and per-record shape can never
+// ! drift from the summary/details endpoints) and simply groups its flat records[] by
+// ! category. The categories are derived from the records themselves rather than from
+// ! categoryBreakdown: computeSpendingForRange always emits a `Fuel` breakdown row even
+// ! at ৳0, and a zero-value bucket here would render as an accordion that expands to
+// ! nothing. Grouping from records drops any category with no line items, and the per-
+// ! category totals still sum to totalSpending because every cost lives in exactly one
+// ! record.
+const getMonthlyCategoryBreakdownFromDB = async (
+  bikeId: string,
+  userId: string,
+  targetMonth: string,
+) => {
+  await findOwnedBikeOrThrow(bikeId, userId);
+
+  const { startDate, endDate } = resolveSpendingDateRange("month", targetMonth);
+
+  const { totalSpending, records } = await computeSpendingForRange(
+    bikeId,
+    startDate,
+    endDate,
+  );
+
+  const groups = new Map<string, TSpendingCategoryGroup>();
+  for (const record of records) {
+    const existing = groups.get(record.category);
+    if (existing) {
+      existing.total += record.amount;
+      existing.records.push(record);
+    } else {
+      groups.set(record.category, {
+        category: record.category,
+        total: record.amount,
+        records: [record],
+      });
+    }
+  }
+
+  const categories = [...groups.values()]
+    .map((group) => ({
+      ...group,
+      // ! newest-first inside a category: computeSpendingForRange sorts records
+      // ! oldest-first (right for the PDF's chronological read, backwards for a
+      // ! drill-down where the most recent spend is what the rider wants first)
+      records: [...group.records].sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+      ),
+    }))
+    .sort((a, b) => b.total - a.total);
+
+  return {
+    period: "month" as const,
+    targetMonth,
+    totalSpending,
+    categories,
+  };
+};
+
 const getSpendingTrendFromDB = async (
   bikeId: string,
   userId: string,
@@ -287,4 +346,5 @@ export const spendingServices = {
   getSpendingSummaryFromDB,
   getSpendingTrendFromDB,
   getSpendingDetailsFromDB,
+  getMonthlyCategoryBreakdownFromDB,
 };
