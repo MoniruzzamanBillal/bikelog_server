@@ -51,6 +51,20 @@ const getBikeAccessories = catchAsync(async (req, res) => {
   });
 });
 
+const getAccessorySpendingSummary = catchAsync(async (req, res) => {
+  const result = await bikeAccessoryServices.getAccessorySpendingSummaryFromDB(
+    req.params.bikeId,
+    req.user.userId,
+  );
+
+  sendResponse(res, {
+    status: httpStatus.OK,
+    success: true,
+    message: "Accessory spending summary retrieved successfully",
+    data: result,
+  });
+});
+
 const getBikeAccessoryById = catchAsync(async (req, res) => {
   const result = await bikeAccessoryServices.getBikeAccessoryByIdFromDB(
     req.params.bikeId,
@@ -147,6 +161,7 @@ const deleteBikeAccessoryImage = catchAsync(async (req, res) => {
 export const bikeAccessoryController = {
   createBikeAccessory,
   getBikeAccessories,
+  getAccessorySpendingSummary,
   getBikeAccessoryById,
   updateBikeAccessory,
   deleteBikeAccessory,

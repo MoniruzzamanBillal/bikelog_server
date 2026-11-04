@@ -2914,6 +2914,46 @@
           ]
         },
         {
+          "name": "Accessory Spending Summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/accessories/spending-summary",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "accessories",
+                "spending-summary"
+              ]
+            },
+            "description": "Month-based spending for the app's accessories \"Purchased\" tab. Only purchased, non-deleted accessories count. Returns `{ allTimeTotal, currentMonth (\"YYYY-MM\"), currentMonthTotal, months }`, where `months` is newest-first and includes EVERY month from the earliest purchase to the current month \u2014 empty in-between months (and an empty current month) have `total: 0` and `accessories: []`. `allTimeTotal` must match the spending-summary \"Accessories\" category total at `period=lifetime`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});",
+                  "pm.test(\"Shape has totals and months\", function () {",
+                  "    const d = pm.response.json().data;",
+                  "    pm.expect(d).to.have.property(\"allTimeTotal\");",
+                  "    pm.expect(d).to.have.property(\"currentMonth\");",
+                  "    pm.expect(d).to.have.property(\"currentMonthTotal\");",
+                  "    pm.expect(d.months).to.be.an(\"array\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Attempt Status Change After Purchased (expect 400)",
           "request": {
             "method": "PATCH",

@@ -14,6 +14,8 @@ const bikeAccessory_validation_1 = require("./bikeAccessory.validation");
 const router = (0, express_1.Router)({ mergeParams: true });
 router.post("/", authCheck_1.default, (0, validateRequest_1.default)(bikeAccessory_validation_1.bikeAccessoryValidations.createBikeAccessorySchema), bikeAccessory_controller_1.bikeAccessoryController.createBikeAccessory);
 router.get("/", authCheck_1.default, bikeAccessory_controller_1.bikeAccessoryController.getBikeAccessories);
+// ! must be registered BEFORE "/:id", or ":id" captures "spending-summary"
+router.get("/spending-summary", authCheck_1.default, bikeAccessory_controller_1.bikeAccessoryController.getAccessorySpendingSummary);
 router.get("/:id", authCheck_1.default, bikeAccessory_controller_1.bikeAccessoryController.getBikeAccessoryById);
 router.patch("/:id", authCheck_1.default, (0, validateRequest_1.default)(bikeAccessory_validation_1.bikeAccessoryValidations.updateBikeAccessorySchema), bikeAccessory_controller_1.bikeAccessoryController.updateBikeAccessory);
 router.delete("/:id", authCheck_1.default, bikeAccessory_controller_1.bikeAccessoryController.deleteBikeAccessory);

@@ -17,6 +17,13 @@ router.post(
 
 router.get("/", authCheck, bikeAccessoryController.getBikeAccessories);
 
+// ! must be registered BEFORE "/:id", or ":id" captures "spending-summary"
+router.get(
+  "/spending-summary",
+  authCheck,
+  bikeAccessoryController.getAccessorySpendingSummary,
+);
+
 router.get("/:id", authCheck, bikeAccessoryController.getBikeAccessoryById);
 
 router.patch(
