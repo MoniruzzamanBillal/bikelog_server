@@ -51,6 +51,15 @@ const getBikeAccessories = (0, catchAsync_1.default)((req, res) => __awaiter(voi
         data: { result, meta },
     });
 }));
+const getAccessorySpendingSummary = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const result = yield bikeAccessory_service_1.bikeAccessoryServices.getAccessorySpendingSummaryFromDB(req.params.bikeId, req.user.userId);
+    (0, sendResponse_1.default)(res, {
+        status: http_status_1.default.OK,
+        success: true,
+        message: "Accessory spending summary retrieved successfully",
+        data: result,
+    });
+}));
 const getBikeAccessoryById = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const result = yield bikeAccessory_service_1.bikeAccessoryServices.getBikeAccessoryByIdFromDB(req.params.bikeId, req.user.userId, req.params.id);
     (0, sendResponse_1.default)(res, {
@@ -112,6 +121,7 @@ const deleteBikeAccessoryImage = (0, catchAsync_1.default)((req, res) => __await
 exports.bikeAccessoryController = {
     createBikeAccessory,
     getBikeAccessories,
+    getAccessorySpendingSummary,
     getBikeAccessoryById,
     updateBikeAccessory,
     deleteBikeAccessory,

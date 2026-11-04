@@ -14,5 +14,8 @@ router.get("/", authCheck_1.default, spending_controller_1.spendingController.ge
 router.get("/trend", authCheck_1.default, spending_controller_1.spendingController.getSpendingTrend);
 // ! per-record spending detail (fuel + maintenance line items) for a given period, feeds PDF export
 router.get("/details", authCheck_1.default, spending_controller_1.spendingController.getSpendingDetails);
+// ! spec 60: month-only category drill-down (each category + its nested line-item records)
+// ! for the app Month tab's accordions. Month-by-definition — takes only targetMonth.
+router.get("/monthly-breakdown", authCheck_1.default, spending_controller_1.spendingController.getMonthlyBreakdown);
 //
 exports.spendingRouter = router;

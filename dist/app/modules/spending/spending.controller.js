@@ -62,8 +62,25 @@ const getSpendingDetails = (0, catchAsync_1.default)((req, res) => __awaiter(voi
         data: result,
     });
 }));
+// ! Spec 60: month-only category drill-down for the app's Month tab. Unlike
+// ! getSpendingSummary there is no `period` param — this endpoint is month-by-definition,
+// ! so targetMonth is always required and no year/lifetime branch exists.
+const getMonthlyBreakdown = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const targetMonth = req.query.targetMonth;
+    if (!targetMonth) {
+        throw new AppError_1.default(http_status_1.default.BAD_REQUEST, "targetMonth is required. Use YYYY-MM");
+    }
+    const result = yield spending_service_1.spendingServices.getMonthlyCategoryBreakdownFromDB(req.params.bikeId, req.user.userId, targetMonth);
+    (0, sendResponse_1.default)(res, {
+        status: http_status_1.default.OK,
+        success: true,
+        message: "Monthly spending breakdown retrieved successfully",
+        data: result,
+    });
+}));
 exports.spendingController = {
     getSpendingSummary,
     getSpendingTrend,
     getSpendingDetails,
+    getMonthlyBreakdown,
 };

@@ -187,8 +187,69 @@ const deleteBikeAccessoryImageFromDB = (bikeId, userId, id) => __awaiter(void 0,
     });
     return toApiShape(updated);
 });
+// ! month-based spending summary for the app's accessories "Purchased" tab (spec 59):
+// ! all-time total, current-month total, and a per-month breakdown (newest-first) that
+// ! includes every month from the earliest purchase to the current one — empty in-between
+// ! months (and an empty current month) are returned with total 0 so the client can render
+// ! the gaps without re-deriving the calendar itself.
+const getAccessorySpendingSummaryFromDB = (bikeId, userId) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a, _b, _c, _d, _e;
+    yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
+    // ! only purchased, non-deleted accessories count as real spending — same filter the
+    // ! spending module uses (pending/cancelled wishlist entries are never money spent)
+    const purchased = yield prisma_1.prisma.bikeAccessory.findMany({
+        where: { bikeId, isDeleted: false, status: bikeAccessory_constant_1.AccessoryStatus.purchased },
+        orderBy: { purchaseDate: "desc" },
+    });
+    // ! "YYYY-MM" in server-local time — same month-boundary convention as
+    // ! resolveSpendingDateRange in spending.service.ts (date-fns is not a server dependency)
+    const monthKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const now = new Date();
+    const currentMonth = monthKey(now);
+    const buckets = new Map();
+    let allTimeTotal = 0;
+    let earliest = null;
+    for (const accessory of purchased) {
+        // purchaseDate is always stamped on the purchase transition; createdAt is a defensive fallback
+        const when = (_a = accessory.purchaseDate) !== null && _a !== void 0 ? _a : accessory.createdAt;
+        const key = monthKey(when);
+        const price = accessory.price !== null ? Number(accessory.price) : 0;
+        allTimeTotal += price;
+        let bucket = buckets.get(key);
+        if (!bucket) {
+            bucket = { total: 0, accessories: [] };
+            buckets.set(key, bucket);
+        }
+        bucket.total += price;
+        bucket.accessories.push(toApiShape(accessory));
+        if (!earliest || when < earliest) {
+            earliest = when;
+        }
+    }
+    const currentMonthTotal = (_c = (_b = buckets.get(currentMonth)) === null || _b === void 0 ? void 0 : _b.total) !== null && _c !== void 0 ? _c : 0;
+    const months = [];
+    // ! no purchases at all → empty list; the client shows its "wishlist is empty" state
+    if (earliest) {
+        const rangeStart = new Date(earliest.getFullYear(), earliest.getMonth(), 1);
+        // walk backwards month-by-month from the current month to the earliest, so the
+        // result is newest-first and every month in between is represented
+        const cursor = new Date(now.getFullYear(), now.getMonth(), 1);
+        while (cursor >= rangeStart) {
+            const key = monthKey(cursor);
+            const bucket = buckets.get(key);
+            months.push({
+                month: key,
+                total: (_d = bucket === null || bucket === void 0 ? void 0 : bucket.total) !== null && _d !== void 0 ? _d : 0,
+                accessories: (_e = bucket === null || bucket === void 0 ? void 0 : bucket.accessories) !== null && _e !== void 0 ? _e : [],
+            });
+            cursor.setMonth(cursor.getMonth() - 1);
+        }
+    }
+    return { allTimeTotal, currentMonth, currentMonthTotal, months };
+});
 exports.bikeAccessoryServices = {
     createBikeAccessoryIntoDB,
+    getAccessorySpendingSummaryFromDB,
     getBikeAccessoriesFromDB,
     getBikeAccessoryByIdFromDB,
     updateBikeAccessoryInDB,

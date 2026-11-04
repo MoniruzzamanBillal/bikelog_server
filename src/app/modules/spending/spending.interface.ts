@@ -39,3 +39,20 @@ export type TSpendingDetails = {
   categoryBreakdown: TSpendingCategoryBreakdown[];
   records: TSpendingRecord[];
 };
+
+// ! Spec 60: the monthly drill-down. One category per bucket, its line-item records
+// ! nested inside it, so the app's Month tab can render each category as an accordion
+// ! without re-grouping a flat records[] client-side. Month-only by design — the Year,
+// ! Lifetime and Trend tabs keep consuming the plain summary endpoint.
+export type TSpendingCategoryGroup = {
+  category: string;
+  total: number;
+  records: TSpendingRecord[];
+};
+
+export type TMonthlyCategoryBreakdown = {
+  period: "month";
+  targetMonth: string;
+  totalSpending: number;
+  categories: TSpendingCategoryGroup[];
+};
