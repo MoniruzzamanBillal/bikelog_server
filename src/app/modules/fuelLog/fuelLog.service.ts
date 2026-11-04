@@ -1,12 +1,12 @@
 import { Prisma } from "@prisma/client";
-import { TFuelLog } from "./fuelLog.interface";
 import httpStatus from "http-status";
+import { buildPrismaListQuery } from "../../builder/buildPrismaListQuery";
 import AppError from "../../Error/AppError";
 import { prisma } from "../../lib/prisma";
-import { generateObjectId } from "../../util/generateObjectId";
-import { buildPrismaListQuery } from "../../builder/buildPrismaListQuery";
-import { findOwnedBikeOrThrow, bumpOdometerIfHigher } from "../bike/bike.utils";
 import { deleteCloudinaryImage } from "../../util/cloudinary";
+import { generateObjectId } from "../../util/generateObjectId";
+import { bumpOdometerIfHigher, findOwnedBikeOrThrow } from "../bike/bike.utils";
+import { TFuelLog } from "./fuelLog.interface";
 
 // every returned fuel log gets the _id/bike remap (spec 31/32 precedent) plus
 // Decimal->Number conversion for pricePerLiter/totalCost (top-level plan decision #6)
@@ -114,20 +114,9 @@ const createFuelLogIntoDB = async (
       periodStartOdometer = previousFullTank.odometerReading;
       periodStartDate = previousFullTank.date;
     }
-    // ! else: no prior full-tank fill exists yet — anchor on the bike's immutable initial
-    // ! odometer reading, NOT currentOdometer (which is bumped below and would always equal
-    // ! this fuel log's own reading, collapsing distanceKm to 0)
-    // ! no lower date bound either (periodStartDate stays null) — this is the bike's
-    // ! first-ever closed period, so every fuel log dated on/before this fill belongs to it.
-    // ! bike.createdAt (when the DB record was inserted) is NOT a valid anchor: backdating fuel
-    // ! history right after creating a bike is a normal, supported flow, and a backdated log's
-    // ! date is almost always before bike.createdAt, which used to invert this query's range
-    // ! and silently zero out the whole period (see spec 26).
 
     distanceKm = odometerReading - periodStartOdometer;
 
-    // ! unreachable while assertOdometerInSequence holds — guards against a negative-distance
-    // ! mileage record ever being written again (DEF-04, spec 48)
     if (distanceKm < 0) {
       throw new AppError(
         httpStatus.BAD_REQUEST,
@@ -211,27 +200,19 @@ const createFuelLogIntoDB = async (
     fuelLog: toApiShape(fuelLog),
     // ! both clients require TMileageRecordClosed.bike: string alongside _id (spec 33 decision A)
     mileageRecordClosed: mileageRecordClosed
-      ? { ...mileageRecordClosed, _id: mileageRecordClosed.id, bike: mileageRecordClosed.bikeId }
+      ? {
+          ...mileageRecordClosed,
+          _id: mileageRecordClosed.id,
+          bike: mileageRecordClosed.bikeId,
+        }
       : null,
     bikeNickname: bike.nickname,
   };
 };
 
-// ! Spec 57 D1 — the two derived fields the list endpoint adds per row, a direct port of
-// ! `engineOilLog.service.ts`'s `withPeriodFields` (server spec 54 D12) with "oil" swapped
-// ! for "fill". A tank is burned over the ride that FOLLOWS the fill, so a row's period is
-// ! closed by its NEWER neighbour: `kmOnThisFill` is that neighbour's odometer reading
-// ! minus this one's, and `costPerKm` is what this fill-up's money worked out to over that
-// ! distance.
-// !
-// ! Computed server-side on purpose. A client deriving it from the page it happens to be
-// ! holding gets a figure that appears and vanishes with pagination, because the
-// ! neighbouring fill-up sits on the previous page at every page boundary.
-// !
-// ! This is NOT mileage and must not be read as one: km/l comes from closed full-tank
-// ! MileageRecord periods and is unchanged by this spec. `costPerKm` here is a money
-// ! figure over one tank's distance, partial fills included.
-const withPeriodFields = <T extends { odometerReading: number; totalCost: number }>(
+const withPeriodFields = <
+  T extends { odometerReading: number; totalCost: number },
+>(
   row: T,
   newerNeighbour: { odometerReading: number } | null,
 ) => {
@@ -242,9 +223,7 @@ const withPeriodFields = <T extends { odometerReading: number; totalCost: number
   return {
     ...row,
     kmOnThisFill,
-    // ! null, never Infinity — two fill-ups can legitimately share an odometer reading (the
-    // ! sequence check above allows equal readings), and `cost / 0` would serialise as
-    // ! `null` through JSON anyway while breaking any arithmetic on the way there
+
     costPerKm:
       kmOnThisFill !== null && kmOnThisFill > 0
         ? row.totalCost / kmOnThisFill
@@ -327,7 +306,11 @@ const getFuelLogsFromDB = async (
   };
 };
 
-const getFuelLogByIdFromDB = async (bikeId: string, userId: string, id: string) => {
+const getFuelLogByIdFromDB = async (
+  bikeId: string,
+  userId: string,
+  id: string,
+) => {
   await findOwnedBikeOrThrow(bikeId, userId);
 
   const fuelLog = await prisma.fuelLog.findFirst({
@@ -375,8 +358,6 @@ const updateFuelLogInDB = async (
     throw new AppError(httpStatus.NOT_FOUND, "Fuel log not found");
   }
 
-  // ! re-check the odometer ordering whenever the reading or the date moves; excludeId keeps a
-  // ! log from conflicting with itself, so correcting a typo on the newest log still works (spec 48)
   if (payload.odometerReading !== undefined || payload.date !== undefined) {
     await assertOdometerInSequence(bike, {
       reading: payload.odometerReading ?? fuelLog.odometerReading,
@@ -385,15 +366,16 @@ const updateFuelLogInDB = async (
     });
   }
 
-  // ! totalCost is always server-derived — never trust a client-submitted value directly
   delete payload.totalCost;
 
   const updateData: Record<string, unknown> = { ...payload };
 
-  if (payload.litersAdded !== undefined || payload.pricePerLiter !== undefined) {
+  if (
+    payload.litersAdded !== undefined ||
+    payload.pricePerLiter !== undefined
+  ) {
     const newLiters = payload.litersAdded ?? fuelLog.litersAdded;
-    // ! fuelLog.pricePerLiter off a freshly-fetched Prisma row is a Prisma.Decimal
-    // ! instance, not a plain number — multiplying it directly is unreliable, convert first
+
     const newPrice = payload.pricePerLiter ?? Number(fuelLog.pricePerLiter);
     updateData.totalCost = newLiters * newPrice;
   }
@@ -403,8 +385,6 @@ const updateFuelLogInDB = async (
     data: updateData,
   });
 
-  // ! keep bike.currentOdometer in step when an edit raises the reading (create already bumps);
-  // ! a no-op when it was lowered — nothing rolls the odometer back (DEF-12, out of scope)
   if (payload.odometerReading !== undefined) {
     await bumpOdometerIfHigher(bike, updated.odometerReading);
   }
@@ -412,7 +392,11 @@ const updateFuelLogInDB = async (
   return toApiShape(updated);
 };
 
-const deleteFuelLogFromDB = async (bikeId: string, userId: string, id: string) => {
+const deleteFuelLogFromDB = async (
+  bikeId: string,
+  userId: string,
+  id: string,
+) => {
   await findOwnedBikeOrThrow(bikeId, userId);
 
   const isLocked = await prisma.mileageRecord.findFirst({

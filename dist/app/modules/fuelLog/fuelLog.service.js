@@ -15,12 +15,12 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.fuelLogServices = void 0;
 const client_1 = require("@prisma/client");
 const http_status_1 = __importDefault(require("http-status"));
+const buildPrismaListQuery_1 = require("../../builder/buildPrismaListQuery");
 const AppError_1 = __importDefault(require("../../Error/AppError"));
 const prisma_1 = require("../../lib/prisma");
-const generateObjectId_1 = require("../../util/generateObjectId");
-const buildPrismaListQuery_1 = require("../../builder/buildPrismaListQuery");
-const bike_utils_1 = require("../bike/bike.utils");
 const cloudinary_1 = require("../../util/cloudinary");
+const generateObjectId_1 = require("../../util/generateObjectId");
+const bike_utils_1 = require("../bike/bike.utils");
 // every returned fuel log gets the _id/bike remap (spec 31/32 precedent) plus
 // Decimal->Number conversion for pricePerLiter/totalCost (top-level plan decision #6)
 const toApiShape = (fuelLog) => (Object.assign(Object.assign({}, fuelLog), { _id: fuelLog.id, bike: fuelLog.bikeId, pricePerLiter: Number(fuelLog.pricePerLiter), totalCost: Number(fuelLog.totalCost) }));
@@ -278,7 +278,8 @@ const updateFuelLogInDB = (bikeId, userId, id, payload) => __awaiter(void 0, voi
     // ! totalCost is always server-derived — never trust a client-submitted value directly
     delete payload.totalCost;
     const updateData = Object.assign({}, payload);
-    if (payload.litersAdded !== undefined || payload.pricePerLiter !== undefined) {
+    if (payload.litersAdded !== undefined ||
+        payload.pricePerLiter !== undefined) {
         const newLiters = (_c = payload.litersAdded) !== null && _c !== void 0 ? _c : fuelLog.litersAdded;
         // ! fuelLog.pricePerLiter off a freshly-fetched Prisma row is a Prisma.Decimal
         // ! instance, not a plain number — multiplying it directly is unreliable, convert first
