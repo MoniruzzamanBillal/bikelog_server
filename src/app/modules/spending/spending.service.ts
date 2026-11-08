@@ -3,7 +3,11 @@ import AppError from "../../Error/AppError";
 import { prisma } from "../../lib/prisma";
 import { findOwnedBikeOrThrow } from "../bike/bike.utils";
 import { AccessoryStatus } from "../bikeAccessory/bikeAccessory.constant";
-import { TSpendingCategoryGroup, TSpendingRecord } from "./spending.interface";
+import {
+  TSpendingCategoryGroup,
+  TSpendingPeriodGroup,
+  TSpendingRecord,
+} from "./spending.interface";
 
 // ! shared by getSpendingSummaryFromDB and getSpendingDetailsFromDB so the two endpoints'
 // ! date-range math can never drift apart from each other
@@ -155,6 +159,7 @@ const computeSpendingForRange = async (
     vendor: log.fuelStation ?? null,
     remarks: log.notes ?? null,
     source: "fuel",
+    liters: Number(log.litersAdded),
   }));
 
   const maintenanceRecords: TSpendingRecord[] = maintenanceLogs.map((log) => {
@@ -167,6 +172,7 @@ const computeSpendingForRange = async (
       vendor: log.serviceCenter ?? null,
       remarks: log.notes ?? null,
       source: "maintenance",
+      liters: null,
     };
   });
 
@@ -178,6 +184,7 @@ const computeSpendingForRange = async (
     vendor: null,
     remarks: null,
     source: "accessory",
+    liters: null,
   }));
 
   const engineOilRecords: TSpendingRecord[] = engineOilLogs.map((log) => ({
@@ -190,6 +197,7 @@ const computeSpendingForRange = async (
     vendor: log.serviceCenter ?? null,
     remarks: log.notes ?? null,
     source: "oil",
+    liters: null,
   }));
 
   const records = [
@@ -316,6 +324,114 @@ const getMonthlyCategoryBreakdownFromDB = async (
   };
 };
 
+// ! Spec 61: category drill-down for the Year and Lifetime tabs. Same shape idea as spec
+// ! 60's month breakdown, but a category expands to TIME BUCKETS, not individual records:
+// ! per-month for a year, per-year for lifetime. Reuses computeSpendingForRange (so the
+// ! date math and totals can never drift from the summary/details endpoints) and buckets
+// ! its flat records[]. Fuel buckets carry summed litres; every other category's litres is
+// ! null. Categories are derived from the records themselves — a ৳0 Fuel row never appears,
+// ! matching spec 60's reasoning — and per-category totals still sum to totalSpending
+// ! because every cost lives in exactly one record.
+const getPeriodCategoryBreakdownFromDB = async (
+  bikeId: string,
+  userId: string,
+  period: "year" | "lifetime",
+  targetYear?: string,
+) => {
+  await findOwnedBikeOrThrow(bikeId, userId);
+
+  const { startDate, endDate } =
+    period === "year"
+      ? resolveSpendingDateRange("year", undefined, targetYear)
+      : resolveSpendingDateRange("lifetime");
+
+  const { totalSpending, records } = await computeSpendingForRange(
+    bikeId,
+    startDate,
+    endDate,
+  );
+
+  // ! bucketKey/bucketLabel decide the grain: a year drills into its 12 months, lifetime
+  // ! into calendar years. Both derive from the record's own date so an out-of-range row
+  // ! can never land in the wrong bucket.
+  const monthLabels = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
+
+  type BucketAcc = { key: string; label: string; total: number; liters: number | null };
+  type GroupAcc = { category: string; total: number; buckets: Map<string, BucketAcc> };
+
+  const groups = new Map<string, GroupAcc>();
+
+  for (const record of records) {
+    const date = new Date(record?.date);
+    const year = date.getFullYear();
+    const month = date.getMonth(); // 0-11
+
+    const bucketKey =
+      period === "year"
+        ? `${year}-${String(month + 1).padStart(2, "0")}`
+        : `${year}`;
+    const bucketLabel = period === "year" ? monthLabels[month] : `${year}`;
+
+    let group = groups.get(record?.category);
+    if (!group) {
+      group = { category: record?.category, total: 0, buckets: new Map() };
+      groups.set(record?.category, group);
+    }
+    group.total += record?.amount ?? 0;
+
+    let bucket = group.buckets.get(bucketKey);
+    if (!bucket) {
+      bucket = { key: bucketKey, label: bucketLabel, total: 0, liters: null };
+      group.buckets.set(bucketKey, bucket);
+    }
+    bucket.total += record?.amount ?? 0;
+    if (record?.liters != null) {
+      bucket.liters = (bucket?.liters ?? 0) + record?.liters;
+    }
+  }
+
+  const categories: TSpendingPeriodGroup[] = [...groups.values()]
+    .map((group) => {
+      const buckets = [...group.buckets.values()].sort((a, b) =>
+        // ! year view: months chronological (Jan→Dec). lifetime: years newest-first.
+        period === "year"
+          ? a?.key.localeCompare(b?.key)
+          : b?.key.localeCompare(a?.key),
+      );
+      const totalLiters = buckets.reduce<number | null>(
+        (sum, b) => (b?.liters != null ? (sum ?? 0) + b?.liters : sum),
+        null,
+      );
+      return {
+        category: group?.category,
+        total: group?.total,
+        totalLiters,
+        buckets,
+      };
+    })
+    .sort((a, b) => b?.total - a?.total);
+
+  return {
+    period,
+    ...(targetYear ? { targetYear } : {}),
+    totalSpending,
+    categories,
+  };
+};
+
 const getSpendingTrendFromDB = async (
   bikeId: string,
   userId: string,
@@ -347,4 +463,5 @@ export const spendingServices = {
   getSpendingTrendFromDB,
   getSpendingDetailsFromDB,
   getMonthlyCategoryBreakdownFromDB,
+  getPeriodCategoryBreakdownFromDB,
 };

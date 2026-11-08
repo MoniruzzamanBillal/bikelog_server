@@ -2860,6 +2860,91 @@
               }
             }
           ]
+        },
+        {
+          "name": "Spending Period Breakdown - Year",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/spending-summary/period-breakdown?period=year&targetYear=2026",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "spending-summary",
+                "period-breakdown"
+              ],
+              "query": [
+                {
+                  "key": "period",
+                  "value": "year",
+                  "disabled": false
+                },
+                {
+                  "key": "targetYear",
+                  "value": "2026",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Spec 61: year/lifetime category drill-down for the app's Spending > Year and Lifetime tab accordions. period must be year or lifetime (NOT month — the Month tab uses monthly-breakdown). For period=year, targetYear (YYYY) is required. Returns `{ period, targetYear?, totalSpending, categories }`, where each category is `{ category, total, totalLiters, buckets }`. A bucket is `{ key, label, total, liters }` — for a year, one bucket per month that has spend (key \"2026-01\", label \"Jan\"), sorted chronologically Jan→Dec. liters/totalLiters are the summed litres for the Fuel category and null for every other category. Categories are derived from the records (no zero-value Fuel bucket) and sorted by total descending; per-category totals sum to totalSpending, which equals Spending Summary's totalSpending for the same period/year."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Spending Period Breakdown - Lifetime",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bikes/{{bikeId}}/spending-summary/period-breakdown?period=lifetime",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bikes",
+                "{{bikeId}}",
+                "spending-summary",
+                "period-breakdown"
+              ],
+              "query": [
+                {
+                  "key": "period",
+                  "value": "lifetime",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Spec 61: lifetime variant of the period breakdown. period=lifetime takes no targetYear and spans all of the bike's records. Each category's buckets are one per calendar year with spend (key/label \"2026\"), sorted newest-year-first. liters/totalLiters are summed litres for Fuel, null elsewhere. Shape is otherwise identical to the Year variant."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     },

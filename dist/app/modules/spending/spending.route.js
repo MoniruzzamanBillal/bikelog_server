@@ -17,5 +17,8 @@ router.get("/details", authCheck_1.default, spending_controller_1.spendingContro
 // ! spec 60: month-only category drill-down (each category + its nested line-item records)
 // ! for the app Month tab's accordions. Month-by-definition — takes only targetMonth.
 router.get("/monthly-breakdown", authCheck_1.default, spending_controller_1.spendingController.getMonthlyBreakdown);
+// ! spec 61: year/lifetime category drill-down (each category + its time buckets — per-month
+// ! for a year, per-year for lifetime) for the app Year/Lifetime tabs' accordions.
+router.get("/period-breakdown", authCheck_1.default, spending_controller_1.spendingController.getPeriodBreakdown);
 //
 exports.spendingRouter = router;
