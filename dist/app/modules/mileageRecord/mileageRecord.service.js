@@ -24,7 +24,12 @@ const computeMileageForRange = (bikeId, startDate, endDate) => __awaiter(void 0,
         orderBy: { date: "asc" },
     });
     if (fuelLogsInRange.length === 0) {
-        return { totalDistanceKm: 0, totalLitersConsumed: 0, fuelLogCount: 0 };
+        return {
+            totalDistanceKm: 0,
+            totalLitersConsumed: 0,
+            totalFuelCost: 0,
+            fuelLogCount: 0,
+        };
     }
     const lastLogInRange = fuelLogsInRange[fuelLogsInRange.length - 1];
     const previousLog = yield prisma_1.prisma.fuelLog.findFirst({
@@ -44,8 +49,10 @@ const computeMileageForRange = (bikeId, startDate, endDate) => __awaiter(void 0,
     }
     const totalDistanceKm = lastLogInRange.odometerReading - startOdometer;
     const totalLitersConsumed = fuelLogsInRange.reduce((sum, log) => sum + log.litersAdded, 0);
+    // ! totalCost is Decimal(12,2) — Number(...) before arithmetic (see spending.service)
+    const totalFuelCost = fuelLogsInRange.reduce((sum, log) => sum + Number(log.totalCost), 0);
     const fuelLogCount = fuelLogsInRange.length;
-    return { totalDistanceKm, totalLitersConsumed, fuelLogCount };
+    return { totalDistanceKm, totalLitersConsumed, totalFuelCost, fuelLogCount };
 });
 // ! how many recent fuel logs feed the rolling-average fallback (plan §2.1) — this must be
 // ! computed from raw FuelLogs regardless of isFullTank, not from existing MileageRecords,
@@ -143,7 +150,12 @@ const getLifetimeMileageFromDB = (bikeId) => __awaiter(void 0, void 0, void 0, f
         orderBy: { date: "desc" },
     });
     if (!latestFuelLog) {
-        return { totalDistanceKm: 0, totalLitersConsumed: 0, fuelLogCount: 0 };
+        return {
+            totalDistanceKm: 0,
+            totalLitersConsumed: 0,
+            totalFuelCost: 0,
+            fuelLogCount: 0,
+        };
     }
     // ! anchor on the bike's immutable initialOdometer (odometer at purchase/registration),
     // ! not the first fuel log's reading — the plan doc's "lifetime" figure is meant to cover
@@ -155,8 +167,9 @@ const getLifetimeMileageFromDB = (bikeId) => __awaiter(void 0, void 0, void 0, f
     });
     const totalDistanceKm = endOdometer - bike.initialOdometer;
     const totalLitersConsumed = allLogs.reduce((sum, log) => sum + log.litersAdded, 0);
+    const totalFuelCost = allLogs.reduce((sum, log) => sum + Number(log.totalCost), 0);
     const fuelLogCount = allLogs.length;
-    return { totalDistanceKm, totalLitersConsumed, fuelLogCount };
+    return { totalDistanceKm, totalLitersConsumed, totalFuelCost, fuelLogCount };
 });
 const getMileageTrendFromDB = (bikeId, months) => __awaiter(void 0, void 0, void 0, function* () {
     const now = new Date();
