@@ -29,6 +29,10 @@ export type TSpendingRecord = {
   vendor: string | null;
   remarks: string | null;
   source: TSpendingRecordSource;
+  // ! Spec 61: litres for a fuel record, null for every other source. Additive — the
+  // ! Month-tab drill-down (spec 60) and the PDF export ignore it; only the Year/Lifetime
+  // ! period breakdown reads it, to show per-bucket litres on the Fuel category.
+  liters: number | null;
 };
 
 export type TSpendingDetails = {
@@ -55,4 +59,29 @@ export type TMonthlyCategoryBreakdown = {
   targetMonth: string;
   totalSpending: number;
   categories: TSpendingCategoryGroup[];
+};
+
+// ! Spec 61: the Year / Lifetime drill-down. Same accordion idea as spec 60's month
+// ! breakdown, but a category expands to TIME BUCKETS instead of individual records —
+// ! per-month for a year, per-year for lifetime. Each bucket carries its total and (fuel
+// ! only) its litres. `liters`/`totalLiters` are null for a non-fuel category.
+export type TSpendingPeriodBucket = {
+  key: string; // "2026-01" for a month bucket, "2026" for a year bucket
+  label: string; // "Jan" / "2026" — pre-formatted server-side so the client renders raw
+  total: number;
+  liters: number | null;
+};
+
+export type TSpendingPeriodGroup = {
+  category: string;
+  total: number;
+  totalLiters: number | null;
+  buckets: TSpendingPeriodBucket[];
+};
+
+export type TPeriodCategoryBreakdown = {
+  period: "year" | "lifetime";
+  targetYear?: string;
+  totalSpending: number;
+  categories: TSpendingPeriodGroup[];
 };

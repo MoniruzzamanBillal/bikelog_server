@@ -78,9 +78,28 @@ const getMonthlyBreakdown = (0, catchAsync_1.default)((req, res) => __awaiter(vo
         data: result,
     });
 }));
+// ! Spec 61: category drill-down for the Year and Lifetime tabs. A category expands to
+// ! time buckets (per-month for a year, per-year for lifetime). `period` is year|lifetime
+// ! only — the Month tab keeps its own /monthly-breakdown route. targetYear is required
+// ! for period=year and ignored for lifetime.
+const getPeriodBreakdown = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const period = req.query.period;
+    if (!period || !["year", "lifetime"].includes(period)) {
+        throw new AppError_1.default(http_status_1.default.BAD_REQUEST, "period must be one of: year, lifetime");
+    }
+    const targetYear = req.query.targetYear;
+    const result = yield spending_service_1.spendingServices.getPeriodCategoryBreakdownFromDB(req.params.bikeId, req.user.userId, period, targetYear);
+    (0, sendResponse_1.default)(res, {
+        status: http_status_1.default.OK,
+        success: true,
+        message: "Period spending breakdown retrieved successfully",
+        data: result,
+    });
+}));
 exports.spendingController = {
     getSpendingSummary,
     getSpendingTrend,
     getSpendingDetails,
     getMonthlyBreakdown,
+    getPeriodBreakdown,
 };

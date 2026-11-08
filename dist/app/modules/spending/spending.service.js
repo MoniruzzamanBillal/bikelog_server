@@ -115,6 +115,7 @@ const computeSpendingForRange = (bikeId, startDate, endDate) => __awaiter(void 0
             vendor: (_a = log.fuelStation) !== null && _a !== void 0 ? _a : null,
             remarks: (_b = log.notes) !== null && _b !== void 0 ? _b : null,
             source: "fuel",
+            liters: Number(log.litersAdded),
         });
     });
     const maintenanceRecords = maintenanceLogs.map((log) => {
@@ -128,6 +129,7 @@ const computeSpendingForRange = (bikeId, startDate, endDate) => __awaiter(void 0
             vendor: (_d = log.serviceCenter) !== null && _d !== void 0 ? _d : null,
             remarks: (_e = log.notes) !== null && _e !== void 0 ? _e : null,
             source: "maintenance",
+            liters: null,
         };
     });
     const accessoryRecords = accessories.map((a) => ({
@@ -138,6 +140,7 @@ const computeSpendingForRange = (bikeId, startDate, endDate) => __awaiter(void 0
         vendor: null,
         remarks: null,
         source: "accessory",
+        liters: null,
     }));
     const engineOilRecords = engineOilLogs.map((log) => {
         var _a, _b, _c, _d;
@@ -150,6 +153,7 @@ const computeSpendingForRange = (bikeId, startDate, endDate) => __awaiter(void 0
             vendor: (_c = log.serviceCenter) !== null && _c !== void 0 ? _c : null,
             remarks: (_d = log.notes) !== null && _d !== void 0 ? _d : null,
             source: "oil",
+            liters: null,
         });
     });
     const records = [
@@ -217,6 +221,82 @@ const getMonthlyCategoryBreakdownFromDB = (bikeId, userId, targetMonth) => __awa
         categories,
     };
 });
+// ! Spec 61: category drill-down for the Year and Lifetime tabs. Same shape idea as spec
+// ! 60's month breakdown, but a category expands to TIME BUCKETS, not individual records:
+// ! per-month for a year, per-year for lifetime. Reuses computeSpendingForRange (so the
+// ! date math and totals can never drift from the summary/details endpoints) and buckets
+// ! its flat records[]. Fuel buckets carry summed litres; every other category's litres is
+// ! null. Categories are derived from the records themselves — a ৳0 Fuel row never appears,
+// ! matching spec 60's reasoning — and per-category totals still sum to totalSpending
+// ! because every cost lives in exactly one record.
+const getPeriodCategoryBreakdownFromDB = (bikeId, userId, period, targetYear) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a, _b, _c;
+    yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
+    const { startDate, endDate } = period === "year"
+        ? resolveSpendingDateRange("year", undefined, targetYear)
+        : resolveSpendingDateRange("lifetime");
+    const { totalSpending, records } = yield computeSpendingForRange(bikeId, startDate, endDate);
+    // ! bucketKey/bucketLabel decide the grain: a year drills into its 12 months, lifetime
+    // ! into calendar years. Both derive from the record's own date so an out-of-range row
+    // ! can never land in the wrong bucket.
+    const monthLabels = [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+    ];
+    const groups = new Map();
+    for (const record of records) {
+        const date = new Date(record === null || record === void 0 ? void 0 : record.date);
+        const year = date.getFullYear();
+        const month = date.getMonth(); // 0-11
+        const bucketKey = period === "year"
+            ? `${year}-${String(month + 1).padStart(2, "0")}`
+            : `${year}`;
+        const bucketLabel = period === "year" ? monthLabels[month] : `${year}`;
+        let group = groups.get(record === null || record === void 0 ? void 0 : record.category);
+        if (!group) {
+            group = { category: record === null || record === void 0 ? void 0 : record.category, total: 0, buckets: new Map() };
+            groups.set(record === null || record === void 0 ? void 0 : record.category, group);
+        }
+        group.total += (_a = record === null || record === void 0 ? void 0 : record.amount) !== null && _a !== void 0 ? _a : 0;
+        let bucket = group.buckets.get(bucketKey);
+        if (!bucket) {
+            bucket = { key: bucketKey, label: bucketLabel, total: 0, liters: null };
+            group.buckets.set(bucketKey, bucket);
+        }
+        bucket.total += (_b = record === null || record === void 0 ? void 0 : record.amount) !== null && _b !== void 0 ? _b : 0;
+        if ((record === null || record === void 0 ? void 0 : record.liters) != null) {
+            bucket.liters = ((_c = bucket === null || bucket === void 0 ? void 0 : bucket.liters) !== null && _c !== void 0 ? _c : 0) + (record === null || record === void 0 ? void 0 : record.liters);
+        }
+    }
+    const categories = [...groups.values()]
+        .map((group) => {
+        const buckets = [...group.buckets.values()].sort((a, b) => 
+        // ! year view: months chronological (Jan→Dec). lifetime: years newest-first.
+        period === "year"
+            ? a === null || a === void 0 ? void 0 : a.key.localeCompare(b === null || b === void 0 ? void 0 : b.key)
+            : b === null || b === void 0 ? void 0 : b.key.localeCompare(a === null || a === void 0 ? void 0 : a.key));
+        const totalLiters = buckets.reduce((sum, b) => ((b === null || b === void 0 ? void 0 : b.liters) != null ? (sum !== null && sum !== void 0 ? sum : 0) + (b === null || b === void 0 ? void 0 : b.liters) : sum), null);
+        return {
+            category: group === null || group === void 0 ? void 0 : group.category,
+            total: group === null || group === void 0 ? void 0 : group.total,
+            totalLiters,
+            buckets,
+        };
+    })
+        .sort((a, b) => (b === null || b === void 0 ? void 0 : b.total) - (a === null || a === void 0 ? void 0 : a.total));
+    return Object.assign(Object.assign({ period }, (targetYear ? { targetYear } : {})), { totalSpending,
+        categories });
+});
 const getSpendingTrendFromDB = (bikeId, userId, months) => __awaiter(void 0, void 0, void 0, function* () {
     yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
     const now = new Date();
@@ -239,4 +319,5 @@ exports.spendingServices = {
     getSpendingTrendFromDB,
     getSpendingDetailsFromDB,
     getMonthlyCategoryBreakdownFromDB,
+    getPeriodCategoryBreakdownFromDB,
 };

@@ -82,6 +82,20 @@ const getMileageRecordsFromDB = (bikeId) => __awaiter(void 0, void 0, void 0, fu
         where: { bikeId },
         orderBy: { periodEndDate: "desc" },
     });
+    // Fuel cost per period isn't stored on MileageRecord — sum each record's own
+    // fuel logs' totalCost at read time (Decimal -> Number). Works for historical
+    // records too, so no migration. Soft-deleted logs are excluded.
+    const allFuelLogIds = [
+        ...new Set(exactRecords.flatMap((record) => record.fuelLogIds)),
+    ];
+    const costLogs = allFuelLogIds.length
+        ? yield prisma_1.prisma.fuelLog.findMany({
+            where: { id: { in: allFuelLogIds }, isDeleted: false },
+            select: { id: true, totalCost: true },
+        })
+        : [];
+    const costByLogId = new Map(costLogs.map((log) => [log.id, Number(log.totalCost)]));
+    const exactRecordsWithCost = exactRecords.map((record) => (Object.assign(Object.assign({}, toApiShape(record)), { totalFuelCost: record.fuelLogIds.reduce((sum, id) => { var _a; return sum + ((_a = costByLogId.get(id)) !== null && _a !== void 0 ? _a : 0); }, 0) })));
     const recentFuelLogs = yield prisma_1.prisma.fuelLog.findMany({
         where: { bikeId, isDeleted: false },
         orderBy: { date: "desc" },
@@ -102,7 +116,7 @@ const getMileageRecordsFromDB = (bikeId) => __awaiter(void 0, void 0, void 0, fu
         }
     }
     return {
-        exactRecords: exactRecords.map(toApiShape),
+        exactRecords: exactRecordsWithCost,
         approximate,
         efficiencyAlert: computeEfficiencyAlert(exactRecords),
     };

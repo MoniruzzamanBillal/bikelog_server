@@ -78,18 +78,7 @@ const createFuelLogIntoDB = (bikeId, userId, payload) => __awaiter(void 0, void 
             periodStartOdometer = previousFullTank.odometerReading;
             periodStartDate = previousFullTank.date;
         }
-        // ! else: no prior full-tank fill exists yet — anchor on the bike's immutable initial
-        // ! odometer reading, NOT currentOdometer (which is bumped below and would always equal
-        // ! this fuel log's own reading, collapsing distanceKm to 0)
-        // ! no lower date bound either (periodStartDate stays null) — this is the bike's
-        // ! first-ever closed period, so every fuel log dated on/before this fill belongs to it.
-        // ! bike.createdAt (when the DB record was inserted) is NOT a valid anchor: backdating fuel
-        // ! history right after creating a bike is a normal, supported flow, and a backdated log's
-        // ! date is almost always before bike.createdAt, which used to invert this query's range
-        // ! and silently zero out the whole period (see spec 26).
         distanceKm = odometerReading - periodStartOdometer;
-        // ! unreachable while assertOdometerInSequence holds — guards against a negative-distance
-        // ! mileage record ever being written again (DEF-04, spec 48)
         if (distanceKm < 0) {
             throw new AppError_1.default(http_status_1.default.BAD_REQUEST, "Odometer reading is lower than the previous full-tank fill");
         }
@@ -158,29 +147,11 @@ const createFuelLogIntoDB = (bikeId, userId, payload) => __awaiter(void 0, void 
         bikeNickname: bike.nickname,
     };
 });
-// ! Spec 57 D1 — the two derived fields the list endpoint adds per row, a direct port of
-// ! `engineOilLog.service.ts`'s `withPeriodFields` (server spec 54 D12) with "oil" swapped
-// ! for "fill". A tank is burned over the ride that FOLLOWS the fill, so a row's period is
-// ! closed by its NEWER neighbour: `kmOnThisFill` is that neighbour's odometer reading
-// ! minus this one's, and `costPerKm` is what this fill-up's money worked out to over that
-// ! distance.
-// !
-// ! Computed server-side on purpose. A client deriving it from the page it happens to be
-// ! holding gets a figure that appears and vanishes with pagination, because the
-// ! neighbouring fill-up sits on the previous page at every page boundary.
-// !
-// ! This is NOT mileage and must not be read as one: km/l comes from closed full-tank
-// ! MileageRecord periods and is unchanged by this spec. `costPerKm` here is a money
-// ! figure over one tank's distance, partial fills included.
 const withPeriodFields = (row, newerNeighbour) => {
     const kmOnThisFill = newerNeighbour
         ? newerNeighbour.odometerReading - row.odometerReading
         : null;
-    return Object.assign(Object.assign({}, row), { kmOnThisFill, 
-        // ! null, never Infinity — two fill-ups can legitimately share an odometer reading (the
-        // ! sequence check above allows equal readings), and `cost / 0` would serialise as
-        // ! `null` through JSON anyway while breaking any arithmetic on the way there
-        costPerKm: kmOnThisFill !== null && kmOnThisFill > 0
+    return Object.assign(Object.assign({}, row), { kmOnThisFill, costPerKm: kmOnThisFill !== null && kmOnThisFill > 0
             ? row.totalCost / kmOnThisFill
             : null });
 };
@@ -266,8 +237,6 @@ const updateFuelLogInDB = (bikeId, userId, id, payload) => __awaiter(void 0, voi
     if (!fuelLog) {
         throw new AppError_1.default(http_status_1.default.NOT_FOUND, "Fuel log not found");
     }
-    // ! re-check the odometer ordering whenever the reading or the date moves; excludeId keeps a
-    // ! log from conflicting with itself, so correcting a typo on the newest log still works (spec 48)
     if (payload.odometerReading !== undefined || payload.date !== undefined) {
         yield assertOdometerInSequence(bike, {
             reading: (_a = payload.odometerReading) !== null && _a !== void 0 ? _a : fuelLog.odometerReading,
@@ -275,14 +244,11 @@ const updateFuelLogInDB = (bikeId, userId, id, payload) => __awaiter(void 0, voi
             excludeId: id,
         });
     }
-    // ! totalCost is always server-derived — never trust a client-submitted value directly
     delete payload.totalCost;
     const updateData = Object.assign({}, payload);
     if (payload.litersAdded !== undefined ||
         payload.pricePerLiter !== undefined) {
         const newLiters = (_c = payload.litersAdded) !== null && _c !== void 0 ? _c : fuelLog.litersAdded;
-        // ! fuelLog.pricePerLiter off a freshly-fetched Prisma row is a Prisma.Decimal
-        // ! instance, not a plain number — multiplying it directly is unreliable, convert first
         const newPrice = (_d = payload.pricePerLiter) !== null && _d !== void 0 ? _d : Number(fuelLog.pricePerLiter);
         updateData.totalCost = newLiters * newPrice;
     }
@@ -290,8 +256,6 @@ const updateFuelLogInDB = (bikeId, userId, id, payload) => __awaiter(void 0, voi
         where: { id: fuelLog.id },
         data: updateData,
     });
-    // ! keep bike.currentOdometer in step when an edit raises the reading (create already bumps);
-    // ! a no-op when it was lowered — nothing rolls the odometer back (DEF-12, out of scope)
     if (payload.odometerReading !== undefined) {
         yield (0, bike_utils_1.bumpOdometerIfHigher)(bike, updated.odometerReading);
     }
