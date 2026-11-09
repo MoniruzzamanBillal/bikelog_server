@@ -34,12 +34,26 @@ const getSpendingSummary = (0, catchAsync_1.default)((req, res) => __awaiter(voi
     });
 }));
 const getSpendingTrend = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const targetYearRaw = req.query.targetYear;
     const monthsRaw = req.query.months;
-    const months = monthsRaw ? parseInt(monthsRaw, 10) : 3;
-    if (isNaN(months) || months < 1 || months > 24) {
-        throw new AppError_1.default(http_status_1.default.BAD_REQUEST, "months must be a number between 1 and 24");
+    // ! spec 63: targetYear (a calendar Jan→Dec year) takes precedence over months (the
+    // ! rolling window). Only one path runs; the other validation is skipped.
+    let options;
+    if (targetYearRaw) {
+        const targetYear = parseInt(targetYearRaw, 10);
+        if (isNaN(targetYear) || targetYear < 2000 || targetYear > 2100) {
+            throw new AppError_1.default(http_status_1.default.BAD_REQUEST, "targetYear must be a year between 2000 and 2100");
+        }
+        options = { targetYear };
     }
-    const result = yield spending_service_1.spendingServices.getSpendingTrendFromDB(req.params.bikeId, req.user.userId, months);
+    else {
+        const months = monthsRaw ? parseInt(monthsRaw, 10) : 3;
+        if (isNaN(months) || months < 1 || months > 24) {
+            throw new AppError_1.default(http_status_1.default.BAD_REQUEST, "months must be a number between 1 and 24");
+        }
+        options = { months };
+    }
+    const result = yield spending_service_1.spendingServices.getSpendingTrendFromDB(req.params.bikeId, req.user.userId, options);
     (0, sendResponse_1.default)(res, {
         status: http_status_1.default.OK,
         success: true,

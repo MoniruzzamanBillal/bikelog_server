@@ -19,7 +19,16 @@ interface YearlyMileageResult {
   monthlySummary: MonthlyMileageResult[];
 }
 
-interface LifetimeMileageResult extends MileageSummary {}
+interface YearlyMileageSummary extends MileageSummary {
+  targetYear: string;
+}
+
+interface LifetimeMileageResult extends MileageSummary {
+  // spec 62: per-year breakdown so the app's Lifetime tab can show a card per
+  // year (same figures as the Yearly tab's per-month cards). Additive — the
+  // flat totals above are unchanged, so the web client reads the same response.
+  yearlySummary: YearlyMileageSummary[];
+}
 
 interface TrendMileageResult {
   months: number;
@@ -263,6 +272,7 @@ const getLifetimeMileageFromDB = async (
       totalLitersConsumed: 0,
       totalFuelCost: 0,
       fuelLogCount: 0,
+      yearlySummary: [],
     };
   }
 
@@ -284,7 +294,27 @@ const getLifetimeMileageFromDB = async (
   );
   const fuelLogCount = allLogs.length;
 
-  return { totalDistanceKm, totalLitersConsumed, totalFuelCost, fuelLogCount };
+  // ! spec 62: per-year breakdown, newest year first. Each year reuses
+  // ! computeMileageForRange (Jan 1 → Dec 31), the same engine the Monthly/Yearly
+  // ! tabs use, so odometer anchoring and soft-delete handling are identical.
+  // ! allLogs is ascending, so [0] is the earliest fuel log the whole span starts at.
+  const firstYear = allLogs[0].date.getFullYear();
+  const lastYear = latestFuelLog.date.getFullYear();
+  const yearlySummary: YearlyMileageSummary[] = [];
+  for (let year = lastYear; year >= firstYear; year--) {
+    const startDate = new Date(year, 0, 1, 0, 0, 0, 0);
+    const endDate = new Date(year, 11, 31, 23, 59, 59, 999);
+    const summary = await computeMileageForRange(bikeId, startDate, endDate);
+    yearlySummary.push({ targetYear: year.toString(), ...summary });
+  }
+
+  return {
+    totalDistanceKm,
+    totalLitersConsumed,
+    totalFuelCost,
+    fuelLogCount,
+    yearlySummary,
+  };
 };
 
 const getMileageTrendFromDB = async (

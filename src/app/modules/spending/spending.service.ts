@@ -435,11 +435,33 @@ const getPeriodCategoryBreakdownFromDB = async (
 const getSpendingTrendFromDB = async (
   bikeId: string,
   userId: string,
-  months: number,
+  // ! spec 63: `targetYear` returns a fixed calendar year Jan→Dec (the app Trend tab);
+  // ! `months` is the original rolling last-N-months window. Exactly one is set — the
+  // ! controller decides. Additive: a caller passing only `months` (the web client) is
+  // ! unchanged.
+  options: { months?: number; targetYear?: number },
 ) => {
   await findOwnedBikeOrThrow(bikeId, userId);
-  const now = new Date();
   const monthlySummary = [];
+
+  if (options.targetYear != null) {
+    const year = options.targetYear;
+    for (let month = 1; month <= 12; month++) {
+      const targetMonth = `${year}-${String(month).padStart(2, "0")}`;
+      const startDate = new Date(year, month - 1, 1, 0, 0, 0, 0);
+      const endDate = new Date(year, month, 0, 23, 59, 59, 999);
+      const { totalSpending, categoryBreakdown } = await computeSpendingForRange(
+        bikeId,
+        startDate,
+        endDate,
+      );
+      monthlySummary.push({ targetMonth, totalSpending, categoryBreakdown });
+    }
+    return { targetYear: year.toString(), months: 12, monthlySummary };
+  }
+
+  const months = options.months ?? 3;
+  const now = new Date();
   for (let i = months - 1; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const year = d.getFullYear();
