@@ -34,20 +34,36 @@ const getSpendingSummary = catchAsync(async (req, res) => {
 });
 
 const getSpendingTrend = catchAsync(async (req, res) => {
+  const targetYearRaw = req.query.targetYear as string | undefined;
   const monthsRaw = req.query.months as string | undefined;
-  const months = monthsRaw ? parseInt(monthsRaw, 10) : 3;
 
-  if (isNaN(months) || months < 1 || months > 24) {
-    throw new AppError(
-      httpStatus.BAD_REQUEST,
-      "months must be a number between 1 and 24",
-    );
+  // ! spec 63: targetYear (a calendar Jan→Dec year) takes precedence over months (the
+  // ! rolling window). Only one path runs; the other validation is skipped.
+  let options: { months?: number; targetYear?: number };
+  if (targetYearRaw) {
+    const targetYear = parseInt(targetYearRaw, 10);
+    if (isNaN(targetYear) || targetYear < 2000 || targetYear > 2100) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        "targetYear must be a year between 2000 and 2100",
+      );
+    }
+    options = { targetYear };
+  } else {
+    const months = monthsRaw ? parseInt(monthsRaw, 10) : 3;
+    if (isNaN(months) || months < 1 || months > 24) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        "months must be a number between 1 and 24",
+      );
+    }
+    options = { months };
   }
 
   const result = await spendingServices.getSpendingTrendFromDB(
     req.params.bikeId,
     req.user.userId,
-    months,
+    options,
   );
 
   sendResponse(res, {

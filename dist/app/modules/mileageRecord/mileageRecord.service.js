@@ -169,6 +169,7 @@ const getLifetimeMileageFromDB = (bikeId) => __awaiter(void 0, void 0, void 0, f
             totalLitersConsumed: 0,
             totalFuelCost: 0,
             fuelLogCount: 0,
+            yearlySummary: [],
         };
     }
     // ! anchor on the bike's immutable initialOdometer (odometer at purchase/registration),
@@ -183,7 +184,26 @@ const getLifetimeMileageFromDB = (bikeId) => __awaiter(void 0, void 0, void 0, f
     const totalLitersConsumed = allLogs.reduce((sum, log) => sum + log.litersAdded, 0);
     const totalFuelCost = allLogs.reduce((sum, log) => sum + Number(log.totalCost), 0);
     const fuelLogCount = allLogs.length;
-    return { totalDistanceKm, totalLitersConsumed, totalFuelCost, fuelLogCount };
+    // ! spec 62: per-year breakdown, newest year first. Each year reuses
+    // ! computeMileageForRange (Jan 1 → Dec 31), the same engine the Monthly/Yearly
+    // ! tabs use, so odometer anchoring and soft-delete handling are identical.
+    // ! allLogs is ascending, so [0] is the earliest fuel log the whole span starts at.
+    const firstYear = allLogs[0].date.getFullYear();
+    const lastYear = latestFuelLog.date.getFullYear();
+    const yearlySummary = [];
+    for (let year = lastYear; year >= firstYear; year--) {
+        const startDate = new Date(year, 0, 1, 0, 0, 0, 0);
+        const endDate = new Date(year, 11, 31, 23, 59, 59, 999);
+        const summary = yield computeMileageForRange(bikeId, startDate, endDate);
+        yearlySummary.push(Object.assign({ targetYear: year.toString() }, summary));
+    }
+    return {
+        totalDistanceKm,
+        totalLitersConsumed,
+        totalFuelCost,
+        fuelLogCount,
+        yearlySummary,
+    };
 });
 const getMileageTrendFromDB = (bikeId, months) => __awaiter(void 0, void 0, void 0, function* () {
     const now = new Date();
