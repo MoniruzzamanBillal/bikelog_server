@@ -16,19 +16,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const app_1 = __importDefault(require("./app"));
 const config_1 = __importDefault(require("./app/config"));
 const prisma_1 = require("./app/lib/prisma");
-// import { Server } from "http";
-// let server: Server;
-// async function Main() {
-//   try {
-//     await mongoose.connect(config.mongo_database_url as string);
-//     app.listen(config.port, () => {
-//       console.log(`listening from port ${config.port}`);
-//     });
-//   } catch (error) {
-//     console.log(error);
-//   }
-// }
-// Main();
 // ! Spec 51 §B — fail at boot, not per request. A missing refresh secret would otherwise
 // ! make every login throw from `Jwt.sign(payload, undefined)`, and a refresh secret EQUAL to
 // ! the access secret would make an access token a structurally valid refresh token, replayable

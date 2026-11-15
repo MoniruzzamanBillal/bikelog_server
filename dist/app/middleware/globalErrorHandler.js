@@ -12,12 +12,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+const client_1 = require("@prisma/client");
 const http_status_1 = __importDefault(require("http-status"));
 const zod_1 = require("zod");
 const AppError_1 = __importDefault(require("../Error/AppError"));
-const handleCatError_1 = require("../Error/handleCatError");
-const handleDuplicateError_1 = require("../Error/handleDuplicateError");
-const handleValidationError_1 = require("../Error/handleValidationError");
+const handlePrismaError_1 = require("../Error/handlePrismaError");
 const handleZodError_1 = require("../Error/handleZodError");
 const errorLog_service_1 = require("../modules/errorLog/errorLog.service");
 const globalErrorHandler = (error, req, res, 
@@ -33,39 +32,44 @@ next) => __awaiter(void 0, void 0, void 0, function* () {
             message: "",
         },
     ];
-    // ! zod validation error
+    // ! One if/else-if chain, most specific first. The old handler was two separate chains
+    // ! (the CastError `if` started a fresh one), which meant a Mongo CastError could silently
+    // ! overwrite a Zod result — moot now those branches are gone, but the single chain is also
+    // ! correct by construction. The three Mongoose-era branches (`name === "ValidationError"`,
+    // ! `name === "CastError"`, Mongo's `code === 11000`) were deleted: none can fire under
+    // ! Prisma/Postgres, and their handlers went with them.
+    // ! Zod request-validation error (thrown by validateRequest before any service runs).
     if (error instanceof zod_1.ZodError) {
         const simplifiedError = (0, handleZodError_1.handleZodError)(error);
         status = simplifiedError === null || simplifiedError === void 0 ? void 0 : simplifiedError.statusCode;
         message = simplifiedError === null || simplifiedError === void 0 ? void 0 : simplifiedError.message;
         errorSources = simplifiedError === null || simplifiedError === void 0 ? void 0 : simplifiedError.errorSources;
     }
-    // ! mongoose validation error
-    else if ((error === null || error === void 0 ? void 0 : error.name) === "ValidationError") {
-        const simplifiedError = (0, handleValidationError_1.handleValidationError)(error);
-        status = simplifiedError === null || simplifiedError === void 0 ? void 0 : simplifiedError.statusCode;
-        message = simplifiedError === null || simplifiedError === void 0 ? void 0 : simplifiedError.message;
-        errorSources = simplifiedError === null || simplifiedError === void 0 ? void 0 : simplifiedError.errorSources;
-    }
-    // ! cast error
-    if ((error === null || error === void 0 ? void 0 : error.name) === "CastError") {
-        const simplifiedError = (0, handleCatError_1.handleCastError)(error);
-        status = simplifiedError === null || simplifiedError === void 0 ? void 0 : simplifiedError.statusCode;
-        message = simplifiedError === null || simplifiedError === void 0 ? void 0 : simplifiedError.message;
-        errorSources = simplifiedError === null || simplifiedError === void 0 ? void 0 : simplifiedError.errorSources;
-    }
-    // ! handle duplicate error
-    else if ((error === null || error === void 0 ? void 0 : error.code) === 11000) {
-        const simplifiedError = (0, handleDuplicateError_1.handleDuplicateError)(error);
-        status = simplifiedError === null || simplifiedError === void 0 ? void 0 : simplifiedError.statusCode;
-        message = simplifiedError === null || simplifiedError === void 0 ? void 0 : simplifiedError.message;
-        errorSources = simplifiedError === null || simplifiedError === void 0 ? void 0 : simplifiedError.errorSources;
-    }
-    // ! handle custom app error
+    // ! A deliberate, domain-level error raised by a service/controller — it already carries
+    // ! the status and message it wants, so trust them verbatim. Checked before the Prisma
+    // ! branches because services catch Prisma errors they care about (e.g. P2002 on a catalog
+    // ! name) and re-throw an AppError with a better message; only what they DON'T catch should
+    // ! reach the generic Prisma mapper below.
     else if (error instanceof AppError_1.default) {
         status = error === null || error === void 0 ? void 0 : error.status;
         message = error === null || error === void 0 ? void 0 : error.message;
         errorSources = [{ path: "", message: error === null || error === void 0 ? void 0 : error.message }];
+    }
+    // ! Central Prisma error branch — the safety net for constraint errors no service caught.
+    // ! P2002 → 409, P2025 → 404, P2003/P2000/P2011 → 400; anything else stays a logged 500.
+    // ! Before this existed, P2003/P2025 fell through to the bare 500 default.
+    else if (error instanceof client_1.Prisma.PrismaClientKnownRequestError) {
+        const simplifiedError = (0, handlePrismaError_1.handlePrismaKnownRequestError)(error);
+        status = simplifiedError === null || simplifiedError === void 0 ? void 0 : simplifiedError.statusCode;
+        message = simplifiedError === null || simplifiedError === void 0 ? void 0 : simplifiedError.message;
+        errorSources = simplifiedError === null || simplifiedError === void 0 ? void 0 : simplifiedError.errorSources;
+    }
+    // ! Malformed query / wrong argument types reaching Prisma — a caller bug, so 400 not 500.
+    else if (error instanceof client_1.Prisma.PrismaClientValidationError) {
+        const simplifiedError = (0, handlePrismaError_1.handlePrismaValidationError)(error);
+        status = simplifiedError === null || simplifiedError === void 0 ? void 0 : simplifiedError.statusCode;
+        message = simplifiedError === null || simplifiedError === void 0 ? void 0 : simplifiedError.message;
+        errorSources = simplifiedError === null || simplifiedError === void 0 ? void 0 : simplifiedError.errorSources;
     }
     // ! Spec 51 §E.1 — a 401 from the refresh-token route is NEVER logged. Its request body
     // ! holds a live 15-day credential, and `error_logs` is read back over HTTP by the admin

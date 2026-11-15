@@ -230,7 +230,7 @@ const getMonthlyCategoryBreakdownFromDB = (bikeId, userId, targetMonth) => __awa
 // ! matching spec 60's reasoning — and per-category totals still sum to totalSpending
 // ! because every cost lives in exactly one record.
 const getPeriodCategoryBreakdownFromDB = (bikeId, userId, period, targetYear) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b, _c;
+    var _a, _b, _c, _d, _e;
     yield (0, bike_utils_1.findOwnedBikeOrThrow)(bikeId, userId);
     const { startDate, endDate } = period === "year"
         ? resolveSpendingDateRange("year", undefined, targetYear)
@@ -277,14 +277,55 @@ const getPeriodCategoryBreakdownFromDB = (bikeId, userId, period, targetYear) =>
         if ((record === null || record === void 0 ? void 0 : record.liters) != null) {
             bucket.liters = ((_c = bucket === null || bucket === void 0 ? void 0 : bucket.liters) !== null && _c !== void 0 ? _c : 0) + (record === null || record === void 0 ? void 0 : record.liters);
         }
+        // ! Spec 64: for lifetime, fold the same record into its month child under the year
+        // ! bucket. Same record, two accumulators — so a year total always equals the sum of
+        // ! its months for that category, by construction, and can never drift. The month key is
+        // ! the full "YYYY-MM" (the year is already fixed by the parent, but keeping it in the
+        // ! key makes the chronological sort below trivial and the key globally unique).
+        if (period === "lifetime") {
+            const monthKey = `${year}-${String(month + 1).padStart(2, "0")}`;
+            if (!bucket.months) {
+                bucket.months = new Map();
+            }
+            let child = bucket.months.get(monthKey);
+            if (!child) {
+                child = { key: monthKey, label: monthLabels[month], total: 0, liters: null };
+                bucket.months.set(monthKey, child);
+            }
+            child.total += (_d = record === null || record === void 0 ? void 0 : record.amount) !== null && _d !== void 0 ? _d : 0;
+            if ((record === null || record === void 0 ? void 0 : record.liters) != null) {
+                child.liters = ((_e = child === null || child === void 0 ? void 0 : child.liters) !== null && _e !== void 0 ? _e : 0) + (record === null || record === void 0 ? void 0 : record.liters);
+            }
+        }
     }
     const categories = [...groups.values()]
         .map((group) => {
-        const buckets = [...group.buckets.values()].sort((a, b) => 
+        const buckets = [...group.buckets.values()]
+            .sort((a, b) => 
         // ! year view: months chronological (Jan→Dec). lifetime: years newest-first.
         period === "year"
             ? a === null || a === void 0 ? void 0 : a.key.localeCompare(b === null || b === void 0 ? void 0 : b.key)
-            : b === null || b === void 0 ? void 0 : b.key.localeCompare(a === null || a === void 0 ? void 0 : a.key));
+            : b === null || b === void 0 ? void 0 : b.key.localeCompare(a === null || a === void 0 ? void 0 : a.key))
+            .map((bucket) => ({
+            key: bucket.key,
+            label: bucket.label,
+            total: bucket.total,
+            liters: bucket.liters,
+            // ! Month children always ordered Jan→Dec regardless of the year order above. A
+            // ! month bucket (and every year-period bucket) carries `children: null`, which is
+            // ! what the client's "has a drill-down" check keys on.
+            children: bucket.months
+                ? [...bucket.months.values()]
+                    .sort((m1, m2) => m1.key.localeCompare(m2.key))
+                    .map((m) => ({
+                    key: m.key,
+                    label: m.label,
+                    total: m.total,
+                    liters: m.liters,
+                    children: null,
+                }))
+                : null,
+        }));
         const totalLiters = buckets.reduce((sum, b) => ((b === null || b === void 0 ? void 0 : b.liters) != null ? (sum !== null && sum !== void 0 ? sum : 0) + (b === null || b === void 0 ? void 0 : b.liters) : sum), null);
         return {
             category: group === null || group === void 0 ? void 0 : group.category,
