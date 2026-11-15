@@ -369,7 +369,16 @@ const getPeriodCategoryBreakdownFromDB = async (
     "Dec",
   ];
 
-  type BucketAcc = { key: string; label: string; total: number; liters: number | null };
+  type BucketAcc = {
+    key: string;
+    label: string;
+    total: number;
+    liters: number | null;
+    // ! Spec 64: lifetime only — a year bucket's per-month children, keyed "YYYY-MM". The
+    // ! year view never sets this (its buckets are already months). Kept as a Map while
+    // ! accumulating, flattened to the sorted `children` array on output.
+    months?: Map<string, BucketAcc>;
+  };
   type GroupAcc = { category: string; total: number; buckets: Map<string, BucketAcc> };
 
   const groups = new Map<string, GroupAcc>();
@@ -401,16 +410,58 @@ const getPeriodCategoryBreakdownFromDB = async (
     if (record?.liters != null) {
       bucket.liters = (bucket?.liters ?? 0) + record?.liters;
     }
+
+    // ! Spec 64: for lifetime, fold the same record into its month child under the year
+    // ! bucket. Same record, two accumulators — so a year total always equals the sum of
+    // ! its months for that category, by construction, and can never drift. The month key is
+    // ! the full "YYYY-MM" (the year is already fixed by the parent, but keeping it in the
+    // ! key makes the chronological sort below trivial and the key globally unique).
+    if (period === "lifetime") {
+      const monthKey = `${year}-${String(month + 1).padStart(2, "0")}`;
+      if (!bucket.months) {
+        bucket.months = new Map<string, BucketAcc>();
+      }
+      let child = bucket.months.get(monthKey);
+      if (!child) {
+        child = { key: monthKey, label: monthLabels[month], total: 0, liters: null };
+        bucket.months.set(monthKey, child);
+      }
+      child.total += record?.amount ?? 0;
+      if (record?.liters != null) {
+        child.liters = (child?.liters ?? 0) + record?.liters;
+      }
+    }
   }
 
   const categories: TSpendingPeriodGroup[] = [...groups.values()]
     .map((group) => {
-      const buckets = [...group.buckets.values()].sort((a, b) =>
-        // ! year view: months chronological (Jan→Dec). lifetime: years newest-first.
-        period === "year"
-          ? a?.key.localeCompare(b?.key)
-          : b?.key.localeCompare(a?.key),
-      );
+      const buckets: TSpendingPeriodGroup["buckets"] = [...group.buckets.values()]
+        .sort((a, b) =>
+          // ! year view: months chronological (Jan→Dec). lifetime: years newest-first.
+          period === "year"
+            ? a?.key.localeCompare(b?.key)
+            : b?.key.localeCompare(a?.key),
+        )
+        .map((bucket) => ({
+          key: bucket.key,
+          label: bucket.label,
+          total: bucket.total,
+          liters: bucket.liters,
+          // ! Month children always ordered Jan→Dec regardless of the year order above. A
+          // ! month bucket (and every year-period bucket) carries `children: null`, which is
+          // ! what the client's "has a drill-down" check keys on.
+          children: bucket.months
+            ? [...bucket.months.values()]
+                .sort((m1, m2) => m1.key.localeCompare(m2.key))
+                .map((m) => ({
+                  key: m.key,
+                  label: m.label,
+                  total: m.total,
+                  liters: m.liters,
+                  children: null,
+                }))
+            : null,
+        }));
       const totalLiters = buckets.reduce<number | null>(
         (sum, b) => (b?.liters != null ? (sum ?? 0) + b?.liters : sum),
         null,

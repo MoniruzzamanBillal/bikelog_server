@@ -70,6 +70,12 @@ export type TSpendingPeriodBucket = {
   label: string; // "Jan" / "2026" — pre-formatted server-side so the client renders raw
   total: number;
   liters: number | null;
+  // ! Spec 64: a LIFETIME year bucket's per-month children, pre-bucketed server-side so the
+  // ! app's Lifetime tab can drill category → year → month with no second request. Present
+  // ! (a non-empty array) only on a lifetime year bucket; `null` on a month bucket and on
+  // ! every year-period bucket, which are already the leaf grain. Additive: existing
+  // ! consumers (the app's Year tab, the web client) ignore it.
+  children?: TSpendingPeriodBucket[] | null;
 };
 
 export type TSpendingPeriodGroup = {
