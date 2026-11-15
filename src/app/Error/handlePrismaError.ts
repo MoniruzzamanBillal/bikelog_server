@@ -19,7 +19,7 @@ const toSource = (path: string | number, message: string): TerrorSource => [
 export const handlePrismaKnownRequestError = (
   error: Prisma.PrismaClientKnownRequestError,
 ): TgenericResponse => {
-  switch (error.code) {
+  switch (error?.code) {
     // Unique constraint violation. `meta.target` is the offending column(s). 409 so the
     // clients read it as "the server refused" (the app paints 409s amber), matching how the
     // services' own P2002 catches already respond.
@@ -91,10 +91,10 @@ export const handlePrismaKnownRequestError = (
     default: {
       return {
         statusCode: httpStatus.INTERNAL_SERVER_ERROR,
-        message: `Database error (${error.code})`,
+        message: `Database error (${error?.code})`,
         errorSources: toSource(
           "",
-          error.message.split("\n").pop() ?? error.message,
+          error?.message?.split("\n")?.pop() ?? error?.message,
         ),
       };
     }
@@ -110,6 +110,6 @@ export const handlePrismaValidationError = (
   message: "Invalid data provided to the database query",
   errorSources: toSource(
     "",
-    error.message.split("\n").pop() ?? "validation error",
+    error?.message?.split("\n")?.pop() ?? "validation error",
   ),
 });
