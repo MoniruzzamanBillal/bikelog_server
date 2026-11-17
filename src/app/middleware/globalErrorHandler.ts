@@ -1,10 +1,12 @@
+import { Prisma } from "@prisma/client";
 import { ErrorRequestHandler } from "express";
 import httpStatus from "http-status";
 import { ZodError } from "zod";
 import AppError from "../Error/AppError";
-import { handleCastError } from "../Error/handleCatError";
-import { handleDuplicateError } from "../Error/handleDuplicateError";
-import { handleValidationError } from "../Error/handleValidationError";
+import {
+  handlePrismaKnownRequestError,
+  handlePrismaValidationError,
+} from "../Error/handlePrismaError";
 import { handleZodError } from "../Error/handleZodError";
 import { TerrorSource } from "../interface/error";
 import { errorLogServices } from "../modules/errorLog/errorLog.service";
@@ -15,7 +17,7 @@ const globalErrorHandler: ErrorRequestHandler = async (
   res,
   // ! unused but required — Express only recognizes error-handling middleware by 4-argument arity
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  next
+  next,
 ) => {
   let status = error.status || 500;
   let message = error.message || "Something went wrong!!";
@@ -27,7 +29,14 @@ const globalErrorHandler: ErrorRequestHandler = async (
     },
   ];
 
-  // ! zod validation error
+  // ! One if/else-if chain, most specific first. The old handler was two separate chains
+  // ! (the CastError `if` started a fresh one), which meant a Mongo CastError could silently
+  // ! overwrite a Zod result — moot now those branches are gone, but the single chain is also
+  // ! correct by construction. The three Mongoose-era branches (`name === "ValidationError"`,
+  // ! `name === "CastError"`, Mongo's `code === 11000`) were deleted: none can fire under
+  // ! Prisma/Postgres, and their handlers went with them.
+
+  // ! Zod request-validation error (thrown by validateRequest before any service runs).
   if (error instanceof ZodError) {
     const simplifiedError = handleZodError(error);
     status = simplifiedError?.statusCode;
@@ -35,35 +44,33 @@ const globalErrorHandler: ErrorRequestHandler = async (
     errorSources = simplifiedError?.errorSources;
   }
 
-  // ! mongoose validation error
-  else if (error?.name === "ValidationError") {
-    const simplifiedError = handleValidationError(error);
-    status = simplifiedError?.statusCode;
-    message = simplifiedError?.message;
-    errorSources = simplifiedError?.errorSources;
-  }
-
-  // ! cast error
-  if (error?.name === "CastError") {
-    const simplifiedError = handleCastError(error);
-    status = simplifiedError?.statusCode;
-    message = simplifiedError?.message;
-    errorSources = simplifiedError?.errorSources;
-  }
-
-  // ! handle duplicate error
-  else if (error?.code === 11000) {
-    const simplifiedError = handleDuplicateError(error);
-    status = simplifiedError?.statusCode;
-    message = simplifiedError?.message;
-    errorSources = simplifiedError?.errorSources;
-  }
-
-  // ! handle custom app error
+  // ! A deliberate, domain-level error raised by a service/controller — it already carries
+  // ! the status and message it wants, so trust them verbatim. Checked before the Prisma
+  // ! branches because services catch Prisma errors they care about (e.g. P2002 on a catalog
+  // ! name) and re-throw an AppError with a better message; only what they DON'T catch should
+  // ! reach the generic Prisma mapper below.
   else if (error instanceof AppError) {
     status = error?.status;
     message = error?.message;
     errorSources = [{ path: "", message: error?.message }];
+  }
+
+  // ! Central Prisma error branch — the safety net for constraint errors no service caught.
+  // ! P2002 → 409, P2025 → 404, P2003/P2000/P2011 → 400; anything else stays a logged 500.
+  // ! Before this existed, P2003/P2025 fell through to the bare 500 default.
+  else if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    const simplifiedError = handlePrismaKnownRequestError(error);
+    status = simplifiedError?.statusCode;
+    message = simplifiedError?.message;
+    errorSources = simplifiedError?.errorSources;
+  }
+
+  // ! Malformed query / wrong argument types reaching Prisma — a caller bug, so 400 not 500.
+  else if (error instanceof Prisma.PrismaClientValidationError) {
+    const simplifiedError = handlePrismaValidationError(error);
+    status = simplifiedError?.statusCode;
+    message = simplifiedError?.message;
+    errorSources = simplifiedError?.errorSources;
   }
 
   // ! Spec 51 §E.1 — a 401 from the refresh-token route is NEVER logged. Its request body
