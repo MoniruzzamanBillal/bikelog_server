@@ -18,6 +18,7 @@ const AppError_1 = __importDefault(require("../../Error/AppError"));
 const prisma_1 = require("../../lib/prisma");
 const bike_utils_1 = require("../bike/bike.utils");
 const bikeAccessory_constant_1 = require("../bikeAccessory/bikeAccessory.constant");
+const serviceLog_utils_1 = require("../serviceLog/serviceLog.utils");
 // ! shared by getSpendingSummaryFromDB and getSpendingDetailsFromDB so the two endpoints'
 // ! date-range math can never drift apart from each other
 const resolveSpendingDateRange = (period, targetMonth, targetYear) => {
@@ -28,7 +29,12 @@ const resolveSpendingDateRange = (period, targetMonth, targetYear) => {
         const [yearStr, monthStr] = targetMonth.split("-");
         const year = parseInt(yearStr, 10);
         const month = parseInt(monthStr, 10);
-        if (isNaN(year) || isNaN(month) || month < 1 || month > 12 || year < 2000 || year > 2100) {
+        if (isNaN(year) ||
+            isNaN(month) ||
+            month < 1 ||
+            month > 12 ||
+            year < 2000 ||
+            year > 2100) {
             throw new AppError_1.default(http_status_1.default.BAD_REQUEST, "Invalid targetMonth format. Use YYYY-MM");
         }
         return {
@@ -52,19 +58,25 @@ const resolveSpendingDateRange = (period, targetMonth, targetYear) => {
     return {};
 };
 const computeSpendingForRange = (bikeId, startDate, endDate) => __awaiter(void 0, void 0, void 0, function* () {
-    const [fuelLogs, maintenanceLogs, accessories, engineOilLogs] = yield Promise.all([
+    const [fuelLogs, maintenanceLogs, accessories, engineOilLogs, serviceLogs] = yield Promise.all([
         prisma_1.prisma.fuelLog.findMany({
-            where: Object.assign({ bikeId, isDeleted: false }, (startDate && endDate ? { date: { gte: startDate, lte: endDate } } : {})),
+            where: Object.assign({ bikeId, isDeleted: false }, (startDate && endDate
+                ? { date: { gte: startDate, lte: endDate } }
+                : {})),
         }),
         prisma_1.prisma.maintenanceLog.findMany({
-            where: Object.assign({ bikeId, isDeleted: false }, (startDate && endDate ? { serviceDate: { gte: startDate, lte: endDate } } : {})),
+            where: Object.assign({ bikeId, isDeleted: false }, (startDate && endDate
+                ? { serviceDate: { gte: startDate, lte: endDate } }
+                : {})),
             // ! replaces Mongoose's .populate("maintenanceType", "name")
             include: { maintenanceType: { select: { name: true } } },
         }),
         // ! only purchased accessories count as real spending — pending/cancelled wishlist
         // ! entries are never included
         prisma_1.prisma.bikeAccessory.findMany({
-            where: Object.assign({ bikeId, isDeleted: false, status: bikeAccessory_constant_1.AccessoryStatus.purchased }, (startDate && endDate ? { purchaseDate: { gte: startDate, lte: endDate } } : {})),
+            where: Object.assign({ bikeId, isDeleted: false, status: bikeAccessory_constant_1.AccessoryStatus.purchased }, (startDate && endDate
+                ? { purchaseDate: { gte: startDate, lte: endDate } }
+                : {})),
         }),
         // ! Spec 54 §F/D7: an oil change is its own record now, and the money is real — without
         // ! this the bike hub's totals would drop by the cost of every oil change ever logged
@@ -74,8 +86,18 @@ const computeSpendingForRange = (bikeId, startDate, endDate) => __awaiter(void 0
         // ! read-only and minutes long inside one operator session — run copy, verify, finalize
         // ! in one sitting, and before the web client ships.
         prisma_1.prisma.engineOilLog.findMany({
-            where: Object.assign({ bikeId, isDeleted: false }, (startDate && endDate ? { changeDate: { gte: startDate, lte: endDate } } : {})),
+            where: Object.assign({ bikeId, isDeleted: false }, (startDate && endDate
+                ? { changeDate: { gte: startDate, lte: endDate } }
+                : {})),
             include: { oilType: { select: { name: true } } },
+        }),
+        // ! Spec 67: only COMPLETED services are real spending — an upcoming (scheduled, not yet
+        // ! visited) service carries no money. Filtered on `serviceDate` like every other source's
+        // ! date filter, so a completed service lands in the period its visit happened.
+        prisma_1.prisma.serviceLog.findMany({
+            where: Object.assign({ bikeId, isDeleted: false, status: "completed" }, (startDate && endDate
+                ? { serviceDate: { gte: startDate, lte: endDate } }
+                : {})),
         }),
     ]);
     // ! every Decimal(12,2) field read here MUST go through Number(...) before arithmetic —
@@ -91,20 +113,26 @@ const computeSpendingForRange = (bikeId, startDate, endDate) => __awaiter(void 0
     }, {});
     const accessoryTotal = accessories.reduce((sum, a) => sum + (a.price ? Number(a.price) : 0), 0);
     const oilTotal = engineOilLogs.reduce((sum, log) => sum + Number(log.cost), 0);
+    // ! Spec 67: a completed service's spend is the sum of its item costs (JSON numbers). A
+    // ! free service (no items) contributes 0 and never appears as a category or record.
+    const serviceTotal = serviceLogs.reduce((sum, log) => sum + (0, serviceLog_utils_1.sumItemCosts)(log.items), 0);
     const categoryBreakdown = [
         { category: "Fuel", total: fuelTotal },
         ...Object.entries(maintenanceByCategory).map(([category, total]) => ({
             category,
             total,
         })),
-        ...(accessoryTotal > 0 ? [{ category: "Accessories", total: accessoryTotal }] : []),
+        ...(accessoryTotal > 0
+            ? [{ category: "Accessories", total: accessoryTotal }]
+            : []),
         // ! only when > 0, following the accessories precedent directly above
         ...(oilTotal > 0 ? [{ category: "Engine Oil", total: oilTotal }] : []),
+        ...(serviceTotal > 0 ? [{ category: "Service", total: serviceTotal }] : []),
     ];
     categoryBreakdown.sort((a, b) => b.total - a.total);
     const maintenanceTotal = maintenanceLogs.reduce((sum, log) => sum + Number(log.cost), 0);
     // ! easy to miss, because the category array above is built separately from this sum
-    const totalSpending = fuelTotal + maintenanceTotal + accessoryTotal + oilTotal;
+    const totalSpending = fuelTotal + maintenanceTotal + accessoryTotal + oilTotal + serviceTotal;
     const fuelRecords = fuelLogs.map((log) => {
         var _a, _b;
         return ({
@@ -124,7 +152,9 @@ const computeSpendingForRange = (bikeId, startDate, endDate) => __awaiter(void 0
         return {
             date: log.serviceDate,
             category,
-            description: ((_c = log.partsReplaced) === null || _c === void 0 ? void 0 : _c.length) ? log.partsReplaced.join(", ") : category,
+            description: ((_c = log.partsReplaced) === null || _c === void 0 ? void 0 : _c.length)
+                ? log.partsReplaced.join(", ")
+                : category,
             amount: Number(log.cost),
             vendor: (_d = log.serviceCenter) !== null && _d !== void 0 ? _d : null,
             remarks: (_e = log.notes) !== null && _e !== void 0 ? _e : null,
@@ -156,11 +186,34 @@ const computeSpendingForRange = (bikeId, startDate, endDate) => __awaiter(void 0
             liters: null,
         });
     });
+    // ! Spec 67: ONE record per item of a completed service (not one per service) — so the
+    // ! Spending details list shows "carbon cleaner ৳300" as its own line, exactly how the
+    // ! rider thinks of it. A service's date is its actual visit date (serviceDate); a
+    // ! completed service always has one.
+    const serviceRecords = serviceLogs.flatMap((log) => {
+        var _a;
+        return ((_a = log.items) !== null && _a !== void 0 ? _a : [])
+            .filter((item) => Number(item === null || item === void 0 ? void 0 : item.cost) > 0)
+            .map((item) => {
+            var _a, _b;
+            return ({
+                date: log.serviceDate,
+                category: "Service",
+                description: item.name,
+                amount: Number(item.cost),
+                vendor: (_a = log.serviceCenter) !== null && _a !== void 0 ? _a : null,
+                remarks: (_b = log.notes) !== null && _b !== void 0 ? _b : null,
+                source: "service",
+                liters: null,
+            });
+        });
+    });
     const records = [
         ...fuelRecords,
         ...maintenanceRecords,
         ...accessoryRecords,
         ...engineOilRecords,
+        ...serviceRecords,
     ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     return { totalSpending, categoryBreakdown, records };
 });
@@ -289,7 +342,12 @@ const getPeriodCategoryBreakdownFromDB = (bikeId, userId, period, targetYear) =>
             }
             let child = bucket.months.get(monthKey);
             if (!child) {
-                child = { key: monthKey, label: monthLabels[month], total: 0, liters: null };
+                child = {
+                    key: monthKey,
+                    label: monthLabels[month],
+                    total: 0,
+                    liters: null,
+                };
                 bucket.months.set(monthKey, child);
             }
             child.total += (_d = record === null || record === void 0 ? void 0 : record.amount) !== null && _d !== void 0 ? _d : 0;
@@ -300,7 +358,9 @@ const getPeriodCategoryBreakdownFromDB = (bikeId, userId, period, targetYear) =>
     }
     const categories = [...groups.values()]
         .map((group) => {
-        const buckets = [...group.buckets.values()]
+        const buckets = [
+            ...group.buckets.values(),
+        ]
             .sort((a, b) => 
         // ! year view: months chronological (Jan→Dec). lifetime: years newest-first.
         period === "year"
