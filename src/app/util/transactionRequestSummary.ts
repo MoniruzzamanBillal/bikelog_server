@@ -66,6 +66,32 @@ export const buildEngineOilLogSummary = (
   return { title, description };
 };
 
+// Spec 67 §expenseTracker: fired once a service becomes completed and carries a cost. Like
+// the oil summary, the push still goes out as `sourceType: "maintenance"` — only the copy is
+// service-specific.
+export const buildServiceLogSummary = (
+  log: {
+    serviceKind?: string;
+    warrantyNumber?: number | null;
+    serviceCenter?: string | null;
+    items?: { name: string }[] | null;
+  },
+  bikeNickname?: string,
+) => {
+  const label =
+    log.serviceKind === "warranty"
+      ? `warranty #${log.warrantyNumber ?? ""}`.trim()
+      : "service";
+  const title = `Service: ${label}`;
+  const itemNames = (log.items ?? []).map((i) => i.name).filter(Boolean);
+  const description =
+    `Bike ${label}${bikeNickname ? ` for ${bikeNickname}` : ""}${
+      log.serviceCenter ? ` at ${log.serviceCenter}` : ""
+    }.` + (itemNames.length ? ` Items: ${itemNames.join(", ")}.` : "");
+
+  return { title, description };
+};
+
 export const buildAccessorySummary = (
   accessory: Pick<TBikeAccessory, "name" | "urgency">,
   bikeNickname?: string,

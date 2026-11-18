@@ -7,7 +7,10 @@ import { bikeIssueRouter } from "../modules/bikeIssue/bikeIssue.route";
 import { bikeManualRouter } from "../modules/bikeManual/bikeManual.route";
 import { engineOilLogRouter } from "../modules/engineOilLog/engineOilLog.route";
 import { engineOilTypeRouter } from "../modules/engineOilType/engineOilType.route";
-import { errorLogCronRouter, errorLogRouter } from "../modules/errorLog/errorLog.route";
+import {
+  errorLogCronRouter,
+  errorLogRouter,
+} from "../modules/errorLog/errorLog.route";
 import { fuelLogRouter } from "../modules/fuelLog/fuelLog.route";
 import {
   maintenanceLogRouter,
@@ -16,6 +19,7 @@ import {
 import { maintenanceTypeRouter } from "../modules/maintenanceType/maintenanceType.route";
 import { mileageRecordRouter } from "../modules/mileageRecord/mileageRecord.route";
 import { notificationRouter } from "../modules/notification/notification.route";
+import { serviceLogRouter } from "../modules/serviceLog/serviceLog.route";
 import { spendingRouter } from "../modules/spending/spending.route";
 import { userRouter } from "../modules/user/user.route";
 
@@ -53,6 +57,10 @@ const routeArray = [
   {
     path: "/bikes/:bikeId/engine-oil-logs",
     route: engineOilLogRouter,
+  },
+  {
+    path: "/bikes/:bikeId/service-logs",
+    route: serviceLogRouter,
   },
   {
     path: "/bikes/:bikeId/reminders",
