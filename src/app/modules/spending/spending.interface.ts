@@ -19,7 +19,11 @@ export type TSpendingRecordSource =
   | "fuel"
   | "maintenance"
   | "accessory"
-  | "oil";
+  | "oil"
+  // ! Spec 67: one record per item of a COMPLETED service. Both clients declare their own
+  // ! copy of this union and never switch on it, so a value they don't know is harmless at
+  // ! runtime — backend-only spec, so neither client copy is touched here (by design).
+  | "service";
 
 export type TSpendingRecord = {
   date: Date;

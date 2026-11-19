@@ -28,6 +28,24 @@ enum BikeIssueStatus {
   resolved
 }
 
+// Spec 67 — a service is either a warranty service (one of the 5 that keep the warranty
+// valid) or a regular one logged afterward; its status is upcoming until the visit happens;
+// the center is the official one or a local workshop.
+enum ServiceKind {
+  warranty
+  regular
+}
+
+enum ServiceStatus {
+  upcoming
+  completed
+}
+
+enum ServiceCenterType {
+  official
+  local
+}
+
 model User {
   id             String   @id
   name           String
@@ -72,6 +90,7 @@ model Bike {
   fuelLogs        FuelLog[]
   maintenanceLogs MaintenanceLog[]
   engineOilLogs   EngineOilLog[]
+  serviceLogs     ServiceLog[]
   mileageRecords  MileageRecord[]
   issues          BikeIssue[]
   accessories     BikeAccessory[]
@@ -216,6 +235,41 @@ model EngineOilLog {
   @@index([bikeId])
   @@index([bikeId, changeDate])
   @@map("engine_oil_logs")
+}
+
+// Spec 67 — warranty-aware open-ended service log. Mirrors EngineOilLog conventions
+// (string @id no @default, soft delete, Restrict on the bike relation, @@map snake_case).
+// `items` and `recommendations` are row JSON arrays, not child tables (tiny per-bike volume,
+// one additive migration, mirrors the serviceImage Json precedent); each sub-entry carries
+// its own generated bson id. Item costs are plain JSON numbers, bounded + rounded in Zod and
+// always Number(...)-ed before arithmetic — JSON cannot hold a Decimal. `status` is derived
+// server-side from serviceDate presence, never trusted from the client.
+model ServiceLog {
+  id              String             @id
+  bikeId          String
+  serviceKind     ServiceKind        @default(regular)
+  warrantyNumber  Int?
+  status          ServiceStatus      @default(upcoming)
+  dueDate         DateTime?
+  serviceDate     DateTime?
+  odometerReading Float?
+  serviceCenter   String?
+  centerType      ServiceCenterType?
+  items           Json?
+  recommendations Json?
+  notes           String?
+  serviceImage    Json?
+  isDeleted       Boolean            @default(false)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  // ! Restrict, like engine_oil_logs — a bike with service history cannot be hard-deleted
+  // ! out from under its logs (soft delete is the only delete path anyway).
+  bike Bike @relation(fields: [bikeId], references: [id], onDelete: Restrict)
+
+  @@index([bikeId])
+  @@index([bikeId, dueDate])
+  @@map("service_logs")
 }
 
 model MileageRecord {

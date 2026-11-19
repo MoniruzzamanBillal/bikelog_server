@@ -23,6 +23,7 @@ const bike_utils_1 = require("../bike/bike.utils");
 const cloudinary_1 = require("../../util/cloudinary");
 const ridingRate_1 = require("../../util/ridingRate");
 const engineOilLog_utils_1 = require("../engineOilLog/engineOilLog.utils");
+const serviceLog_utils_1 = require("../serviceLog/serviceLog.utils");
 // ! Spec 41 §B: every read that returns a log populates its two catalog relations, so the
 // ! display name travels with the log instead of being joined client-side against the
 // ! catalog list. That join broke once the list endpoints started hiding soft-deleted rows
@@ -197,7 +198,8 @@ const updateMaintenanceLogInDB = (bikeId, userId, id, payload) => __awaiter(void
     }
     const newOdometer = (_a = payload.odometerReading) !== null && _a !== void 0 ? _a : log.odometerReading;
     const newInterval = (_c = (_b = payload.intervalKmUsed) !== null && _b !== void 0 ? _b : log.intervalKmUsed) !== null && _c !== void 0 ? _c : undefined;
-    if ((payload.odometerReading !== undefined || payload.intervalKmUsed !== undefined) &&
+    if ((payload.odometerReading !== undefined ||
+        payload.intervalKmUsed !== undefined) &&
         newInterval !== undefined) {
         updateData.nextDueOdometer = computeNextDueOdometer(newOdometer, newInterval);
     }
@@ -355,7 +357,9 @@ const getRemindersFromDB = (bikeId, userId) => __awaiter(void 0, void 0, void 0,
                 status: due.status,
             };
             // ! D4 again: upcoming only. An overdue row is already past; a projection for it is noise.
-            if (due.status === "upcoming" && due.projectedDays !== undefined && rate) {
+            if (due.status === "upcoming" &&
+                due.projectedDays !== undefined &&
+                rate) {
                 reminder.projectedDaysRemaining = due.projectedDays;
                 reminder.projectedDueDate = new Date(Date.now() + due.projectedDays * ridingRate_1.DAY_MS);
                 reminder.kmPerDay = Math.round(rate.kmPerDay * 10) / 10;
@@ -363,6 +367,13 @@ const getRemindersFromDB = (bikeId, userId) => __awaiter(void 0, void 0, void 0,
             reminders.push(reminder);
         }
     }
+    // ! Spec 67 §Reminders — re-source service reminders the same way the oil block above
+    // ! re-sources the oil one: derived in serviceLog.utils (so the due arithmetic can't drift
+    // ! from the /service-logs/status endpoint) and pushed in the existing shape, so both
+    // ! clients' reminder banners render them with no change. Earliest upcoming service row +
+    // ! every pending recommendation that carries a target date, filtered to overdue/≤14 days.
+    const serviceReminders = yield (0, serviceLog_utils_1.getServiceRemindersFromDB)(bikeId, bike.currentOdometer);
+    reminders.push(...serviceReminders);
     return { reminders };
 });
 const uploadMaintenanceLogImageIntoDB = (bikeId, userId, id, file) => __awaiter(void 0, void 0, void 0, function* () {

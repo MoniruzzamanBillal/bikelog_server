@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.buildAccessorySummary = exports.buildEngineOilLogSummary = exports.buildMaintenanceLogSummary = exports.buildFuelLogSummary = void 0;
+exports.buildAccessorySummary = exports.buildServiceLogSummary = exports.buildEngineOilLogSummary = exports.buildMaintenanceLogSummary = exports.buildFuelLogSummary = void 0;
 const buildFuelLogSummary = (fuelLog, bikeNickname) => {
     const title = `Fuel: ${fuelLog.fuelStation || "Fuel top-up"}`;
     const description = `Took ${fuelLog.litersAdded}L fuel${bikeNickname ? ` for ${bikeNickname}` : ""} from ${fuelLog.fuelStation || "the fuel station"}, ${fuelLog.isFullTank ? "full tank" : "partial tank"}, at ${fuelLog.odometerReading} km.` +
@@ -36,6 +36,20 @@ log, oilTypeName, bikeNickname) => {
     return { title, description };
 };
 exports.buildEngineOilLogSummary = buildEngineOilLogSummary;
+// Spec 67 §expenseTracker: fired once a service becomes completed and carries a cost. Like
+// the oil summary, the push still goes out as `sourceType: "maintenance"` — only the copy is
+// service-specific.
+const buildServiceLogSummary = (log, bikeNickname) => {
+    var _a, _b;
+    const label = log.serviceKind === "warranty"
+        ? `warranty #${(_a = log.warrantyNumber) !== null && _a !== void 0 ? _a : ""}`.trim()
+        : "service";
+    const title = `Service: ${label}`;
+    const itemNames = ((_b = log.items) !== null && _b !== void 0 ? _b : []).map((i) => i.name).filter(Boolean);
+    const description = `Bike ${label}${bikeNickname ? ` for ${bikeNickname}` : ""}${log.serviceCenter ? ` at ${log.serviceCenter}` : ""}.` + (itemNames.length ? ` Items: ${itemNames.join(", ")}.` : "");
+    return { title, description };
+};
+exports.buildServiceLogSummary = buildServiceLogSummary;
 const buildAccessorySummary = (accessory, bikeNickname) => {
     const title = `Accessory: ${accessory.name}`;
     const description = `Purchased ${accessory.name}${bikeNickname ? ` for ${bikeNickname}` : ""} (${accessory.urgency} priority).`;

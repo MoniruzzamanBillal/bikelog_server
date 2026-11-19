@@ -16,6 +16,7 @@ const maintenanceLog_route_1 = require("../modules/maintenanceLog/maintenanceLog
 const maintenanceType_route_1 = require("../modules/maintenanceType/maintenanceType.route");
 const mileageRecord_route_1 = require("../modules/mileageRecord/mileageRecord.route");
 const notification_route_1 = require("../modules/notification/notification.route");
+const serviceLog_route_1 = require("../modules/serviceLog/serviceLog.route");
 const spending_route_1 = require("../modules/spending/spending.route");
 const user_route_1 = require("../modules/user/user.route");
 const router = (0, express_1.Router)();
@@ -51,6 +52,10 @@ const routeArray = [
     {
         path: "/bikes/:bikeId/engine-oil-logs",
         route: engineOilLog_route_1.engineOilLogRouter,
+    },
+    {
+        path: "/bikes/:bikeId/service-logs",
+        route: serviceLog_route_1.serviceLogRouter,
     },
     {
         path: "/bikes/:bikeId/reminders",

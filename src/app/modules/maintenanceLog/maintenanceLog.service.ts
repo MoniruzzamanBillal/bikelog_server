@@ -17,6 +17,7 @@ import {
   evaluateOilDue,
   findLatestEngineOilLog,
 } from "../engineOilLog/engineOilLog.utils";
+import { getServiceRemindersFromDB } from "../serviceLog/serviceLog.utils";
 
 // ! Spec 41 §B: every read that returns a log populates its two catalog relations, so the
 // ! display name travels with the log instead of being joined client-side against the
@@ -78,7 +79,10 @@ const assertNotBeforePurchase = (serviceDate: Date, purchaseDate: Date) => {
   }
 };
 
-const computeNextDueOdometer = (odometerReading: number, intervalKmUsed: number): number => {
+const computeNextDueOdometer = (
+  odometerReading: number,
+  intervalKmUsed: number,
+): number => {
   return odometerReading + intervalKmUsed;
 };
 
@@ -182,7 +186,11 @@ const getMaintenanceLogsFromDB = async (
   return { result: result.map(toApiShape), meta };
 };
 
-const getMaintenanceLogByIdFromDB = async (bikeId: string, userId: string, id: string) => {
+const getMaintenanceLogByIdFromDB = async (
+  bikeId: string,
+  userId: string,
+  id: string,
+) => {
   await findOwnedBikeOrThrow(bikeId, userId);
 
   const log = await prisma.maintenanceLog.findFirst({
@@ -253,10 +261,14 @@ const updateMaintenanceLogInDB = async (
   const newOdometer = payload.odometerReading ?? log.odometerReading;
   const newInterval = payload.intervalKmUsed ?? log.intervalKmUsed ?? undefined;
   if (
-    (payload.odometerReading !== undefined || payload.intervalKmUsed !== undefined) &&
+    (payload.odometerReading !== undefined ||
+      payload.intervalKmUsed !== undefined) &&
     newInterval !== undefined
   ) {
-    updateData.nextDueOdometer = computeNextDueOdometer(newOdometer, newInterval);
+    updateData.nextDueOdometer = computeNextDueOdometer(
+      newOdometer,
+      newInterval,
+    );
   }
 
   const updated = await prisma.maintenanceLog.update({
@@ -275,7 +287,11 @@ const updateMaintenanceLogInDB = async (
   return toApiShape(updated);
 };
 
-const deleteMaintenanceLogFromDB = async (bikeId: string, userId: string, id: string) => {
+const deleteMaintenanceLogFromDB = async (
+  bikeId: string,
+  userId: string,
+  id: string,
+) => {
   await findOwnedBikeOrThrow(bikeId, userId);
 
   const log = await prisma.maintenanceLog.findFirst({
@@ -473,7 +489,11 @@ const getRemindersFromDB = async (bikeId: string, userId: string) => {
       };
 
       // ! D4 again: upcoming only. An overdue row is already past; a projection for it is noise.
-      if (due.status === "upcoming" && due.projectedDays !== undefined && rate) {
+      if (
+        due.status === "upcoming" &&
+        due.projectedDays !== undefined &&
+        rate
+      ) {
         reminder.projectedDaysRemaining = due.projectedDays;
         reminder.projectedDueDate = new Date(
           Date.now() + due.projectedDays * DAY_MS,
@@ -484,6 +504,17 @@ const getRemindersFromDB = async (bikeId: string, userId: string) => {
       reminders.push(reminder);
     }
   }
+
+  // ! Spec 67 §Reminders — re-source service reminders the same way the oil block above
+  // ! re-sources the oil one: derived in serviceLog.utils (so the due arithmetic can't drift
+  // ! from the /service-logs/status endpoint) and pushed in the existing shape, so both
+  // ! clients' reminder banners render them with no change. Earliest upcoming service row +
+  // ! every pending recommendation that carries a target date, filtered to overdue/≤14 days.
+  const serviceReminders = await getServiceRemindersFromDB(
+    bikeId,
+    bike.currentOdometer,
+  );
+  reminders.push(...serviceReminders);
 
   return { reminders };
 };
