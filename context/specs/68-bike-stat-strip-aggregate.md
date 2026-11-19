@@ -7,13 +7,13 @@
 
 `BikeStatStrip` (and the web client's `BikeDetailPage` hub) renders a handful of summary scalars for one bike: average mileage, this-month spend, lifetime spend, cost-per-km, and engine-oil status (km on the current oil, oil life %). To get them it currently calls four endpoints and does the final arithmetic client-side:
 
-| Stat | Endpoint today | Client-side work |
-| --- | --- | --- |
-| Avg mileage | `GET /bikes/:bikeId/mileage` | mean of the 5 most recent `exactRecords`, else `approximate` |
-| This-month spend | `GET /bikes/:bikeId/spending-summary?period=month&targetMonth=…` | read `totalSpending` |
-| Lifetime spend | `GET /bikes/:bikeId/spending-summary?period=lifetime` | read `totalSpending` |
-| Cost / km | (derived) | `lifetimeSpending / (currentOdometer − initialOdometer)` |
-| Oil km / oil life % | `GET /bikes/:bikeId/engine-oil-logs/status` | read `kmSinceChange` / `percentUsed` when a change exists |
+| Stat                | Endpoint today                                                   | Client-side work                                             |
+| ------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------ |
+| Avg mileage         | `GET /bikes/:bikeId/mileage`                                     | mean of the 5 most recent `exactRecords`, else `approximate` |
+| This-month spend    | `GET /bikes/:bikeId/spending-summary?period=month&targetMonth=…` | read `totalSpending`                                         |
+| Lifetime spend      | `GET /bikes/:bikeId/spending-summary?period=lifetime`            | read `totalSpending`                                         |
+| Cost / km           | (derived)                                                        | `lifetimeSpending / (currentOdometer − initialOdometer)`     |
+| Oil km / oil life % | `GET /bikes/:bikeId/engine-oil-logs/status`                      | read `kmSinceChange` / `percentUsed` when a change exists    |
 
 Four round-trips and duplicated math (the same `getAvgMileage` and `costPerKm` logic lives in both clients) to fill one row. **Goal:** one endpoint that returns exactly those scalars, computed server-side, so each client makes a single call and renders plain values.
 
@@ -26,7 +26,7 @@ Four round-trips and duplicated math (the same `getAvgMileage` and `costPerKm` l
    - `spendingServices.getSpendingSummaryFromDB(bikeId, userId, "month", targetMonth)` → `monthSpending`.
    - `spendingServices.getSpendingSummaryFromDB(bikeId, userId, "lifetime")` → `lifetimeSpending`.
    - `engineOilLogServices.getEngineOilStatusFromDB(bikeId, userId)` → the oil scalars.
-   This keeps a **single source of truth** for each number — the stat strip can never drift from the drill-down screen that owns the same figure.
+     This keeps a **single source of truth** for each number — the stat strip can never drift from the drill-down screen that owns the same figure.
 
 3. **`avgMileage` logic is lifted verbatim from the client.** Mean of the 5 most-recent `exactRecords` by `periodEndDate` desc; else `approximate.mileageKmPerLiter`; else `null`. It moves server-side unchanged so the value is byte-identical to today's strip.
 
@@ -51,12 +51,12 @@ Four round-trips and duplicated math (the same `getAvgMileage` and `costPerKm` l
 // src/app/modules/bikeStats/bikeStats.interface.ts
 export type TBikeStatStrip = {
   avgMileageKmPerLiter: number | null;
-  monthSpending: number;       // for targetMonth (or current month)
+  monthSpending: number; // for targetMonth (or current month)
   lifetimeSpending: number;
-  costPerKm: number | null;    // null when (currentOdometer - initialOdometer) <= 0
+  costPerKm: number | null; // null when (currentOdometer - initialOdometer) <= 0
   oil: {
-    kmSinceChange: number | null;  // null ⇔ no oil change on record
-    percentUsed: number | null;    // null ⇔ no oil change on record
+    kmSinceChange: number | null; // null ⇔ no oil change on record
+    percentUsed: number | null; // null ⇔ no oil change on record
   };
 };
 ```
@@ -73,13 +73,15 @@ export type TBikeStatStrip = {
   3. `Promise.all` the four composed calls (Decision 2).
   4. Reduce: `avgMileageKmPerLiter` (Decision 3), `monthSpending`/`lifetimeSpending` (`.totalSpending`), `oil` (Decision 5), `costPerKm` (Decision 6).
   5. Return `TBikeStatStrip`.
-  Export via `const bikeStatsServices = { getBikeStatStripFromDB }`.
+     Export via `const bikeStatsServices = { getBikeStatStripFromDB }`.
 - **`bikeStats.interface.ts`** — the `TBikeStatStrip` type above.
 
 **Register** in `src/app/router/index.ts` `routeArray`:
+
 ```ts
 { path: "/bikes/:bikeId/stat-strip", route: bikeStatsRouter },
 ```
+
 (Place it near the other `/bikes/:bikeId/...` entries.)
 
 ## Cross-cutting server edits
@@ -89,11 +91,11 @@ None. No schema change, no migration, no change to `spending`/`mileageRecord`/`e
 ## Clients
 
 - **`bikelog_app`** — consumes this endpoint; see app spec **74**. Replaces the four `useFetchData` calls in `BikeStatStrip.tsx` with one and deletes the client-side `getAvgMileage`/`costPerKm` math.
-- **`bikelog_client-web-`** — consumes this endpoint; see web spec **45**. The web hub (`BikeDetailPage.tsx`) renders the same strip from the same four endpoints and duplicates the same math, so the cascade's step 3 *is* triggered here (the clients are additive consumers, not forced migrations — nothing breaks if a client lags, because the four old endpoints remain).
+- **`bikelog_client-web-`** — consumes this endpoint; see web spec **45**. The web hub (`BikeDetailPage.tsx`) renders the same strip from the same four endpoints and duplicates the same math, so the cascade's step 3 _is_ triggered here (the clients are additive consumers, not forced migrations — nothing breaks if a client lags, because the four old endpoints remain).
 
 ## Verification
 
-- `npx prisma generate` (no schema change, but keep the habit) → `yarn build` (tsc clean) → `yarn lint` (no *new* findings) → `yarn test` (the Vitest suite is unaffected; this module is DB-calling so it isn't unit-tested — see below).
+- `npx prisma generate` (no schema change, but keep the habit) → `yarn build` (tsc clean) → `yarn lint` (no _new_ findings) → `yarn test` (the Vitest suite is unaffected; this module is DB-calling so it isn't unit-tested — see below).
 - **Not reachable by the unit suite.** `getBikeStatStripFromDB` composes `prisma`-calling services, which the `PrismaNeon` adapter can't point at local Postgres. So verification is **Postman against a Neon branch / production**, not a test.
 - **Operator / Postman (not run here):** for a real `bikeId`, call `GET /api/bikes/:bikeId/stat-strip?targetMonth=<this month>` and assert each scalar equals the value from the endpoint it replaces:
   - `avgMileageKmPerLiter` == the mean the client computes from `GET …/mileage`.

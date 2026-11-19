@@ -5,6 +5,7 @@ import { bikeAccessoryRouter } from "../modules/bikeAccessory/bikeAccessory.rout
 import { bikeDocumentRouter } from "../modules/bikeDocument/bikeDocument.route";
 import { bikeIssueRouter } from "../modules/bikeIssue/bikeIssue.route";
 import { bikeManualRouter } from "../modules/bikeManual/bikeManual.route";
+import { bikeStatsRouter } from "../modules/bikeStats/bikeStats.route";
 import { engineOilLogRouter } from "../modules/engineOilLog/engineOilLog.route";
 import { engineOilTypeRouter } from "../modules/engineOilType/engineOilType.route";
 import {
@@ -69,6 +70,10 @@ const routeArray = [
   {
     path: "/bikes/:bikeId/spending-summary",
     route: spendingRouter,
+  },
+  {
+    path: "/bikes/:bikeId/stat-strip",
+    route: bikeStatsRouter,
   },
   {
     path: "/bikes/:bikeId/issues",
