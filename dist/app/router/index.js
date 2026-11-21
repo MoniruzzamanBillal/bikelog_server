@@ -8,6 +8,7 @@ const bikeAccessory_route_1 = require("../modules/bikeAccessory/bikeAccessory.ro
 const bikeDocument_route_1 = require("../modules/bikeDocument/bikeDocument.route");
 const bikeIssue_route_1 = require("../modules/bikeIssue/bikeIssue.route");
 const bikeManual_route_1 = require("../modules/bikeManual/bikeManual.route");
+const bikeStats_route_1 = require("../modules/bikeStats/bikeStats.route");
 const engineOilLog_route_1 = require("../modules/engineOilLog/engineOilLog.route");
 const engineOilType_route_1 = require("../modules/engineOilType/engineOilType.route");
 const errorLog_route_1 = require("../modules/errorLog/errorLog.route");
@@ -64,6 +65,10 @@ const routeArray = [
     {
         path: "/bikes/:bikeId/spending-summary",
         route: spending_route_1.spendingRouter,
+    },
+    {
+        path: "/bikes/:bikeId/stat-strip",
+        route: bikeStats_route_1.bikeStatsRouter,
     },
     {
         path: "/bikes/:bikeId/issues",

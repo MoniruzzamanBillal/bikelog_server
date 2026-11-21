@@ -20,14 +20,13 @@ the `engineOilLog` module's conventions.
 
 ## Decisions
 
-1. **Warranty-aware open log** — unlimited services; each tagged `warranty` (counts toward
-   5) or `regular`. A `/status` endpoint reports warranty progress (X of 5, next due,
+1. **Warranty-aware open log** — unlimited services; each tagged `warranty` (counts toward 5) or `regular`. A `/status` endpoint reports warranty progress (X of 5, next due,
    void-risk when an upcoming warranty service is already overdue). Regular services are
    just logged — any center, no deadline.
 2. **Line items inside each service** — `items: [{ id, name, cost }]`; zero items = free
    service. Costs live in the row's JSON, not a child table (see §Data model note).
 3. **Trackable recommendations** — `recommendations: [{ id, text, targetDate?,
-   targetOdometer?, done }]`; pending ones with a `targetDate` surface as reminders.
+targetOdometer?, done }]`; pending ones with a `targetDate` surface as reminders.
 4. **Spending** — item costs of **completed** services sum into Spending as a new
    **"Service"** category, and push to expenseTracker2 on completion.
 5. **Two dates** — `dueDate` (expected/scheduled) + `serviceDate` (actual visit, set on
@@ -100,8 +99,9 @@ Register in `src/app/router/index.ts`:
 **Routes** (`Router({ mergeParams: true })`, every route `authCheck`; writes
 `validateRequest`; literal `/status` **before** `/:id` — Express matches in registration
 order, §0 H1 of the oil module):
+
 - `GET /` — paginated list via `buildPrismaListQuery` (`baseWhere: { bikeId, isDeleted:
-  false }`, default sort `-serviceDate`, strip `bike`/`isDeleted` from the query).
+false }`, default sort `-serviceDate`, strip `bike`/`isDeleted` from the query).
 - `GET /status` — warranty progress summary (below).
 - `POST /` — create.
 - `PATCH /:id` — update (also completes an upcoming service, and toggles a recommendation's
@@ -113,6 +113,7 @@ order, §0 H1 of the oil module):
 **Service layer** — every function opens with `findOwnedBikeOrThrow(bikeId, userId)` (404,
 not 403). IDs via `generateObjectId()`, incl. each item/recommendation sub-entry missing
 one. `toApiShape` remaps `id→_id`, `bikeId→bike`, item/recommendation costs → `Number`.
+
 - **Create**: `status` derived from `serviceDate` presence. If `serviceKind === "warranty"`
   and `warrantyNumber` omitted → auto-assign `count(live warranty rows) + 1`. On a
   completed create with `odometerReading` → `bumpOdometerIfHigher(bike, reading)`.
@@ -121,7 +122,7 @@ one. `toApiShape` remaps `id→_id`, `bikeId→bike`, item/recommendation costs 
   `completed` before, is now) so the controller fires the expense push exactly once.
 - `getServiceStatus`: pure `summarizeWarranty(rows, now)` over all live rows →
   `{ warrantyTotal: 5, warrantyCompleted, warrantyLogged, nextWarranty?: { number, dueDate,
-  status }, nextService?: { dueDate, status }, warrantyVoidRisk }`. `status` of a dated row
+status }, nextService?: { dueDate, status }, warrantyVoidRisk }`. `status` of a dated row
   = `overdue` if `dueDate < now`, else `upcoming`.
 
 **Validation** (Zod `z.object({ body })`): separate create/update schemas. `items` array of
@@ -134,8 +135,9 @@ of `dueDate`/`serviceDate` (a service is either scheduled or done). `status` and
 ## Cross-cutting server edits (additive)
 
 **Spending** — `spending.service.ts` `computeSpendingForRange`:
+
 - 5th `findMany` in the `Promise.all`: `serviceLog` where `{ bikeId, isDeleted: false,
-  status: "completed", ...(serviceDate range) }`.
+status: "completed", ...(serviceDate range) }`.
 - `serviceTotal` = Σ over each row's `items[]` costs.
 - Push `{ category: "Service", total: serviceTotal }` guarded `> 0`.
 - Add `serviceTotal` into `totalSpending` (computed separately from the array — easy miss).
@@ -158,6 +160,7 @@ the engine-oil block): append service reminders from `serviceLog.utils`'
 `{ maintenanceType: { _id, name }, lastServiceDate, lastOdometerReading, nextDueDate,
 daysRemaining, status }` shape so both clients' banners render them with **no client
 change**:
+
 - Earliest `upcoming` service row with a `dueDate` → a date reminder (`_id` = row id,
   `name` = `Warranty service #N` or `Next service`). Overdue if past, upcoming if ≤14 days
   (same rule as maintenance date reminders).
